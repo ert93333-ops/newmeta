@@ -1,0 +1,22 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+describe("Supabase migration guardrails", () => {
+  const migration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260531162030_hermes_foundation_schema.sql"),
+    "utf8"
+  );
+
+  it("enables RLS and keeps security definer functions out of public schema", () => {
+    expect(migration).toContain("enable row level security");
+    expect(migration).toContain("create schema if not exists private");
+    expect(migration).toContain("function private.has_tenant_role");
+  });
+
+  it("does not define budget mutation approval actions", () => {
+    expect(migration).not.toContain("change_budget");
+    expect(migration).not.toContain("daily_budget'");
+    expect(migration).toContain("approval_action_no_budget");
+  });
+});

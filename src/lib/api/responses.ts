@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server";
+import { isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
+
+export function ok<T>(data: T, status = 200): NextResponse<T> {
+  return NextResponse.json(data, { status });
+}
+
+export function fail(code: string, message: string, status = 400, details?: unknown): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code,
+        message,
+        details
+      }
+    },
+    { status }
+  );
+}
+
+export async function parseJson(request: Request): Promise<unknown> {
+  const text = await request.text();
+  if (!text) {
+    return {};
+  }
+  return JSON.parse(text);
+}
+
+export function handleError(error: unknown): NextResponse {
+  if (isBudgetMutationBlockedError(error)) {
+    return fail(error.code, error.message, 403, { paths: error.paths });
+  }
+  if (error instanceof Error) {
+    if (error.message === "APPROVAL_REQUIRED" || error.message === "SECOND_APPROVAL_REQUIRED") {
+      return fail(error.message, "승인 후 실행할 수 있습니다.", 403);
+    }
+    if (error.message.endsWith("_ACCESS_DENIED")) {
+      return fail(error.message, "권한이 없습니다.", 403);
+    }
+    return fail("REQUEST_FAILED", error.message, 400);
+  }
+  return fail("UNKNOWN_ERROR", "알 수 없는 오류가 발생했습니다.", 500);
+}
