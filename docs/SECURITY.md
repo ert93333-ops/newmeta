@@ -27,7 +27,8 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 
 - Read/report/analysis/validation: no approval.
 - Meta upload, creative creation, PAUSED campaign/adset/ad creation, paid AI generation: approval required.
-- ACTIVE transition, pause/delete, targeting change, creative replacement, catalog/feed mutation: admin/owner approval and second approval for destructive actions.
+- ACTIVE transition, pause/delete, targeting change, creative replacement, catalog/feed mutation: admin/owner approval plus typed confirmation.
+- Destructive actions require a second approval, and each approval must provide the typed confirmation.
 - Budget mutation: hard block, no approval escape hatch.
 
 ## Audit

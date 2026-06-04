@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { approveRequest, assertExecutableApproval, createApprovalRequest } from "@/lib/approval/approval-policy";
+import {
+  approveRequest,
+  assertExecutableApproval,
+  createApprovalRequest,
+  requiredTypedConfirmation
+} from "@/lib/approval/approval-policy";
 import type { UserContext } from "@/lib/types";
 
 const requester: UserContext = {
@@ -43,5 +48,38 @@ describe("approval policy", () => {
       objectType: "ad"
     });
     expect(() => approveRequest(approval, { ...requester, role: "owner" })).toThrow("SELF_APPROVAL_NOT_ALLOWED");
+  });
+
+  it("requires typed confirmation for publish approvals", () => {
+    const approval = createApprovalRequest({
+      context: requester,
+      action: "meta_activate_ad",
+      objectType: "ad",
+      objectId: "ad-1"
+    });
+
+    expect(requiredTypedConfirmation(approval)).toBe("APPROVE meta_activate_ad");
+    expect(() => approveRequest(approval, approver)).toThrow("TYPED_CONFIRMATION_REQUIRED");
+    expect(() =>
+      approveRequest(approval, approver, { typedConfirmation: "APPROVE meta_activate_ad" })
+    ).not.toThrow();
+  });
+
+  it("requires typed confirmation on both destructive approvals", () => {
+    const approval = createApprovalRequest({
+      context: { ...requester, role: "admin" },
+      action: "meta_delete_ad",
+      objectType: "ad",
+      objectId: "ad-1"
+    });
+    const firstApprover = { ...approver, userId: "owner-1" };
+    const secondApprover = { ...approver, userId: "owner-2" };
+
+    const approved = approveRequest(approval, firstApprover, { typedConfirmation: "APPROVE meta_delete_ad" });
+
+    expect(() => approveRequest(approved, secondApprover)).toThrow("TYPED_CONFIRMATION_REQUIRED");
+    expect(
+      approveRequest(approved, secondApprover, { typedConfirmation: "APPROVE meta_delete_ad" }).secondApprovedBy
+    ).toBe("owner-2");
   });
 });

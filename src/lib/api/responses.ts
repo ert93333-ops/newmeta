@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
 import { isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
 
 export function ok<T>(data: T, status = 200): NextResponse<T> {
@@ -29,6 +30,11 @@ export async function parseJson(request: Request): Promise<unknown> {
 export function handleError(error: unknown): NextResponse {
   if (isBudgetMutationBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });
+  }
+  if (isTypedConfirmationRequiredError(error)) {
+    return fail("TYPED_CONFIRMATION_REQUIRED", "위험 액션 승인을 위한 명시 확인 문구가 필요합니다.", 403, {
+      requiredText: error.requiredText
+    });
   }
   if (error instanceof Error) {
     if (error.message === "APPROVAL_REQUIRED" || error.message === "SECOND_APPROVAL_REQUIRED") {

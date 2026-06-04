@@ -11,6 +11,18 @@ export interface ApprovalPolicy {
   requiresSecondApproval: boolean;
 }
 
+export interface ApprovalConfirmationOptions {
+  typedConfirmation?: string;
+}
+
+export class TypedConfirmationRequiredError extends Error {
+  readonly code = "TYPED_CONFIRMATION_REQUIRED";
+
+  constructor(readonly requiredText: string) {
+    super("TYPED_CONFIRMATION_REQUIRED");
+  }
+}
+
 const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
   meta_upload_image: {
     action: "meta_upload_image",
@@ -123,6 +135,18 @@ export function getApprovalPolicy(action: ApprovalAction): ApprovalPolicy {
   return POLICIES[action];
 }
 
+export function isTypedConfirmationRequiredError(error: unknown): error is TypedConfirmationRequiredError {
+  return error instanceof TypedConfirmationRequiredError;
+}
+
+export function requiredTypedConfirmation(request: ApprovalRequest): string | undefined {
+  if (request.riskLevel !== "publish" && request.riskLevel !== "destructive") {
+    return undefined;
+  }
+
+  return `APPROVE ${request.action}`;
+}
+
 export function createApprovalRequest(input: {
   context: UserContext;
   action: ApprovalAction;
@@ -157,7 +181,11 @@ export function createApprovalRequest(input: {
   };
 }
 
-export function approveRequest(request: ApprovalRequest, approver: UserContext): ApprovalRequest {
+export function approveRequest(
+  request: ApprovalRequest,
+  approver: UserContext,
+  options: ApprovalConfirmationOptions = {}
+): ApprovalRequest {
   const policy = getApprovalPolicy(request.action);
   assertRole(approver, policy.executorRole);
   if (request.tenantId !== approver.tenantId) {
@@ -168,6 +196,11 @@ export function approveRequest(request: ApprovalRequest, approver: UserContext):
   }
   if (request.requestedBy === approver.userId) {
     throw new Error("SELF_APPROVAL_NOT_ALLOWED");
+  }
+
+  const requiredConfirmation = requiredTypedConfirmation(request);
+  if (requiredConfirmation && options.typedConfirmation?.trim() !== requiredConfirmation) {
+    throw new TypedConfirmationRequiredError(requiredConfirmation);
   }
 
   if (request.requiresSecondApproval && request.status === "approved") {

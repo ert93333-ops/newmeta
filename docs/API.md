@@ -38,6 +38,16 @@ Routes resolve tenant/user context before persistence. In production, send a Sup
 - `POST /api/approvals/:id/reject`
 - `POST /api/approvals/:id/execute`
 
+Publish and destructive approvals require a typed confirmation in the approve body:
+
+```json
+{
+  "typedConfirmation": "APPROVE meta_activate_ad"
+}
+```
+
+If the confirmation is missing or wrong, the API returns `TYPED_CONFIRMATION_REQUIRED` with `details.requiredText`.
+
 ## Cost and Data
 
 - `POST /api/cost/estimate`

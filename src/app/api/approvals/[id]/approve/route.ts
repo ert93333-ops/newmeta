@@ -1,5 +1,5 @@
 import { approveRequest } from "@/lib/approval/approval-policy";
-import { fail, handleError, ok } from "@/lib/api/responses";
+import { fail, handleError, ok, parseJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 import { hasSupabaseConfig } from "@/lib/supabase/server";
@@ -8,6 +8,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const context = await resolveUserContext(request);
+    const body = (await parseJson(request)) as { typedConfirmation?: unknown; confirmationText?: unknown };
     const repository = getRepository();
     const approval = await repository.getApproval(request, context, id);
     if (!approval) return fail("APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.", 404);
@@ -15,7 +16,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       hasSupabaseConfig("user") && process.env.HERMES_AUTH_MODE !== "mock"
         ? context
         : { ...context, userId: "00000000-0000-0000-0000-000000000011", role: "owner" as const };
-    const approved = approveRequest(approval, actor);
+    const typedConfirmation =
+      typeof body.typedConfirmation === "string"
+        ? body.typedConfirmation
+        : typeof body.confirmationText === "string"
+          ? body.confirmationText
+          : undefined;
+    const approved = approveRequest(approval, actor, { typedConfirmation });
     await repository.updateApproval(request, approved);
     await repository.saveAuditLog(request, {
       tenantId: actor.tenantId,
