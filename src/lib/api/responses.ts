@@ -49,6 +49,12 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "MOCK_AUTH_DISABLED_IN_PRODUCTION") {
       return fail(error.message, "Mock authentication is disabled in production.", 401);
     }
+    if (error.message === "MOCK_EXECUTION_DISABLED_IN_PRODUCTION") {
+      return fail(error.message, "Mock approval execution is disabled in production.", 501);
+    }
+    if (error.message === "LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED") {
+      return fail(error.message, "Live approval execution is not configured.", 501);
+    }
     if (error.message === "TENANT_REQUIRED") {
       return fail(error.message, "Tenant context is required.", 400);
     }

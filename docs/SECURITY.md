@@ -30,6 +30,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 - ACTIVE transition, pause/delete, targeting change, creative replacement, catalog/feed mutation: admin/owner approval plus typed confirmation.
 - Destructive actions require a second approval, and each approval must provide the typed confirmation.
 - Budget mutation: hard block, no approval escape hatch.
+- Approval execution must fail closed in production unless a real live executor is configured; mock execution is local-only.
 
 ## Audit
 

@@ -63,6 +63,10 @@ Publish and destructive approvals require a typed confirmation in the approve bo
 
 If the confirmation is missing or wrong, the API returns `TYPED_CONFIRMATION_REQUIRED` with `details.requiredText`.
 
+`POST /api/approvals/:id/execute` also parses the request body through the budget hard-block boundary. If any executable budget mutation field is present, it returns `BUDGET_MUTATION_HARD_BLOCKED` before execution.
+
+Approval execution is mock-only in local development until a live executor is wired. Production must not return a fake execution success; if `HERMES_APPROVAL_EXECUTION_MODE=mock` or the live executor is not configured, execution fails closed with `MOCK_EXECUTION_DISABLED_IN_PRODUCTION` or `LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED`.
+
 ## Cost and Data
 
 - `POST /api/cost/estimate`
