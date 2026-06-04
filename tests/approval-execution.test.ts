@@ -124,6 +124,16 @@ describe("approval execution", () => {
     );
   });
 
+  it("rechecks stored approval expiry before dispatch", () => {
+    clearEnv();
+    const expiredApproval = {
+      ...approvedRequest(),
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    };
+
+    expect(() => executeApprovedAction(expiredApproval)).toThrow("APPROVAL_EXPIRED");
+  });
+
   it("hard-blocks budget mutation payloads before marking an approval executed", async () => {
     clearEnv();
     setEnv("HERMES_AUTH_MODE", "mock");
@@ -142,6 +152,31 @@ describe("approval execution", () => {
 
     expect(response.status).toBe(403);
     expect(body.error.code).toBe("BUDGET_MUTATION_HARD_BLOCKED");
+  });
+
+  it("blocks expired approvals before dispatching execution", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const approval = {
+      ...approvedRequest(),
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    };
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(new Request("http://localhost/api/test"), approver, approval.id);
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("APPROVAL_EXPIRED");
+    expect(stored?.status).toBe("approved");
+    expect(stored?.executionResultJson).toBeUndefined();
   });
 
   it("persists action-specific execution details before returning success", async () => {

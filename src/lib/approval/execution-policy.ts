@@ -1,4 +1,5 @@
 import { isProductionRuntime } from "@/lib/api/context";
+import { assertApprovalNotExpired } from "@/lib/approval/approval-policy";
 import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
 import type { ApprovalAction, ApprovalRequest } from "@/lib/types";
 
@@ -118,6 +119,7 @@ export function planApprovalExecution(action: ApprovalAction): ApprovalExecution
 }
 
 export function executeApprovedAction(approval: ApprovalRequest): ApprovalExecutionResult {
+  assertApprovalNotExpired(approval);
   assertNoBudgetMutation(approval);
   const plan = planApprovalExecution(approval.action);
   const template = MOCK_EXECUTION_TEMPLATES[approval.action];

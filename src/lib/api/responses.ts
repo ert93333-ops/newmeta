@@ -61,6 +61,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "APPROVAL_REQUIRED" || error.message === "SECOND_APPROVAL_REQUIRED") {
       return fail(error.message, "승인 후 실행할 수 있습니다.", 403);
     }
+    if (error.message === "APPROVAL_EXPIRED") {
+      return fail(error.message, "Approval request has expired.", 403);
+    }
     if (error.message.endsWith("_ACCESS_DENIED")) {
       return fail(error.message, "권한이 없습니다.", 403);
     }

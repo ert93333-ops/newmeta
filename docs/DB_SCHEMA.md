@@ -17,6 +17,8 @@ All tenant-scoped tables have `tenant_id`, timestamps, and RLS. `approval_action
 
 `approval_requests.execution_result_json` stores the server-side executor result after an approved action is executed.
 
+`approval_requests.expires_at` is enforced by application policy: draft 24 hours, publish 4 hours, destructive 1 hour.
+
 ## Token Storage
 
 `meta_connections` stores encrypted token material:

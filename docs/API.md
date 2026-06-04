@@ -48,6 +48,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
     "riskLevel": "publish",
     "requiresSecondApproval": false,
     "typedConfirmationRequired": true,
+    "expiresAt": "2026-06-05T04:00:00.000Z",
     "requiredText": "APPROVE meta_activate_ad"
   }
 }
@@ -62,6 +63,8 @@ Publish and destructive approvals require a typed confirmation in the approve bo
 ```
 
 If the confirmation is missing or wrong, the API returns `TYPED_CONFIRMATION_REQUIRED` with `details.requiredText`.
+
+Approval requests expire before execution. Draft approvals expire after 24 hours, publish approvals after 4 hours, and destructive approvals after 1 hour. Approving or executing an expired request returns `APPROVAL_EXPIRED`.
 
 `POST /api/approvals/:id/execute` also parses the request body through the budget hard-block boundary. If any executable budget mutation field is present, it returns `BUDGET_MUTATION_HARD_BLOCKED` before execution.
 

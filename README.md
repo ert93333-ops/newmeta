@@ -9,6 +9,7 @@ Hermes is an internal-first, SaaS-ready Meta Ads creative operations platform. I
 - Access tokens are encrypted server-side and never returned to the browser.
 - Tenant data stays isolated by `tenant_id` and Supabase RLS.
 - ACTIVE transitions and destructive actions require approval. Destructive actions require a second approval.
+- Approval requests expire before execution: draft 24h, publish 4h, destructive 1h.
 - Final ad images must not contain safezone, pixel, guide, or layout labels.
 - Cross-tenant learning only uses anonymized, aggregated, opt-in patterns.
 

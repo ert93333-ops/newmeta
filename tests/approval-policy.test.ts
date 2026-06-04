@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   approvalGuardDetails,
+  approvalExpiresAt,
   approveRequest,
   assertExecutableApproval,
   createApprovalRequest,
@@ -21,6 +22,28 @@ const approver: UserContext = {
 };
 
 describe("approval policy", () => {
+  it("assigns risk-based approval expiry timestamps", () => {
+    const draft = createApprovalRequest({
+      context: requester,
+      action: "meta_create_ad_paused",
+      objectType: "ad"
+    });
+    const publish = createApprovalRequest({
+      context: requester,
+      action: "meta_activate_ad",
+      objectType: "ad"
+    });
+    const destructive = createApprovalRequest({
+      context: { ...requester, role: "admin" },
+      action: "meta_delete_ad",
+      objectType: "ad"
+    });
+
+    expect(draft.expiresAt).toBe(approvalExpiresAt("draft", draft.createdAt));
+    expect(publish.expiresAt).toBe(approvalExpiresAt("publish", publish.createdAt));
+    expect(destructive.expiresAt).toBe(approvalExpiresAt("destructive", destructive.createdAt));
+  });
+
   it("requires approval before execution", () => {
     const approval = createApprovalRequest({
       context: requester,
@@ -40,6 +63,26 @@ describe("approval policy", () => {
     });
     const approved = approveRequest(approval, approver);
     expect(() => assertExecutableApproval(approved, approver)).not.toThrow();
+  });
+
+  it("blocks expired approvals before approval or execution", () => {
+    const approval = createApprovalRequest({
+      context: requester,
+      action: "meta_create_ad_paused",
+      objectType: "ad",
+      afterJson: { status: "PAUSED" }
+    });
+    const expired = {
+      ...approval,
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    };
+    const approvedExpired = {
+      ...approveRequest(approval, approver),
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    };
+
+    expect(() => approveRequest(expired, approver)).toThrow("APPROVAL_EXPIRED");
+    expect(() => assertExecutableApproval(approvedExpired, approver)).toThrow("APPROVAL_EXPIRED");
   });
 
   it("does not allow self approval", () => {
@@ -96,6 +139,7 @@ describe("approval policy", () => {
       riskLevel: "publish",
       requiresSecondApproval: false,
       typedConfirmationRequired: true,
+      expiresAt: approval.expiresAt,
       requiredText: "APPROVE meta_activate_campaign"
     });
   });

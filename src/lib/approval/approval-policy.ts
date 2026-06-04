@@ -23,6 +23,14 @@ export class TypedConfirmationRequiredError extends Error {
   }
 }
 
+const APPROVAL_EXPIRY_HOURS: Record<RiskLevel, number> = {
+  read: 24,
+  draft: 24,
+  publish: 4,
+  destructive: 1,
+  hard_blocked: 0
+};
+
 const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
   meta_upload_image: {
     action: "meta_upload_image",
@@ -139,6 +147,33 @@ export function isTypedConfirmationRequiredError(error: unknown): error is Typed
   return error instanceof TypedConfirmationRequiredError;
 }
 
+export function approvalExpiresAt(riskLevel: RiskLevel, createdAt: string): string {
+  const createdAtMs = Date.parse(createdAt);
+  if (Number.isNaN(createdAtMs)) {
+    throw new Error("INVALID_APPROVAL_CREATED_AT");
+  }
+
+  return new Date(createdAtMs + APPROVAL_EXPIRY_HOURS[riskLevel] * 60 * 60 * 1000).toISOString();
+}
+
+export function isApprovalExpired(request: ApprovalRequest, now = new Date()): boolean {
+  if (request.status === "expired") {
+    return true;
+  }
+  if (!request.expiresAt) {
+    return true;
+  }
+
+  const expiresAtMs = Date.parse(request.expiresAt);
+  return Number.isNaN(expiresAtMs) || expiresAtMs <= now.getTime();
+}
+
+export function assertApprovalNotExpired(request: ApprovalRequest, now = new Date()): void {
+  if (isApprovalExpired(request, now)) {
+    throw new Error("APPROVAL_EXPIRED");
+  }
+}
+
 export function requiredTypedConfirmation(request: ApprovalRequest): string | undefined {
   if (request.riskLevel !== "publish" && request.riskLevel !== "destructive") {
     return undefined;
@@ -151,6 +186,7 @@ export function approvalGuardDetails(request: ApprovalRequest): {
   riskLevel: RiskLevel;
   requiresSecondApproval: boolean;
   typedConfirmationRequired: boolean;
+  expiresAt?: string;
   requiredText?: string;
 } {
   const requiredText = requiredTypedConfirmation(request);
@@ -159,6 +195,7 @@ export function approvalGuardDetails(request: ApprovalRequest): {
     riskLevel: request.riskLevel,
     requiresSecondApproval: request.requiresSecondApproval,
     typedConfirmationRequired: Boolean(requiredText),
+    expiresAt: request.expiresAt,
     requiredText
   };
 }
@@ -193,6 +230,7 @@ export function createApprovalRequest(input: {
     afterJson: input.afterJson,
     diffJson: input.diffJson,
     reason: input.reason,
+    expiresAt: approvalExpiresAt(policy.riskLevel, now),
     requiresSecondApproval: policy.requiresSecondApproval
   };
 }
@@ -210,6 +248,7 @@ export function approveRequest(
   if (request.status !== "pending" && request.status !== "approved") {
     throw new Error("APPROVAL_NOT_PENDING");
   }
+  assertApprovalNotExpired(request);
   if (request.requestedBy === approver.userId) {
     throw new Error("SELF_APPROVAL_NOT_ALLOWED");
   }
@@ -256,6 +295,7 @@ export function assertExecutableApproval(request: ApprovalRequest, executor: Use
   if (request.status !== "approved") {
     throw new Error("APPROVAL_REQUIRED");
   }
+  assertApprovalNotExpired(request);
   if (request.requiresSecondApproval && !request.secondApprovedBy) {
     throw new Error("SECOND_APPROVAL_REQUIRED");
   }
