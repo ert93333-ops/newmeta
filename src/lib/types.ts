@@ -59,6 +59,8 @@ export interface ApprovalRequest extends TenantScoped {
   requestedBy: string;
   approvedBy?: string;
   secondApprovedBy?: string;
+  executionResultJson?: unknown;
+  expiresAt?: string;
 }
 
 export type ApprovalAction =

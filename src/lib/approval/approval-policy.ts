@@ -261,9 +261,10 @@ export function assertExecutableApproval(request: ApprovalRequest, executor: Use
   }
 }
 
-export function markExecuted(request: ApprovalRequest): ApprovalRequest {
+export function markExecuted(request: ApprovalRequest, executionResultJson?: unknown): ApprovalRequest {
   return {
     ...request,
-    status: "executed"
+    status: "executed",
+    executionResultJson: executionResultJson ?? request.executionResultJson
   };
 }

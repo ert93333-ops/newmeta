@@ -31,6 +31,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 - Destructive actions require a second approval, and each approval must provide the typed confirmation.
 - Budget mutation: hard block, no approval escape hatch.
 - Approval execution must go through the action-specific executor registry and fail closed in production unless a real live executor is configured; mock execution is local-only.
+- Approval execution must persist the executor result, and Supabase approval updates must confirm that a row was actually updated so RLS or tenant mismatches cannot be reported as successful execution.
 
 ## Audit
 

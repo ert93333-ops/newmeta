@@ -14,21 +14,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!approval) return fail("APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.", 404);
     assertExecutableApproval(approval, context);
     const execution = executeApprovedAction(approval);
-    const executed = markExecuted(approval);
-    await repository.updateApproval(request, executed);
+    const executed = markExecuted(approval, execution);
+    const persisted = await repository.updateApproval(request, executed);
     await repository.saveAuditLog(request, {
       tenantId: context.tenantId,
       userId: context.userId,
-      action: `approval_executed:${executed.action}`,
-      objectType: executed.objectType,
-      objectId: executed.objectId,
-      approvalRequestId: executed.id,
+      action: `approval_executed:${persisted.action}`,
+      objectType: persisted.objectType,
+      objectId: persisted.objectId,
+      approvalRequestId: persisted.id,
       beforeJson: approval,
-      afterJson: executed,
+      afterJson: persisted,
       result: execution.result
     });
     return ok({
-      approval: executed,
+      approval: persisted,
       execution: execution.result,
       executionMode: execution.mode,
       executionDetails: execution

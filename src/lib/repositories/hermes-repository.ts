@@ -154,13 +154,16 @@ export class SupabaseHermesRepository implements HermesRepository {
     const supabase = createRequestClient(request);
     if (!supabase) return this.fallback.updateApproval(request, approval);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("approval_requests")
       .update(toApprovalRow(approval))
       .eq("id", approval.id)
-      .eq("tenant_id", approval.tenantId);
+      .eq("tenant_id", approval.tenantId)
+      .select("*")
+      .maybeSingle();
     if (error) throw new Error(`SUPABASE_APPROVAL_UPDATE_FAILED:${error.message}`);
-    return approval;
+    if (!data) throw new Error("SUPABASE_APPROVAL_UPDATE_MISSED");
+    return fromApprovalRow(data as ApprovalRow);
   }
 
   async saveAuditLog(request: Request, audit: AuditLogInput): Promise<void> {
@@ -296,6 +299,8 @@ interface ApprovalRow {
   after_json?: unknown;
   diff_json?: unknown;
   reason?: string | null;
+  execution_result_json?: unknown;
+  expires_at?: string | null;
 }
 
 function toApprovalRow(approval: ApprovalRequest): Record<string, unknown> {
@@ -315,7 +320,9 @@ function toApprovalRow(approval: ApprovalRequest): Record<string, unknown> {
     before_json: approval.beforeJson ?? {},
     after_json: approval.afterJson ?? {},
     diff_json: approval.diffJson ?? {},
-    reason: approval.reason
+    reason: approval.reason,
+    execution_result_json: approval.executionResultJson ?? {},
+    expires_at: approval.expiresAt
   };
 }
 
@@ -337,7 +344,9 @@ function fromApprovalRow(row: ApprovalRow): ApprovalRequest {
     beforeJson: row.before_json,
     afterJson: row.after_json,
     diffJson: row.diff_json,
-    reason: row.reason ?? undefined
+    reason: row.reason ?? undefined,
+    executionResultJson: row.execution_result_json,
+    expiresAt: row.expires_at ?? undefined
   };
 }
 

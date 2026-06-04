@@ -15,6 +15,8 @@ All tenant-scoped tables have `tenant_id`, timestamps, and RLS. `approval_action
 
 `audit_logs` includes `ip_address` and `user_agent` for request metadata when headers are available.
 
+`approval_requests.execution_result_json` stores the server-side executor result after an approved action is executed.
+
 ## Token Storage
 
 `meta_connections` stores encrypted token material:

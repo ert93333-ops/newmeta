@@ -67,6 +67,8 @@ If the confirmation is missing or wrong, the API returns `TYPED_CONFIRMATION_REQ
 
 Approval execution goes through an action-specific executor registry. Local mock execution returns action-specific results such as `mock_created_ad_paused`, but production must not return a fake execution success; if `HERMES_APPROVAL_EXECUTION_MODE=mock` or the live executor is not configured, execution fails closed with `MOCK_EXECUTION_DISABLED_IN_PRODUCTION` or `LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED`.
 
+Successful execution persists the action-specific execution result on `approval_requests.execution_result_json` before the API returns success.
+
 ## Cost and Data
 
 - `POST /api/cost/estimate`

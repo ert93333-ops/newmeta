@@ -143,4 +143,37 @@ describe("approval execution", () => {
     expect(response.status).toBe(403);
     expect(body.error.code).toBe("BUDGET_MUTATION_HARD_BLOCKED");
   });
+
+  it("persists action-specific execution details before returning success", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const approval = approvedRequest();
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(
+      new Request("http://localhost/api/test"),
+      { ...approver, userId: "00000000-0000-0000-0000-000000000010" },
+      approval.id
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.approval).toMatchObject({
+      id: approval.id,
+      status: "executed",
+      executionResultJson: {
+        result: "mock_created_ad_paused",
+        operation: "meta_create_ad_paused",
+        externalStatus: "PAUSED"
+      }
+    });
+    expect(stored?.executionResultJson).toEqual(body.executionDetails);
+  });
 });
