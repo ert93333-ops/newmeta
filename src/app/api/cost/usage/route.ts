@@ -1,9 +1,11 @@
 import { ok } from "@/lib/api/responses";
-import { getStore } from "@/lib/api/store";
+import { resolveUserContext } from "@/lib/api/context";
+import { getRepository } from "@/lib/repositories/hermes-repository";
 
-export function GET() {
+export async function GET(request: Request) {
+  const context = await resolveUserContext(request);
   return ok({
-    usage: getStore().costUsage,
+    usage: await getRepository().listCostUsage(request, context),
     policy: {
       defaultDailyCapKrw: 5000,
       hardDailyCapKrw: 7500,

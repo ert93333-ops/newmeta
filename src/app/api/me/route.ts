@@ -1,9 +1,9 @@
-import { mockContext } from "@/lib/api/store";
 import { ok } from "@/lib/api/responses";
+import { resolveUserContext } from "@/lib/api/context";
 
-export function GET() {
+export async function GET(request: Request) {
   return ok({
-    user: mockContext(),
+    user: await resolveUserContext(request),
     permissions: {
       budgetMutation: "hard_blocked",
       dangerousActions: "approval_required"

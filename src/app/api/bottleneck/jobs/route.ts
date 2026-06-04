@@ -1,20 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { diagnoseBottlenecks } from "@/lib/bottleneck/diagnosis";
 import { handleError, ok, parseJson } from "@/lib/api/responses";
-import { getStore, mockContext } from "@/lib/api/store";
+import { resolveUserContext } from "@/lib/api/context";
+import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { MetaInsight } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const context = await resolveUserContext(request);
     const insight = (await parseJson(request)) as MetaInsight;
     const job = {
       id: randomUUID(),
-      tenantId: mockContext().tenantId,
+      tenantId: context.tenantId,
+      createdBy: context.userId,
       type: "bottleneck_diagnosis",
       status: "succeeded",
       result: diagnoseBottlenecks(insight)
     };
-    getStore().jobs.set(job.id, job);
+    await getRepository().saveJob(request, job);
     return ok(job, 201);
   } catch (error) {
     return handleError(error);

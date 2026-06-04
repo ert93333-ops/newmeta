@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { checkForbiddenFinalText, checkPriceAccuracy, checkSafeArea } from "@/lib/creative/checkers";
 import { handleError, ok, parseJson } from "@/lib/api/responses";
-import { getStore, mockContext } from "@/lib/api/store";
+import { resolveUserContext } from "@/lib/api/context";
+import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { CreativeManifest } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const context = await resolveUserContext(request);
     const manifest = (await parseJson(request)) as CreativeManifest;
     const checks = {
       safeArea: checkSafeArea(manifest),
@@ -14,7 +16,8 @@ export async function POST(request: Request) {
     };
     const job = {
       id: randomUUID(),
-      tenantId: mockContext().tenantId,
+      tenantId: context.tenantId,
+      createdBy: context.userId,
       type: "render",
       status: Object.values(checks).every((check) => check.passed) ? "succeeded" : "failed",
       result: {
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
         checks
       }
     };
-    getStore().jobs.set(job.id, job);
+    await getRepository().saveJob(request, job);
     return ok(job, 201);
   } catch (error) {
     return handleError(error);

@@ -19,4 +19,10 @@ describe("Supabase migration guardrails", () => {
     expect(migration).not.toContain("daily_budget'");
     expect(migration).toContain("approval_action_no_budget");
   });
+
+  it("keeps worker job claiming in private schema", () => {
+    expect(migration).toContain("function private.claim_creative_job");
+    expect(migration).toContain("for update skip locked");
+    expect(migration).not.toContain("function public.claim_creative_job");
+  });
 });

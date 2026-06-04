@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { ok, parseJson } from "@/lib/api/responses";
-import { mockContext } from "@/lib/api/store";
+import { resolveUserContext } from "@/lib/api/context";
 
 export async function POST(request: Request) {
   const body = (await parseJson(request)) as { code?: string; scopes?: string[] };
-  const context = mockContext();
+  const context = await resolveUserContext(request);
   return ok(
     {
       connection: {

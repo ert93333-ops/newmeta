@@ -2,21 +2,24 @@ import { randomUUID } from "node:crypto";
 import { analyzeImageCreative } from "@/lib/creative/image-analysis";
 import { analyzeVideoCreative } from "@/lib/creative/video-analysis";
 import { handleError, ok, parseJson } from "@/lib/api/responses";
-import { getStore, mockContext } from "@/lib/api/store";
+import { resolveUserContext } from "@/lib/api/context";
+import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { CreativeManifest } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const context = await resolveUserContext(request);
     const manifest = (await parseJson(request)) as CreativeManifest;
     const result = manifest.asset.type === "video" ? analyzeVideoCreative(manifest.asset) : analyzeImageCreative(manifest);
     const job = {
       id: randomUUID(),
-      tenantId: mockContext().tenantId,
+      tenantId: context.tenantId,
+      createdBy: context.userId,
       type: "creative_analysis",
       status: "succeeded",
       result
     };
-    getStore().jobs.set(job.id, job);
+    await getRepository().saveJob(request, job);
     return ok(job, 201);
   } catch (error) {
     return handleError(error);

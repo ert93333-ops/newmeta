@@ -23,3 +23,7 @@ Hermes is organized around a strict server-side orchestration path:
 ## Worker
 
 The worker claims queued jobs through `private.claim_creative_job(worker_name)` using direct DB access. This keeps the privileged claim function outside exposed schemas and supports `FOR UPDATE SKIP LOCKED`.
+
+## Persistence Boundary
+
+API routes call `resolveUserContext(request)` and then use the Hermes repository interface. When Supabase env vars and an authenticated bearer token are available, the repository writes to Supabase through RLS-scoped user clients. Without Supabase env vars, it falls back to an in-memory repository for local mock development and tests.
