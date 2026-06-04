@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
     "auth:smoke": "node scripts/verify-supabase-auth-smoke.mjs",
+    "github:release-gates": "node scripts/check-github-release-gates.mjs",
     "supabase:validate": "node scripts/validate-supabase-local.mjs",
     "worker:once": "tsx worker/hermes-worker.ts"
   },

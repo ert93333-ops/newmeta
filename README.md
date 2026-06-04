@@ -62,4 +62,12 @@ Relevant official docs checked during implementation:
 
 ## GitHub
 
-This folder has been initialized as a local Git repository and includes `.github/workflows/ci.yml`. A remote is not configured because no repository URL was provided.
+This folder is pushed to `https://github.com/ert93333-ops/newmeta.git` on `main` and includes `.github/workflows/ci.yml`.
+
+Run the GitHub release gate after the latest `main` CI run succeeds:
+
+```bash
+npm run github:release-gates
+```
+
+The gate verifies that `main` is clean, synced to `origin/main`, the latest CI run succeeded for `HEAD`, and branch protection requires CI without force pushes or branch deletion. If GitHub reports that branch protection is unavailable for a private repository on the current plan, treat that as a release blocker rather than a pass.

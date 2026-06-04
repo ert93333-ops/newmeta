@@ -46,4 +46,12 @@ Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_U
 
 ## GitHub
 
-CI exists in `.github/workflows/ci.yml` and runs typecheck, unit tests, local Supabase migration validation, and build. The workflow uses Node 24-native GitHub actions so release checks do not depend on the deprecated GitHub Actions Node 20 runtime. Configure a remote, then protect the main branch after the first push.
+CI exists in `.github/workflows/ci.yml` and runs typecheck, unit tests, local Supabase migration validation, and build. The workflow uses Node 24-native GitHub actions so release checks do not depend on the deprecated GitHub Actions Node 20 runtime.
+
+The repo is pushed to `https://github.com/ert93333-ops/newmeta.git` on `main`. Run the release gate after CI succeeds:
+
+```bash
+npm run github:release-gates
+```
+
+The gate checks a clean worktree, `main` synced to `origin/main`, latest CI success for `HEAD`, and branch protection requiring CI with force pushes/deletions disabled. If GitHub reports that branch protection is unavailable for a private repository on the current plan, do not treat the repo as release-ready; upgrade the plan or make the repository public, then enable branch protection.
