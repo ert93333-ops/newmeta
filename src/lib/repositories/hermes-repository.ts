@@ -11,6 +11,8 @@ export interface AuditLogInput {
   beforeJson?: unknown;
   afterJson?: unknown;
   result?: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface CostUsageInput {
@@ -89,8 +91,8 @@ export class MemoryHermesRepository implements HermesRepository {
     return approval;
   }
 
-  async saveAuditLog(_request: Request, audit: AuditLogInput): Promise<void> {
-    getMemoryStore().auditLogs.push(audit);
+  async saveAuditLog(request: Request, audit: AuditLogInput): Promise<void> {
+    getMemoryStore().auditLogs.push(withRequestAuditMetadata(request, audit));
   }
 
   async saveCostUsage(_request: Request, usage: CostUsageInput): Promise<void> {
@@ -164,18 +166,21 @@ export class SupabaseHermesRepository implements HermesRepository {
   async saveAuditLog(request: Request, audit: AuditLogInput): Promise<void> {
     const supabase = createRequestClient(request);
     if (!supabase) return this.fallback.saveAuditLog(request, audit);
+    const enrichedAudit = withRequestAuditMetadata(request, audit);
 
     const { error } = await supabase.from("audit_logs").insert({
-      tenant_id: audit.tenantId,
-      created_by: audit.userId,
-      user_id: audit.userId,
-      action: audit.action,
-      object_type: audit.objectType,
-      object_id: audit.objectId,
-      approval_request_id: audit.approvalRequestId,
-      before_json: audit.beforeJson ?? {},
-      after_json: audit.afterJson ?? {},
-      result: audit.result ?? "recorded"
+      tenant_id: enrichedAudit.tenantId,
+      created_by: enrichedAudit.userId,
+      user_id: enrichedAudit.userId,
+      action: enrichedAudit.action,
+      object_type: enrichedAudit.objectType,
+      object_id: enrichedAudit.objectId,
+      approval_request_id: enrichedAudit.approvalRequestId,
+      before_json: enrichedAudit.beforeJson ?? {},
+      after_json: enrichedAudit.afterJson ?? {},
+      ip_address: enrichedAudit.ipAddress,
+      user_agent: enrichedAudit.userAgent,
+      result: enrichedAudit.result ?? "recorded"
     });
     if (error) throw new Error(`SUPABASE_AUDIT_INSERT_FAILED:${error.message}`);
   }
@@ -249,6 +254,28 @@ export class SupabaseHermesRepository implements HermesRepository {
 
 function createRequestClient(request: Request) {
   return createSupabaseClient("user", getBearerAuthorization(request));
+}
+
+export function requestAuditMetadata(request: Request): Pick<AuditLogInput, "ipAddress" | "userAgent"> {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
+  const ipAddress = firstForwardedIp || request.headers.get("x-real-ip")?.trim() || undefined;
+  const userAgent = request.headers.get("user-agent")?.trim() || undefined;
+
+  return {
+    ipAddress,
+    userAgent
+  };
+}
+
+function withRequestAuditMetadata(request: Request, audit: AuditLogInput): AuditLogInput {
+  const metadata = requestAuditMetadata(request);
+
+  return {
+    ...audit,
+    ipAddress: audit.ipAddress ?? metadata.ipAddress,
+    userAgent: audit.userAgent ?? metadata.userAgent
+  };
 }
 
 interface ApprovalRow {

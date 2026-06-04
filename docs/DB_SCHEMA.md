@@ -13,6 +13,8 @@ The Supabase migration creates the foundation schema:
 
 All tenant-scoped tables have `tenant_id`, timestamps, and RLS. `approval_action_enum` deliberately has no budget mutation action.
 
+`audit_logs` includes `ip_address` and `user_agent` for request metadata when headers are available.
+
 ## Token Storage
 
 `meta_connections` stores encrypted token material:
