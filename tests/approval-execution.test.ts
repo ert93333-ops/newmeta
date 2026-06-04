@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import {
   configuredApprovalExecutionMode,
+  executeApprovedAction,
   planApprovalExecution
 } from "@/lib/approval/execution-policy";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
@@ -82,7 +83,13 @@ describe("approval execution", () => {
     expect(configuredApprovalExecutionMode()).toBe("mock");
     expect(planApprovalExecution("meta_create_ad_paused")).toEqual({
       mode: "mock",
-      result: "mock_executed_server_side"
+      result: "mock_created_ad_paused"
+    });
+    expect(executeApprovedAction(approvedRequest())).toMatchObject({
+      mode: "mock",
+      operation: "meta_create_ad_paused",
+      result: "mock_created_ad_paused",
+      externalStatus: "PAUSED"
     });
   });
 
@@ -99,6 +106,22 @@ describe("approval execution", () => {
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "live");
 
     expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
+  });
+
+  it("rechecks stored approval payloads for budget mutations before dispatch", () => {
+    clearEnv();
+    const contaminatedApproval = {
+      ...approvedRequest(),
+      afterJson: {
+        daily_budget: 50000
+      }
+    };
+
+    expect(() => executeApprovedAction(contaminatedApproval)).toThrowError(
+      expect.objectContaining({
+        code: "BUDGET_MUTATION_HARD_BLOCKED"
+      })
+    );
   });
 
   it("hard-blocks budget mutation payloads before marking an approval executed", async () => {

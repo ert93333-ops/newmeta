@@ -1,5 +1,5 @@
 import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-policy";
-import { planApprovalExecution } from "@/lib/approval/execution-policy";
+import { executeApprovedAction } from "@/lib/approval/execution-policy";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const approval = await repository.getApproval(request, context, id);
     if (!approval) return fail("APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.", 404);
     assertExecutableApproval(approval, context);
-    const execution = planApprovalExecution(approval.action);
+    const execution = executeApprovedAction(approval);
     const executed = markExecuted(approval);
     await repository.updateApproval(request, executed);
     await repository.saveAuditLog(request, {
@@ -25,12 +25,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       approvalRequestId: executed.id,
       beforeJson: approval,
       afterJson: executed,
-      result: "executed"
+      result: execution.result
     });
     return ok({
       approval: executed,
       execution: execution.result,
-      executionMode: execution.mode
+      executionMode: execution.mode,
+      executionDetails: execution
     });
   } catch (error) {
     return handleError(error);
