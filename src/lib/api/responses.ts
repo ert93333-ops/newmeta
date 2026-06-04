@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
-import { isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
+import { assertNoBudgetMutation, isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
 
 export function ok<T>(data: T, status = 200): NextResponse<T> {
   return NextResponse.json(data, { status });
@@ -25,6 +25,12 @@ export async function parseJson(request: Request): Promise<unknown> {
     return {};
   }
   return JSON.parse(text);
+}
+
+export async function parseWriteJson(request: Request): Promise<unknown> {
+  const body = await parseJson(request);
+  assertNoBudgetMutation(body);
+  return body;
 }
 
 export function handleError(error: unknown): NextResponse {

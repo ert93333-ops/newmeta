@@ -1,10 +1,8 @@
-import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
-import { handleError, ok, parseJson } from "@/lib/api/responses";
+import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 
 export async function POST(request: Request) {
   try {
-    const body = await parseJson(request);
-    assertNoBudgetMutation(body);
+    await parseWriteJson(request);
     return ok(
       {
         status: "approval_required",

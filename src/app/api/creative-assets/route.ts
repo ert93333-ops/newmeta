@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { handleError, ok, parseJson } from "@/lib/api/responses";
+import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 
 export async function POST(request: Request) {
   try {
     const context = await resolveUserContext(request);
-    const body = (await parseJson(request)) as Record<string, unknown>;
+    const body = (await parseWriteJson(request)) as Record<string, unknown>;
     const asset = {
       id: randomUUID(),
       tenantId: context.tenantId,

@@ -1,10 +1,10 @@
 import { designVariants } from "@/lib/variants/variant-designer";
-import { handleError, ok, parseJson } from "@/lib/api/responses";
+import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import type { VariantDesignInput } from "@/lib/variants/variant-designer";
 
 export async function POST(request: Request) {
   try {
-    return ok(designVariants((await parseJson(request)) as VariantDesignInput), 201);
+    return ok(designVariants((await parseWriteJson(request)) as VariantDesignInput), 201);
   } catch (error) {
     return handleError(error);
   }

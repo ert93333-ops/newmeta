@@ -1,6 +1,6 @@
 # API
 
-All write-like routes reject executable budget mutation payloads with `BUDGET_MUTATION_HARD_BLOCKED`.
+All write-like routes parse request bodies through the guarded API JSON boundary and reject executable budget mutation payloads with `BUDGET_MUTATION_HARD_BLOCKED`.
 
 Routes resolve tenant/user context before persistence. In production, send a Supabase Auth bearer token and `x-tenant-id`; local mock mode falls back to the default mock tenant.
 

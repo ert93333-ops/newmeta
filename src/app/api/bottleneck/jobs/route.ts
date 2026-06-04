@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { diagnoseBottlenecks } from "@/lib/bottleneck/diagnosis";
-import { handleError, ok, parseJson } from "@/lib/api/responses";
+import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { MetaInsight } from "@/lib/types";
@@ -8,7 +8,7 @@ import type { MetaInsight } from "@/lib/types";
 export async function POST(request: Request) {
   try {
     const context = await resolveUserContext(request);
-    const insight = (await parseJson(request)) as MetaInsight;
+    const insight = (await parseWriteJson(request)) as MetaInsight;
     const job = {
       id: randomUUID(),
       tenantId: context.tenantId,

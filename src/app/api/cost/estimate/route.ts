@@ -1,5 +1,5 @@
 import { guardCost } from "@/lib/guards/cost-guard";
-import { handleError, ok, parseJson } from "@/lib/api/responses";
+import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import type { CostEstimateInput } from "@/lib/types";
 import { resolveUserContext } from "@/lib/api/context";
 import { costUsageFromEstimate, getRepository } from "@/lib/repositories/hermes-repository";
@@ -7,7 +7,7 @@ import { costUsageFromEstimate, getRepository } from "@/lib/repositories/hermes-
 export async function POST(request: Request) {
   try {
     const context = await resolveUserContext(request);
-    const input = (await parseJson(request)) as CostEstimateInput;
+    const input = (await parseWriteJson(request)) as CostEstimateInput;
     const decision = guardCost(input);
     await getRepository().saveCostUsage(request, costUsageFromEstimate(input, context, decision.estimatedCostKrw));
     return ok(decision);
