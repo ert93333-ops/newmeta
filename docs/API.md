@@ -31,6 +31,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/performance-fusion/reports`
 - `POST /api/variants/design`
 
+`POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed` and writes an audit log. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
+
 ## Draft and Approval
 
 - `POST /api/drafts/preflight`

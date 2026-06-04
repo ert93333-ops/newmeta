@@ -1,4 +1,4 @@
-import type { CostEstimateInput, CostSettings } from "@/lib/types";
+import type { ApprovalRequest, CostEstimateInput, CostSettings } from "@/lib/types";
 
 export type CostGuardDecision =
   | {
@@ -22,6 +22,14 @@ export type CostGuardDecision =
       message: string;
       requiresApproval: false;
     };
+
+export class PaidOperationApprovalRequiredError extends Error {
+  readonly code = "PAID_OPERATION_APPROVAL_REQUIRED";
+
+  constructor(readonly operationType: CostEstimateInput["operationType"]) {
+    super("PAID_OPERATION_APPROVAL_REQUIRED");
+  }
+}
 
 const DEFAULT_REFERENCE_DAILY_AD_BUDGET_KRW = 50000;
 const DEFAULT_DAILY_CAP_KRW = 5000;
@@ -78,6 +86,25 @@ export function guardCost(input: CostEstimateInput): CostGuardDecision {
     message: estimatedCostKrw === 0 ? "캐시 또는 저비용 검사를 사용합니다." : "설정한 비용 한도 내에서 실행할 수 있습니다.",
     requiresApproval: false
   };
+}
+
+export function assertPaidOperationApproval(
+  approval: ApprovalRequest | null | undefined,
+  operationType: CostEstimateInput["operationType"]
+): asserts approval is ApprovalRequest {
+  if (!requiresPaidApproval(operationType)) {
+    return;
+  }
+
+  if (!approval || approval.action !== "ai_paid_generation" || approval.objectType !== operationType) {
+    throw new PaidOperationApprovalRequiredError(operationType);
+  }
+}
+
+export function isPaidOperationApprovalRequiredError(
+  error: unknown
+): error is PaidOperationApprovalRequiredError {
+  return error instanceof PaidOperationApprovalRequiredError;
 }
 
 function deriveCreditUnitCost(settings: CostSettings): number {

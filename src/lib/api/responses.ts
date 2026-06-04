@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
-import { assertNoBudgetMutation, isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
+import {
+  assertNoBudgetMutation,
+  isBudgetMutationBlockedError
+} from "@/lib/guards/budget-guard";
+import { isPaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
 import {
   assertNoCredentialPayload,
   isCredentialPayloadBlockedError,
@@ -42,6 +46,11 @@ export async function parseWriteJson(request: Request): Promise<unknown> {
 export function handleError(error: unknown): NextResponse {
   if (isBudgetMutationBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });
+  }
+  if (isPaidOperationApprovalRequiredError(error)) {
+    return fail(error.code, "Paid AI operations require an approved approval request before execution.", 403, {
+      operationType: error.operationType
+    });
   }
   if (isCredentialPayloadBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });

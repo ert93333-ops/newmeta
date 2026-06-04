@@ -27,4 +27,6 @@ Approval required:
 - variant batches
 - external provider credit spend
 
+Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches.
+
 Automatic retry is limited to one failed generation retry.
