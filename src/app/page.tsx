@@ -1,3 +1,5 @@
+import { ApprovalCenterPanel } from "@/app/approval-center-panel";
+
 const navItems = [
   "Dashboard",
   "Meta Connection",
@@ -79,6 +81,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <ApprovalCenterPanel />
       </section>
     </main>
   );

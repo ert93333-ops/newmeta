@@ -1,4 +1,4 @@
-import { createApprovalRequest } from "@/lib/approval/approval-policy";
+import { approvalGuardDetails, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { handleError, ok, parseJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       afterJson: approval,
       result: "pending"
     });
-    return ok({ approval }, 201);
+    return ok({ approval, guard: approvalGuardDetails(approval) }, 201);
   } catch (error) {
     return handleError(error);
   }

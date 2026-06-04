@@ -147,6 +147,22 @@ export function requiredTypedConfirmation(request: ApprovalRequest): string | un
   return `APPROVE ${request.action}`;
 }
 
+export function approvalGuardDetails(request: ApprovalRequest): {
+  riskLevel: RiskLevel;
+  requiresSecondApproval: boolean;
+  typedConfirmationRequired: boolean;
+  requiredText?: string;
+} {
+  const requiredText = requiredTypedConfirmation(request);
+
+  return {
+    riskLevel: request.riskLevel,
+    requiresSecondApproval: request.requiresSecondApproval,
+    typedConfirmationRequired: Boolean(requiredText),
+    requiredText
+  };
+}
+
 export function createApprovalRequest(input: {
   context: UserContext;
   action: ApprovalAction;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  approvalGuardDetails,
   approveRequest,
   assertExecutableApproval,
   createApprovalRequest,
@@ -81,5 +82,21 @@ describe("approval policy", () => {
     expect(
       approveRequest(approved, secondApprover, { typedConfirmation: "APPROVE meta_delete_ad" }).secondApprovedBy
     ).toBe("owner-2");
+  });
+
+  it("returns approval guard metadata for the UI", () => {
+    const approval = createApprovalRequest({
+      context: requester,
+      action: "meta_activate_campaign",
+      objectType: "campaign",
+      objectId: "campaign-1"
+    });
+
+    expect(approvalGuardDetails(approval)).toEqual({
+      riskLevel: "publish",
+      requiresSecondApproval: false,
+      typedConfirmationRequired: true,
+      requiredText: "APPROVE meta_activate_campaign"
+    });
   });
 });

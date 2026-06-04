@@ -38,6 +38,19 @@ Routes resolve tenant/user context before persistence. In production, send a Sup
 - `POST /api/approvals/:id/reject`
 - `POST /api/approvals/:id/execute`
 
+`POST /api/approvals` and `POST /api/approvals/:id/approve` include approval guard metadata:
+
+```json
+{
+  "guard": {
+    "riskLevel": "publish",
+    "requiresSecondApproval": false,
+    "typedConfirmationRequired": true,
+    "requiredText": "APPROVE meta_activate_ad"
+  }
+}
+```
+
 Publish and destructive approvals require a typed confirmation in the approve body:
 
 ```json
