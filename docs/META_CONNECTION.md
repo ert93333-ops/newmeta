@@ -22,4 +22,6 @@ Optional expansion scopes:
 
 External customer connections must use OAuth / Business Login. Customers must not paste access tokens.
 
+The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
+
 All create methods create PAUSED entities only. ACTIVE transition is separate and approval-gated.

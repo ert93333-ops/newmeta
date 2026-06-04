@@ -14,8 +14,7 @@ export async function POST(request: Request) {
           status: body.code ? "connected_mock" : "pending_code",
           scopes: body.scopes ?? ["ads_read"],
           encryptedTokenStored: Boolean(body.code)
-        },
-        token: "never_returned_to_client"
+        }
       },
       201
     );
