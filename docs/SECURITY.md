@@ -14,7 +14,7 @@ Roles:
 
 Authorization must not depend on user-editable metadata. Server-only code handles privileged operations.
 
-API routes must resolve user context from Supabase Auth and `user_roles` before reading or writing tenant data. The local mock context is only a development fallback when Supabase env vars are absent or `HERMES_AUTH_MODE=mock`.
+API routes must resolve user context from Supabase Auth and `user_roles` before reading or writing tenant data. The local mock context is only a non-production fallback when Supabase env vars are absent or `HERMES_AUTH_MODE=mock`; production runtime fails closed instead of creating an owner mock context.
 
 ## Token Handling
 

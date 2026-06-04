@@ -32,7 +32,7 @@ npm run dev
 
 Copy `.env.example` to `.env.local` for local Supabase/Meta credentials. Use `MockMetaAdapter` for safe development without ad spend.
 
-For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production requests should use Supabase Auth bearer tokens and `x-tenant-id`.
+For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth and requires Supabase Auth bearer tokens plus `x-tenant-id`.
 
 ## Important Files
 

@@ -43,6 +43,15 @@ export function handleError(error: unknown): NextResponse {
     });
   }
   if (error instanceof Error) {
+    if (error.message === "AUTH_REQUIRED" || error.message === "SUPABASE_AUTH_REQUIRED") {
+      return fail(error.message, "Authentication is required.", 401);
+    }
+    if (error.message === "MOCK_AUTH_DISABLED_IN_PRODUCTION") {
+      return fail(error.message, "Mock authentication is disabled in production.", 401);
+    }
+    if (error.message === "TENANT_REQUIRED") {
+      return fail(error.message, "Tenant context is required.", 400);
+    }
     if (error.message === "APPROVAL_REQUIRED" || error.message === "SECOND_APPROVAL_REQUIRED") {
       return fail(error.message, "승인 후 실행할 수 있습니다.", 403);
     }

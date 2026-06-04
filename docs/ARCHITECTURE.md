@@ -26,4 +26,4 @@ The worker claims queued jobs through `private.claim_creative_job(worker_name)` 
 
 ## Persistence Boundary
 
-API routes call `resolveUserContext(request)` and then use the Hermes repository interface. When Supabase env vars and an authenticated bearer token are available, the repository writes to Supabase through RLS-scoped user clients. Without Supabase env vars, it falls back to an in-memory repository for local mock development and tests.
+API routes call `resolveUserContext(request)` and then use the Hermes repository interface. When Supabase env vars and an authenticated bearer token are available, the repository writes to Supabase through RLS-scoped user clients. Without Supabase env vars, non-production runs can fall back to an in-memory repository for local mock development and tests. Production runtime fails closed before tenant data access if Supabase user auth config or a bearer token is missing.

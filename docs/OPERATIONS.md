@@ -24,7 +24,9 @@ Use a secret-bearing server environment only. Do not run worker code in the brow
 
 ## Auth Mode
 
-Set `HERMES_AUTH_MODE=mock` only for local development without Supabase Auth. Production should omit this flag and send Supabase Auth bearer tokens plus `x-tenant-id` on API requests that access tenant data.
+Set `HERMES_AUTH_MODE=mock` only for local development without Supabase Auth. Runtime production is detected when `NODE_ENV=production` or `VERCEL_ENV=production`.
+
+Production must omit `HERMES_AUTH_MODE=mock`, provide Supabase user auth env vars, and send Supabase Auth bearer tokens plus `x-tenant-id` on API requests that access tenant data. If Supabase user config is missing in production, API context resolution fails closed with `SUPABASE_AUTH_REQUIRED`. If mock auth is explicitly enabled in production, it fails closed with `MOCK_AUTH_DISABLED_IN_PRODUCTION`.
 
 ## GitHub
 
