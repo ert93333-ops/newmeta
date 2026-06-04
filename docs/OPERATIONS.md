@@ -12,6 +12,14 @@ npm test
 
 Use the migration in `supabase/migrations`. The CLI was initialized with `npx supabase init`; apply migrations with your linked Supabase project or local Supabase stack.
 
+For release validation, run:
+
+```bash
+npm run supabase:validate
+```
+
+This starts the local Supabase database through Docker, resets it with committed migrations, runs schema lint, and runs local security/performance advisors. It uses `--local` only; do not replace it with linked or remote project validation in CI unless that environment is explicitly approved.
+
 ## Worker
 
 The worker requires direct DB access:
@@ -30,4 +38,4 @@ Production must omit `HERMES_AUTH_MODE=mock`, provide Supabase user auth env var
 
 ## GitHub
 
-CI exists in `.github/workflows/ci.yml`. Configure a remote, then protect the main branch after the first push.
+CI exists in `.github/workflows/ci.yml` and runs typecheck, unit tests, local Supabase migration validation, and build. Configure a remote, then protect the main branch after the first push.

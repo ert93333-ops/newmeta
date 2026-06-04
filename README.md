@@ -18,7 +18,7 @@ Hermes is an internal-first, SaaS-ready Meta Ads creative operations platform. I
 - Supabase Auth, Postgres, Storage-ready schema, and optional Edge Functions
 - Separate worker process for long-running video/render/AI work
 - Vitest for core engine and guardrail tests
-- GitHub Actions CI for typecheck, tests, and build
+- GitHub Actions CI for typecheck, tests, local Supabase migration validation, and build
 
 ## Quick Start
 
@@ -26,6 +26,7 @@ Hermes is an internal-first, SaaS-ready Meta Ads creative operations platform. I
 npm install
 npm run typecheck
 npm test
+npm run supabase:validate
 npm run build
 npm run dev
 ```
@@ -48,6 +49,8 @@ For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. 
 ## Supabase Notes
 
 The migration follows current Supabase RLS guidance: RLS is enabled on exposed tables, policies are scoped to the `authenticated` role, and authorization does not rely on user-editable metadata. Server-only keys and token encryption keys must stay out of `NEXT_PUBLIC_*`.
+
+Run `npm run supabase:validate` with Docker running to apply migrations to the local Supabase database, run schema lint, and run local security/performance advisors. The script only uses local Supabase and redacts local generated keys from command output.
 
 Relevant official docs checked during implementation:
 

@@ -34,3 +34,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 ## Audit
 
 Risk actions write `audit_logs` with actor, tenant, object, before/after diff, approval id, IP/user agent when available, and result.
+
+## Release Gates
+
+`npm run supabase:validate` must pass before release. It applies committed migrations to a local Supabase database, runs schema lint, and runs security/performance advisors without touching linked or remote projects.
