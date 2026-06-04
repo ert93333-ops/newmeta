@@ -1,4 +1,5 @@
 import type { ApprovalRequest, CostEstimateInput, UserContext } from "@/lib/types";
+import { redactCredentialPayload } from "@/lib/guards/credential-guard";
 import { createSupabaseClient, getBearerAuthorization, hasSupabaseConfig } from "@/lib/supabase/server";
 
 export interface AuditLogInput {
@@ -276,6 +277,8 @@ function withRequestAuditMetadata(request: Request, audit: AuditLogInput): Audit
 
   return {
     ...audit,
+    beforeJson: audit.beforeJson === undefined ? undefined : redactCredentialPayload(audit.beforeJson),
+    afterJson: audit.afterJson === undefined ? undefined : redactCredentialPayload(audit.afterJson),
     ipAddress: audit.ipAddress ?? metadata.ipAddress,
     userAgent: audit.userAgent ?? metadata.userAgent
   };

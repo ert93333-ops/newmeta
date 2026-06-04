@@ -1,21 +1,25 @@
 import { NextResponse } from "next/server";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
 import { assertNoBudgetMutation, isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
-import { assertNoCredentialPayload, isCredentialPayloadBlockedError } from "@/lib/guards/credential-guard";
+import {
+  assertNoCredentialPayload,
+  isCredentialPayloadBlockedError,
+  redactCredentialPayload
+} from "@/lib/guards/credential-guard";
 
 export function ok<T>(data: T, status = 200): NextResponse<T> {
-  return NextResponse.json(data, { status });
+  return NextResponse.json(redactCredentialPayload(data) as T, { status });
 }
 
 export function fail(code: string, message: string, status = 400, details?: unknown): NextResponse {
   return NextResponse.json(
-    {
+    redactCredentialPayload({
       error: {
         code,
         message,
         details
       }
-    },
+    }),
     { status }
   );
 }

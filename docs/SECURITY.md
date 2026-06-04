@@ -21,7 +21,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 - Tokens are never returned to clients.
 - Tokens are encrypted with AES-256-GCM before storage.
 - Logs must not include access tokens, refresh tokens, app secrets, authorization codes, or service keys.
-- Write API payloads reject token-shaped fields before persistence or audit logging.
+- Write API payloads reject token-shaped fields before persistence or audit logging. API responses and audit JSON payloads defensively redact token-shaped fields.
 - Token test responses expose only account, permission, and expiry status.
 
 ## Approval

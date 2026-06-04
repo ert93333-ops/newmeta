@@ -104,4 +104,38 @@ describe("Hermes repository", () => {
       userAgent: "HermesAudit/1.0"
     });
   });
+
+  it("redacts credential-shaped fields from audit JSON payloads", async () => {
+    const repository = new MemoryHermesRepository();
+
+    await repository.saveAuditLog(request, {
+      tenantId: owner.tenantId,
+      userId: owner.userId,
+      action: "approval_requested:meta_create_ad_paused",
+      objectType: "approval_request",
+      beforeJson: {
+        access_token: "must-not-enter-audit-log"
+      },
+      afterJson: {
+        nested: {
+          clientSecret: "must-not-enter-audit-log"
+        }
+      },
+      result: "pending"
+    });
+
+    const auditStore = globalThis as typeof globalThis & {
+      __hermesRepositoryStore?: { auditLogs?: unknown[] };
+    };
+    const auditLogs = auditStore.__hermesRepositoryStore?.auditLogs ?? [];
+    const latestAudit = auditLogs.at(-1) as {
+      beforeJson?: Record<string, unknown>;
+      afterJson?: { nested?: Record<string, unknown> };
+    };
+    const serialized = JSON.stringify(latestAudit);
+
+    expect(serialized).not.toContain("must-not-enter-audit-log");
+    expect(latestAudit.beforeJson?.access_token).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(latestAudit.afterJson?.nested?.clientSecret).toBe("[REDACTED_CREDENTIAL_FIELD]");
+  });
 });

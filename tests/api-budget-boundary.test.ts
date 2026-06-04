@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseWriteJson } from "@/lib/api/responses";
+import { ok, parseWriteJson } from "@/lib/api/responses";
 
 function apiRouteFiles(dir = join(process.cwd(), "src", "app", "api")): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -58,6 +58,25 @@ describe("API budget boundary", () => {
       code: "CREDENTIAL_PAYLOAD_BLOCKED",
       paths: ["$.afterJson.access_token"]
     });
+  });
+
+  it("redacts credential-shaped fields from API responses", async () => {
+    const response = ok({
+      connection: {
+        id: "connection-1",
+        access_token: "must-not-leave-server",
+        nested: {
+          clientSecret: "must-not-leave-server"
+        }
+      }
+    });
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(serialized).not.toContain("must-not-leave-server");
+    expect(body.connection.access_token).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(body.connection.nested.clientSecret).toBe("[REDACTED_CREDENTIAL_FIELD]");
   });
 
   it("keeps API routes on guarded write parsing", () => {
