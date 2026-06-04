@@ -52,6 +52,8 @@ The migration follows current Supabase RLS guidance: RLS is enabled on exposed t
 
 Run `npm run supabase:validate` with Docker running to apply migrations to the local Supabase database, run schema lint, and run local security/performance advisors. The script only uses local Supabase and redacts local generated keys from command output.
 
+Run `npm run auth:smoke` against a deployed or production-mode app after setting `HERMES_APP_URL`, Supabase publishable env, smoke user credentials, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. It verifies `/api/me` rejects unauthenticated traffic, accepts the allowed tenant, keeps budget mutation hard-blocked, and optionally rejects `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID`.
+
 Relevant official docs checked during implementation:
 
 - [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)

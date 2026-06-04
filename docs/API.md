@@ -4,6 +4,8 @@ All write-like routes parse request bodies through the guarded API JSON boundary
 
 Routes resolve tenant/user context before persistence. In production, send a Supabase Auth bearer token and `x-tenant-id`; local mock mode falls back to the default mock tenant.
 
+Tenant-scoped GET routes also use the shared error boundary, so missing auth returns `AUTH_REQUIRED`/`SUPABASE_AUTH_REQUIRED` with 401 instead of an unhandled server error.
+
 ## Identity
 
 - `GET /api/me`

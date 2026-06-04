@@ -38,3 +38,5 @@ Risk actions write `audit_logs` with actor, tenant, object, before/after diff, a
 ## Release Gates
 
 `npm run supabase:validate` must pass before release. It applies committed migrations to a local Supabase database, runs schema lint, and runs security/performance advisors without touching linked or remote projects.
+
+`npm run auth:smoke` should pass against the deployed production-mode app before customer access. It verifies that `/api/me` rejects unauthenticated requests, accepts a valid tenant membership, and optionally rejects a denied tenant id.
