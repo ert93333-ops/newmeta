@@ -36,6 +36,14 @@ Set `HERMES_AUTH_MODE=mock` only for local development without Supabase Auth. Ru
 
 Production must omit `HERMES_AUTH_MODE=mock`, provide Supabase user auth env vars, and send Supabase Auth bearer tokens plus `x-tenant-id` on API requests that access tenant data. If Supabase user config is missing in production, API context resolution fails closed with `SUPABASE_AUTH_REQUIRED`. If mock auth is explicitly enabled in production, it fails closed with `MOCK_AUTH_DISABLED_IN_PRODUCTION`.
 
+For deployment env validation, start from `.env.production.example` and run:
+
+```bash
+npm run env:release-gates
+```
+
+The gate blocks missing required Supabase/Meta/worker env, placeholder values, `HERMES_AUTH_MODE=mock`, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+
 For a real Supabase Auth smoke test, run:
 
 ```bash

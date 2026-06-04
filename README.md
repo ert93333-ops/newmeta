@@ -35,6 +35,14 @@ Copy `.env.example` to `.env.local` for local Supabase/Meta credentials. Use `Mo
 
 For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth and requires Supabase Auth bearer tokens plus `x-tenant-id`.
 
+For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=mock`, and run:
+
+```bash
+npm run env:release-gates
+```
+
+The gate fails closed on missing production Supabase/Meta/worker env, placeholder values, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, and secret-looking `NEXT_PUBLIC_*` names.
+
 ## Important Files
 
 - `src/lib/guards/budget-guard.ts`: hard block for executable budget mutations
