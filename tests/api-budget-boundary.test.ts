@@ -49,14 +49,15 @@ describe("API budget boundary", () => {
           body: JSON.stringify({
             action: "meta_create_ad_paused",
             afterJson: {
-              access_token: "must-not-enter-approval-payload"
+              access_token: "must-not-enter-approval-payload",
+              token_iv: "must-not-enter-approval-payload"
             }
           })
         })
       )
     ).rejects.toMatchObject({
       code: "CREDENTIAL_PAYLOAD_BLOCKED",
-      paths: ["$.afterJson.access_token"]
+      paths: ["$.afterJson.access_token", "$.afterJson.token_iv"]
     });
   });
 
@@ -65,8 +66,10 @@ describe("API budget boundary", () => {
       connection: {
         id: "connection-1",
         access_token: "must-not-leave-server",
+        encryptedAccessToken: "must-not-leave-server",
         nested: {
-          clientSecret: "must-not-leave-server"
+          clientSecret: "must-not-leave-server",
+          tokenAuthTag: "must-not-leave-server"
         }
       }
     });
@@ -76,7 +79,9 @@ describe("API budget boundary", () => {
     expect(response.status).toBe(200);
     expect(serialized).not.toContain("must-not-leave-server");
     expect(body.connection.access_token).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(body.connection.encryptedAccessToken).toBe("[REDACTED_CREDENTIAL_FIELD]");
     expect(body.connection.nested.clientSecret).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(body.connection.nested.tokenAuthTag).toBe("[REDACTED_CREDENTIAL_FIELD]");
   });
 
   it("keeps API routes on guarded write parsing", () => {

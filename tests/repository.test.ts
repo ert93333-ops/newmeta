@@ -114,11 +114,13 @@ describe("Hermes repository", () => {
       action: "approval_requested:meta_create_ad_paused",
       objectType: "approval_request",
       beforeJson: {
-        access_token: "must-not-enter-audit-log"
+        access_token: "must-not-enter-audit-log",
+        encryptedAccessToken: "must-not-enter-audit-log"
       },
       afterJson: {
         nested: {
-          clientSecret: "must-not-enter-audit-log"
+          clientSecret: "must-not-enter-audit-log",
+          tokenAuthTag: "must-not-enter-audit-log"
         }
       },
       result: "pending"
@@ -136,6 +138,8 @@ describe("Hermes repository", () => {
 
     expect(serialized).not.toContain("must-not-enter-audit-log");
     expect(latestAudit.beforeJson?.access_token).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(latestAudit.beforeJson?.encryptedAccessToken).toBe("[REDACTED_CREDENTIAL_FIELD]");
     expect(latestAudit.afterJson?.nested?.clientSecret).toBe("[REDACTED_CREDENTIAL_FIELD]");
+    expect(latestAudit.afterJson?.nested?.tokenAuthTag).toBe("[REDACTED_CREDENTIAL_FIELD]");
   });
 });
