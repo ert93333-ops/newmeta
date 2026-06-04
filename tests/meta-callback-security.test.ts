@@ -34,4 +34,18 @@ describe("Meta OAuth callback response security", () => {
     expect(serialized).not.toMatch(/\b(access_token|refresh_token|client_secret)\b/i);
     expect(serialized).toContain("encryptedTokenStored");
   });
+
+  it("rejects direct access token payloads at the callback boundary", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/integrations/meta/callback", {
+        method: "POST",
+        body: JSON.stringify({ access_token: "must-not-be-accepted" })
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("CREDENTIAL_PAYLOAD_BLOCKED");
+    expect(JSON.stringify(body)).not.toContain("must-not-be-accepted");
+  });
 });

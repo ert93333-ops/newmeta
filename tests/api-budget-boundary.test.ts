@@ -41,6 +41,25 @@ describe("API budget boundary", () => {
     });
   });
 
+  it("blocks credential-shaped payload fields at JSON parse boundary", async () => {
+    await expect(
+      parseWriteJson(
+        new Request("http://localhost/api/approvals", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "meta_create_ad_paused",
+            afterJson: {
+              access_token: "must-not-enter-approval-payload"
+            }
+          })
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "CREDENTIAL_PAYLOAD_BLOCKED",
+      paths: ["$.afterJson.access_token"]
+    });
+  });
+
   it("keeps API routes on guarded write parsing", () => {
     const offenders = apiRouteFiles()
       .map((path) => ({

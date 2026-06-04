@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
 import { assertNoBudgetMutation, isBudgetMutationBlockedError } from "@/lib/guards/budget-guard";
+import { assertNoCredentialPayload, isCredentialPayloadBlockedError } from "@/lib/guards/credential-guard";
 
 export function ok<T>(data: T, status = 200): NextResponse<T> {
   return NextResponse.json(data, { status });
@@ -30,11 +31,15 @@ export async function parseJson(request: Request): Promise<unknown> {
 export async function parseWriteJson(request: Request): Promise<unknown> {
   const body = await parseJson(request);
   assertNoBudgetMutation(body);
+  assertNoCredentialPayload(body);
   return body;
 }
 
 export function handleError(error: unknown): NextResponse {
   if (isBudgetMutationBlockedError(error)) {
+    return fail(error.code, error.message, 403, { paths: error.paths });
+  }
+  if (isCredentialPayloadBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });
   }
   if (isTypedConfirmationRequiredError(error)) {

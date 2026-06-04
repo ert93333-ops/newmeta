@@ -24,4 +24,6 @@ External customer connections must use OAuth / Business Login. Customers must no
 
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
+The OAuth callback request accepts authorization `code` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.
+
 All create methods create PAUSED entities only. ACTIVE transition is separate and approval-gated.
