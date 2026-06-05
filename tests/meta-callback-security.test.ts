@@ -52,7 +52,7 @@ describe("Meta OAuth callback response security", () => {
     const response = await POST(
       new Request("http://localhost/api/integrations/meta/callback", {
         method: "POST",
-        body: JSON.stringify({ code: "mock-code", scopes: ["ads_read"], state })
+        body: JSON.stringify({ code: "mock-code", state })
       })
     );
     const body = (await response.json()) as Record<string, unknown>;
@@ -69,7 +69,7 @@ describe("Meta OAuth callback response security", () => {
     const response = await POST(
       new Request("http://localhost/api/integrations/meta/callback", {
         method: "POST",
-        body: JSON.stringify({ code: "mock-code-for-storage", scopes: ["ads_read"], state })
+        body: JSON.stringify({ code: "mock-code-for-storage", state })
       })
     );
     const body = (await response.json()) as { connection?: { id?: string } };
@@ -91,7 +91,7 @@ describe("Meta OAuth callback response security", () => {
     const response = await POST(
       new Request("http://localhost/api/integrations/meta/callback", {
         method: "POST",
-        body: JSON.stringify({ code: "mock-code", scopes: ["ads_read"] })
+        body: JSON.stringify({ code: "mock-code" })
       })
     );
     const body = await response.json();
@@ -112,5 +112,26 @@ describe("Meta OAuth callback response security", () => {
     expect(response.status).toBe(403);
     expect(body.error.code).toBe("CREDENTIAL_PAYLOAD_BLOCKED");
     expect(JSON.stringify(body)).not.toContain("must-not-be-accepted");
+  });
+
+  it("ignores client-supplied scopes and stores server-owned granted scopes instead", async () => {
+    const state = createMetaOAuthState(mockContext()).value;
+    const response = await POST(
+      new Request("http://localhost/api/integrations/meta/callback", {
+        method: "POST",
+        body: JSON.stringify({ code: "mock-code", scopes: ["forged_scope"], state })
+      })
+    );
+    const body = (await response.json()) as {
+      connection?: {
+        scopes?: string[];
+      };
+    };
+
+    expect(response.status).toBe(201);
+    expect(body.connection?.scopes).toEqual(
+      expect.arrayContaining(["ads_read", "ads_management", "business_management"])
+    );
+    expect(body.connection?.scopes).not.toContain("forged_scope");
   });
 });

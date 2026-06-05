@@ -1,10 +1,8 @@
 import { resolveUserContext } from "@/lib/api/context";
 import { handleError, ok } from "@/lib/api/responses";
 import { resolveMetaOAuthMode } from "@/lib/meta/oauth";
+import { OPTIONAL_META_OAUTH_SCOPES, REQUIRED_META_OAUTH_SCOPES } from "@/lib/meta/oauth-scopes";
 import { createMetaOAuthState } from "@/lib/meta/oauth-state";
-
-const REQUIRED_SCOPES = ["ads_read", "ads_management", "business_management"];
-const OPTIONAL_SCOPES = ["pages_show_list", "pages_read_engagement", "instagram_basic", "instagram_manage_insights"];
 
 export async function GET(request: Request) {
   try {
@@ -16,7 +14,7 @@ export async function GET(request: Request) {
       oauthMode === "live"
         ? readRequiredEnv("META_REDIRECT_URI")
         : process.env.META_REDIRECT_URI?.trim() || "http://localhost:3000/api/integrations/meta/callback";
-    const scope = [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES].join(",");
+    const scope = [...REQUIRED_META_OAUTH_SCOPES, ...OPTIONAL_META_OAUTH_SCOPES].join(",");
     const url = new URL("https://www.facebook.com/dialog/oauth");
     url.searchParams.set("client_id", appId);
     url.searchParams.set("redirect_uri", redirectUri);
@@ -26,8 +24,8 @@ export async function GET(request: Request) {
 
     return ok({
       connectUrl: url.toString(),
-      requiredScopes: REQUIRED_SCOPES,
-      optionalScopes: OPTIONAL_SCOPES,
+      requiredScopes: REQUIRED_META_OAUTH_SCOPES,
+      optionalScopes: OPTIONAL_META_OAUTH_SCOPES,
       stateBound: true,
       stateExpiresAt: state.expiresAt,
       tokenPolicy: "Customers are never asked to paste access tokens."

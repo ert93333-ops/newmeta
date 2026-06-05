@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await parseWriteJson(request)) as { code?: unknown; scopes?: unknown; state?: unknown };
+    const body = (await parseWriteJson(request)) as { code?: unknown; state?: unknown };
     const context = await resolveUserContext(request);
     const code = readCode(body.code);
     verifyMetaOAuthState(readState(body.state), context);
@@ -35,8 +35,7 @@ export async function POST(request: Request) {
       request,
       context,
       repository,
-      code,
-      scopes: readScopes(body.scopes)
+      code
     });
 
     return ok({ connection }, 201);
@@ -96,12 +95,4 @@ function readState(value: unknown): string {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function readScopes(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return ["ads_read"];
-  }
-  const scopes = value.filter((scope): scope is string => typeof scope === "string" && scope.trim().length > 0);
-  return scopes.length > 0 ? Array.from(new Set(scopes.map((scope) => scope.trim()))) : ["ads_read"];
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isProductionRuntime } from "@/lib/api/context";
+import { DEFAULT_META_GRANTED_SCOPES } from "@/lib/meta/oauth-scopes";
 import type { HermesRepository, MetaConnectionInput } from "@/lib/repositories/hermes-repository";
 import { encryptToken } from "@/lib/security/token-crypto";
 import type { UserContext } from "@/lib/types";
@@ -15,7 +16,6 @@ interface MetaOAuthConnectInput {
   context: UserContext;
   repository: HermesRepository;
   code: string;
-  scopes: string[];
 }
 
 type MetaOAuthMode = "mock" | "live";
@@ -34,6 +34,8 @@ export async function connectMetaOAuth(input: MetaOAuthConnectInput): Promise<St
   const mode = resolveMetaOAuthMode();
   const tokenResult =
     mode === "mock" ? mockMetaOAuthToken(input.code) : await exchangeMetaAuthorizationCode(input.code);
+  const grantedScopes =
+    mode === "mock" ? Array.from(DEFAULT_META_GRANTED_SCOPES) : await fetchMetaGrantedScopes(tokenResult.accessToken);
   const encryptionKey = readRequiredEnv("TOKEN_ENCRYPTION_KEY", "TOKEN_ENCRYPTION_KEY_REQUIRED");
   const encrypted = encryptToken(tokenResult.accessToken, encryptionKey, process.env.TOKEN_ENCRYPTION_KEY_ID ?? "primary");
   const expiresAt = tokenResult.expiresIn
@@ -49,7 +51,7 @@ export async function connectMetaOAuth(input: MetaOAuthConnectInput): Promise<St
     tokenIv: encrypted.tokenIv,
     tokenAuthTag: encrypted.tokenAuthTag,
     tokenKid: encrypted.tokenKid,
-    scopes: input.scopes,
+    scopes: grantedScopes,
     expiresAt,
     status: "connected",
     metadataJson: {
@@ -68,7 +70,7 @@ export async function connectMetaOAuth(input: MetaOAuthConnectInput): Promise<St
     afterJson: {
       id: connection.id,
       mode,
-      scopes: input.scopes,
+      scopes: grantedScopes,
       expiresAt,
       encryptedTokenStored: true
     },
@@ -137,6 +139,43 @@ export async function exchangeMetaAuthorizationCode(code: string): Promise<MetaO
     expiresIn: readNumber(body.expires_in),
     tokenType: typeof body.token_type === "string" ? body.token_type : undefined
   };
+}
+
+export async function fetchMetaGrantedScopes(accessToken: string): Promise<string[]> {
+  const graphVersion = process.env.META_GRAPH_VERSION ?? "v24.0";
+  const response = await fetch(`https://graph.facebook.com/${graphVersion}/me/permissions`, {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`META_OAUTH_PERMISSIONS_FETCH_FAILED:${response.status}`);
+  }
+
+  const body = (await response.json()) as { data?: Array<{ permission?: unknown; status?: unknown }> };
+  const grantedScopes = Array.isArray(body.data)
+    ? Array.from(
+        new Set(
+          body.data
+            .filter(
+              (entry): entry is { permission: string; status: string } =>
+                typeof entry?.permission === "string" && typeof entry?.status === "string"
+            )
+            .filter((entry) => entry.status === "granted")
+            .map((entry) => entry.permission.trim())
+            .filter((permission) => permission.length > 0)
+        )
+      )
+    : [];
+
+  if (grantedScopes.length === 0) {
+    throw new Error("META_OAUTH_SCOPES_UNAVAILABLE");
+  }
+
+  return grantedScopes;
 }
 
 function mockMetaOAuthToken(code: string): MetaOAuthTokenResult {

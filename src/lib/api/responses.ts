@@ -197,6 +197,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_OAUTH_TOKEN_MISSING") {
       return fail(error.message, "Meta OAuth token exchange response did not include a usable token.", 502);
     }
+    if (error.message === "META_OAUTH_SCOPES_UNAVAILABLE") {
+      return fail(error.message, "Meta OAuth granted scopes could not be resolved server-side.", 502);
+    }
     if (error.message === "META_OAUTH_STATE_SECRET_REQUIRED") {
       return fail(error.message, "Meta OAuth state signing secret is required.", 501);
     }
@@ -215,6 +218,11 @@ export function handleError(error: unknown): NextResponse {
     }
     if (error.message.startsWith("META_OAUTH_CODE_EXCHANGE_FAILED:")) {
       return fail("META_OAUTH_CODE_EXCHANGE_FAILED", "Meta OAuth code exchange failed.", 502, {
+        status: error.message.split(":").at(-1)
+      });
+    }
+    if (error.message.startsWith("META_OAUTH_PERMISSIONS_FETCH_FAILED:")) {
+      return fail("META_OAUTH_PERMISSIONS_FETCH_FAILED", "Meta OAuth granted scopes lookup failed.", 502, {
         status: error.message.split(":").at(-1)
       });
     }

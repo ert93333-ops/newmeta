@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { exchangeMetaAuthorizationCode, resolveMetaOAuthMode } from "@/lib/meta/oauth";
+import { exchangeMetaAuthorizationCode, fetchMetaGrantedScopes, resolveMetaOAuthMode } from "@/lib/meta/oauth";
 
 const ENV_KEYS = [
   "NODE_ENV",
@@ -94,5 +94,38 @@ describe("Meta OAuth exchange", () => {
 
     await expect(exchangeMetaAuthorizationCode("oauth-code")).rejects.toThrow("META_OAUTH_CODE_EXCHANGE_FAILED:400");
     await expect(exchangeMetaAuthorizationCode("oauth-code")).rejects.not.toThrow("server-app-secret");
+  });
+
+  it("resolves granted scopes from Meta server-side instead of trusting the browser payload", async () => {
+    mutableEnv.META_GRAPH_VERSION = "v24.0";
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        data: [
+          { permission: "ads_read", status: "granted" },
+          { permission: "ads_management", status: "granted" },
+          { permission: "pages_show_list", status: "declined" },
+          { permission: "ads_read", status: "granted" }
+        ]
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const scopes = await fetchMetaGrantedScopes("live-meta-token");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+
+    expect(scopes).toEqual(["ads_read", "ads_management"]);
+    expect(url).toBe("https://graph.facebook.com/v24.0/me/permissions");
+    expect(init.method).toBe("GET");
+    expect(init.headers).toEqual(
+      expect.objectContaining({
+        authorization: "Bearer live-meta-token"
+      })
+    );
+  });
+
+  it("fails closed when granted scopes cannot be loaded from Meta", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "nope" } }), { status: 400 })));
+
+    await expect(fetchMetaGrantedScopes("live-meta-token")).rejects.toThrow("META_OAUTH_PERMISSIONS_FETCH_FAILED:400");
   });
 });
