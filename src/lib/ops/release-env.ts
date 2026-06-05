@@ -21,7 +21,10 @@ const REQUIRED_RELEASE_ENV = [
   "META_APP_SECRET",
   "META_REDIRECT_URI",
   "HERMES_META_OAUTH_MODE",
-  "HERMES_WORKER_SECRET"
+  "HERMES_WORKER_SECRET",
+  "SUPABASE_AUTH_SMOKE_EMAIL",
+  "SUPABASE_AUTH_SMOKE_PASSWORD",
+  "SUPABASE_AUTH_SMOKE_TENANT_ID"
 ] as const;
 
 const PLACEHOLDER_PATTERNS = [
@@ -47,6 +50,12 @@ function isPlaceholder(raw: string): boolean {
 
 function addIssue(issues: ReleaseEnvIssue[], code: string, message: string): void {
   issues.push({ code, message });
+}
+
+function requireOneOf(issues: ReleaseEnvIssue[], env: EnvRecord, keys: readonly string[], message: string): void {
+  if (!keys.some((key) => value(env, key))) {
+    addIssue(issues, "MISSING_ENV", message);
+  }
 }
 
 function requireUrl(issues: ReleaseEnvIssue[], env: EnvRecord, key: string, options: { allowLocalhost: boolean }): void {
@@ -107,6 +116,12 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
       addIssue(issues, "PLACEHOLDER_ENV", `${key} still contains a placeholder value.`);
     }
   }
+  requireOneOf(
+    issues,
+    env,
+    ["HERMES_APP_URL", "NEXT_PUBLIC_APP_URL"],
+    "HERMES_APP_URL or NEXT_PUBLIC_APP_URL is required for release."
+  );
 
   if (value(env, "HERMES_AUTH_MODE") === "mock") {
     addIssue(issues, "MOCK_AUTH_ENABLED", "HERMES_AUTH_MODE=mock must not be set for release.");
@@ -122,6 +137,8 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   }
 
   requireUrl(issues, env, "NEXT_PUBLIC_SUPABASE_URL", { allowLocalhost: false });
+  requireUrl(issues, env, "HERMES_APP_URL", { allowLocalhost: false });
+  requireUrl(issues, env, "NEXT_PUBLIC_APP_URL", { allowLocalhost: false });
   requireUrl(issues, env, "META_REDIRECT_URI", { allowLocalhost: false });
   requirePostgresUrl(issues, env, "SUPABASE_DB_URL");
   requireBase64Key(issues, env, "TOKEN_ENCRYPTION_KEY");

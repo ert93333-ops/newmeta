@@ -52,7 +52,7 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker/OAuth-state env, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate blocks missing required Supabase/Meta/worker/OAuth-state env, missing auth-smoke env, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
 Before enabling paid estimate/approval flows, persist tenant cost settings through `PATCH /api/settings/<providerName>` so `POST /api/cost/estimate` can resolve server-owned pricing and caps for that provider. Without that row, the route fails closed with `COST_SETTINGS_NOT_CONFIGURED`.
 
@@ -62,7 +62,7 @@ For a real Supabase Auth smoke test, run:
 npm run auth:smoke
 ```
 
-Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_AUTH_SMOKE_EMAIL`, `SUPABASE_AUTH_SMOKE_PASSWORD`, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. Optional: `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID` to verify cross-tenant denial. The script verifies bearer-only `/api/me` tenant membership bootstrap, explicit allowed-tenant `/api/me`, unauthenticated rejection, `PATCH /api/settings/budget` returning `BUDGET_MUTATION_HARD_BLOCKED`, and signed Meta connect URL generation. It does not call the Meta callback or exchange/store Meta tokens. The script does not print tokens or passwords; if env is missing, it exits blocked instead of reporting a false pass.
+Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_AUTH_SMOKE_EMAIL`, `SUPABASE_AUTH_SMOKE_PASSWORD`, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. Optional: `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID` to verify cross-tenant denial. These same required values are now part of `npm run env:release-gates`, so a release cannot be declared ready before the smoke prerequisites exist. The script verifies bearer-only `/api/me` tenant membership bootstrap, explicit allowed-tenant `/api/me`, unauthenticated rejection, `PATCH /api/settings/budget` returning `BUDGET_MUTATION_HARD_BLOCKED`, and signed Meta connect URL generation. It does not call the Meta callback or exchange/store Meta tokens. The script does not print tokens or passwords; if env is missing, it exits blocked instead of reporting a false pass.
 
 ## GitHub
 

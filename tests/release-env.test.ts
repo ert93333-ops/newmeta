@@ -4,6 +4,7 @@ import { checkReleaseEnv } from "@/lib/ops/release-env";
 
 function validReleaseEnv(): Record<string, string> {
   return {
+    HERMES_APP_URL: "https://app.newmeta.test",
     NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_value",
     SUPABASE_SECRET_KEY: "sb_secret_test_value",
@@ -14,7 +15,10 @@ function validReleaseEnv(): Record<string, string> {
     META_APP_SECRET: "meta-secret-value",
     META_REDIRECT_URI: "https://app.newmeta.test/api/integrations/meta/callback",
     HERMES_META_OAUTH_MODE: "live",
-    HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters"
+    HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
+    SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
+    SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
+    SUPABASE_AUTH_SMOKE_TENANT_ID: "00000000-0000-0000-0000-000000000001"
   };
 }
 
@@ -39,11 +43,35 @@ describe("release env gate", () => {
     const result = checkReleaseEnv({
       ...validReleaseEnv(),
       META_APP_ID: "your-meta-app-id",
-      META_APP_SECRET: undefined
+      META_APP_SECRET: undefined,
+      SUPABASE_AUTH_SMOKE_EMAIL: "example@example.com"
     });
 
     expect(result.issues.map((issue) => issue.code)).toContain("PLACEHOLDER_ENV");
     expect(result.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+  });
+
+  it("blocks release env when app url or auth smoke env is missing", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_APP_URL: undefined,
+      NEXT_PUBLIC_APP_URL: undefined,
+      SUPABASE_AUTH_SMOKE_PASSWORD: undefined
+    });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+    expect(result.issues.some((issue) => issue.message.includes("HERMES_APP_URL or NEXT_PUBLIC_APP_URL"))).toBe(true);
+    expect(result.issues.some((issue) => issue.message.includes("SUPABASE_AUTH_SMOKE_PASSWORD"))).toBe(true);
+  });
+
+  it("blocks localhost app urls", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_APP_URL: "http://localhost:3000"
+    });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("INSECURE_URL");
+    expect(result.issues.map((issue) => issue.code)).toContain("LOCALHOST_URL");
   });
 
   it("blocks invalid token encryption keys", () => {
