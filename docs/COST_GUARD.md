@@ -31,4 +31,6 @@ Variant design execution must be bound to an approved `ai_paid_generation` appro
 
 `POST /api/cost/estimate` can create the required pending `ai_paid_generation` request when callers explicitly pass `approvalRequest.create = true`. This happens only for `approval_required` decisions; `blocked` cost decisions never create an approval request.
 
+Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw` and `monthActualCostKrw` values are ignored at the API boundary so callers cannot lower their effective usage by editing the request body.
+
 Automatic retry is limited to one failed generation retry.

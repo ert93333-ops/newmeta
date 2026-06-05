@@ -17,12 +17,18 @@ export async function POST(request: Request) {
   try {
     const context = await resolveUserContext(request);
     const input = (await parseWriteJson(request)) as CostEstimateRequest;
-    const decision = guardCost(input);
     const repository = getRepository();
-    await repository.saveCostUsage(request, costUsageFromEstimate(input, context, decision.estimatedCostKrw));
+    const usageSummary = await repository.summarizeCostUsage(request, context);
+    const guardedInput = {
+      ...input,
+      todayActualCostKrw: usageSummary.todayActualCostKrw,
+      monthActualCostKrw: usageSummary.monthActualCostKrw
+    };
+    const decision = guardCost(guardedInput);
+    await repository.saveCostUsage(request, costUsageFromEstimate(guardedInput, context, decision.estimatedCostKrw));
 
     if (decision.status !== "approval_required" || input.approvalRequest?.create !== true) {
-      return ok(decision);
+      return ok({ ...decision, usageSummary });
     }
 
     const approval = createApprovalRequest({
@@ -38,7 +44,8 @@ export async function POST(request: Request) {
         estimatedCostKrw: decision.estimatedCostKrw,
         effectiveDailyCapKrw: decision.effectiveDailyCapKrw,
         providerName: input.settings.providerName,
-        status: decision.status
+        status: decision.status,
+        usageSummary
       },
       reason: readOptionalString(input.approvalRequest.reason) ?? `Paid AI operation approval for ${input.operationType}.`
     });
@@ -55,7 +62,7 @@ export async function POST(request: Request) {
       result: "pending"
     });
 
-    return ok({ ...decision, approval, guard: approvalGuardDetails(approval) }, 201);
+    return ok({ ...decision, usageSummary, approval, guard: approvalGuardDetails(approval) }, 201);
   } catch (error) {
     return handleError(error);
   }

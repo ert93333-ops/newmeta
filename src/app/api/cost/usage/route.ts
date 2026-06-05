@@ -5,8 +5,10 @@ import { getRepository } from "@/lib/repositories/hermes-repository";
 export async function GET(request: Request) {
   try {
     const context = await resolveUserContext(request);
+    const repository = getRepository();
     return ok({
-      usage: await getRepository().listCostUsage(request, context),
+      usage: await repository.listCostUsage(request, context),
+      summary: await repository.summarizeCostUsage(request, context),
       policy: {
         defaultDailyCapKrw: 5000,
         hardDailyCapKrw: 7500,

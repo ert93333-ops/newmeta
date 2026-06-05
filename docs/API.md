@@ -96,7 +96,9 @@ Successful execution persists the action-specific execution result on `approval_
 }
 ```
 
-The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked.
+The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked.
+
+`GET /api/cost/usage` returns both the raw tenant-scoped usage rows and the server-calculated daily/monthly summary used by the cost guard.
 
 ## Budget Policy
 

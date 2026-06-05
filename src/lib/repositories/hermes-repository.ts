@@ -29,6 +29,12 @@ export interface CostUsageInput {
   relatedAssetId?: string;
   relatedJobId?: string;
   status: string;
+  createdAt?: string;
+}
+
+export interface CostUsageSummary {
+  todayActualCostKrw: number;
+  monthActualCostKrw: number;
 }
 
 export interface HermesRepository {
@@ -38,6 +44,7 @@ export interface HermesRepository {
   saveAuditLog(request: Request, audit: AuditLogInput): Promise<void>;
   saveCostUsage(request: Request, usage: CostUsageInput): Promise<void>;
   listCostUsage(request: Request, context: UserContext): Promise<unknown[]>;
+  summarizeCostUsage(request: Request, context: UserContext, now?: Date): Promise<CostUsageSummary>;
   saveJob(request: Request, job: Record<string, unknown>): Promise<Record<string, unknown>>;
   getJob(request: Request, context: UserContext, id: string): Promise<Record<string, unknown> | null>;
   saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -97,13 +104,20 @@ export class MemoryHermesRepository implements HermesRepository {
   }
 
   async saveCostUsage(_request: Request, usage: CostUsageInput): Promise<void> {
-    getMemoryStore().costUsage.push(usage);
+    getMemoryStore().costUsage.push({
+      ...usage,
+      createdAt: usage.createdAt ?? new Date().toISOString()
+    });
   }
 
   async listCostUsage(_request: Request, context: UserContext): Promise<unknown[]> {
     return getMemoryStore().costUsage.filter((item) => {
       return typeof item === "object" && item !== null && "tenantId" in item && item.tenantId === context.tenantId;
     });
+  }
+
+  async summarizeCostUsage(_request: Request, context: UserContext, now = new Date()): Promise<CostUsageSummary> {
+    return summarizeCostUsageRows(await this.listCostUsage(_request, context), now);
   }
 
   async saveJob(_request: Request, job: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -193,7 +207,7 @@ export class SupabaseHermesRepository implements HermesRepository {
     const supabase = createRequestClient(request);
     if (!supabase) return this.fallback.saveCostUsage(request, usage);
 
-    const { error } = await supabase.from("cost_usage_logs").insert({
+    const row: Record<string, unknown> = {
       tenant_id: usage.tenantId,
       created_by: usage.userId,
       provider: usage.provider,
@@ -206,7 +220,12 @@ export class SupabaseHermesRepository implements HermesRepository {
       related_asset_id: usage.relatedAssetId,
       related_job_id: usage.relatedJobId,
       status: usage.status
-    });
+    };
+    if (usage.createdAt) {
+      row.created_at = usage.createdAt;
+    }
+
+    const { error } = await supabase.from("cost_usage_logs").insert(row);
     if (error) throw new Error(`SUPABASE_COST_INSERT_FAILED:${error.message}`);
   }
 
@@ -221,6 +240,19 @@ export class SupabaseHermesRepository implements HermesRepository {
       .order("created_at", { ascending: false });
     if (error) throw new Error(`SUPABASE_COST_SELECT_FAILED:${error.message}`);
     return data ?? [];
+  }
+
+  async summarizeCostUsage(request: Request, context: UserContext, now = new Date()): Promise<CostUsageSummary> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.summarizeCostUsage(request, context, now);
+
+    const { data, error } = await supabase
+      .from("cost_usage_logs")
+      .select("created_at, estimated_cost_krw, actual_cost_krw, status")
+      .eq("tenant_id", context.tenantId)
+      .gte("created_at", monthStartUtc(now).toISOString());
+    if (error) throw new Error(`SUPABASE_COST_SUMMARY_FAILED:${error.message}`);
+    return summarizeCostUsageRows(data ?? [], now);
   }
 
   async saveJob(request: Request, job: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -403,4 +435,83 @@ export function costUsageFromEstimate(input: CostEstimateInput, context: UserCon
     estimatedCostKrw,
     status: "estimated"
   };
+}
+
+export function summarizeCostUsageRows(rows: unknown[], now = new Date()): CostUsageSummary {
+  const todayStart = dayStartUtc(now).getTime();
+  const monthStart = monthStartUtc(now).getTime();
+
+  return rows.reduce<CostUsageSummary>(
+    (summary, row) => {
+      if (!shouldCountCostUsage(row)) {
+        return summary;
+      }
+
+      const createdAtMs = readCostUsageCreatedAt(row, now);
+      const costKrw = readCostUsageCostKrw(row);
+      if (createdAtMs >= monthStart) {
+        summary.monthActualCostKrw += costKrw;
+      }
+      if (createdAtMs >= todayStart) {
+        summary.todayActualCostKrw += costKrw;
+      }
+      return summary;
+    },
+    {
+      todayActualCostKrw: 0,
+      monthActualCostKrw: 0
+    }
+  );
+}
+
+function shouldCountCostUsage(row: unknown): boolean {
+  const status = readStringField(row, "status")?.toLowerCase();
+  return status !== "failed" && status !== "cancelled";
+}
+
+function readCostUsageCreatedAt(row: unknown, fallbackNow: Date): number {
+  const rawCreatedAt = readStringField(row, "createdAt") ?? readStringField(row, "created_at");
+  const parsed = rawCreatedAt ? Date.parse(rawCreatedAt) : Number.NaN;
+  return Number.isNaN(parsed) ? fallbackNow.getTime() : parsed;
+}
+
+function readCostUsageCostKrw(row: unknown): number {
+  return (
+    readNumberField(row, "actualCostKrw") ??
+    readNumberField(row, "actual_cost_krw") ??
+    readNumberField(row, "estimatedCostKrw") ??
+    readNumberField(row, "estimated_cost_krw") ??
+    0
+  );
+}
+
+function readStringField(row: unknown, key: string): string | undefined {
+  if (typeof row !== "object" || row === null || !(key in row)) {
+    return undefined;
+  }
+  const value = (row as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNumberField(row: unknown, key: string): number | undefined {
+  if (typeof row !== "object" || row === null || !(key in row)) {
+    return undefined;
+  }
+  const value = (row as Record<string, unknown>)[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function dayStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function monthStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }

@@ -9,19 +9,13 @@ const ENV_KEYS = [
   "NODE_ENV",
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
+  "HERMES_DEFAULT_TENANT_ID",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
 
 const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const mutableEnv = process.env as unknown as Record<string, string | undefined>;
-const tenantId = "00000000-0000-0000-0000-000000000001";
-
-const approver: UserContext = {
-  userId: "cost-approval-owner",
-  tenantId,
-  role: "owner"
-};
 
 const baseEstimate: CostEstimateInput = {
   operationType: "variant_batch",
@@ -68,6 +62,16 @@ function jsonRequest(url: string, body: unknown): Request {
   });
 }
 
+function useMockTenant(tenantId: string): UserContext {
+  setEnv("HERMES_AUTH_MODE", "mock");
+  setEnv("HERMES_DEFAULT_TENANT_ID", tenantId);
+  return {
+    userId: "cost-approval-owner",
+    tenantId,
+    role: "owner"
+  };
+}
+
 describe("cost estimate route approval request flow", () => {
   afterEach(() => {
     restoreEnv();
@@ -75,7 +79,7 @@ describe("cost estimate route approval request flow", () => {
 
   it("returns approval_required without creating an approval by default", async () => {
     clearEnv();
-    setEnv("HERMES_AUTH_MODE", "mock");
+    useMockTenant("00000000-0000-0000-0000-000000000101");
 
     const response = await estimateCostRoute(jsonRequest("http://localhost/api/cost/estimate", baseEstimate));
     const body = await response.json();
@@ -86,12 +90,16 @@ describe("cost estimate route approval request flow", () => {
       estimatedCostKrw: 500,
       requiresApproval: true
     });
+    expect(body.usageSummary).toEqual({
+      todayActualCostKrw: 0,
+      monthActualCostKrw: 0
+    });
     expect(body.approval).toBeUndefined();
   });
 
   it("creates a pending paid generation approval only when explicitly requested", async () => {
     clearEnv();
-    setEnv("HERMES_AUTH_MODE", "mock");
+    const approver = useMockTenant("00000000-0000-0000-0000-000000000102");
     const repository = new MemoryHermesRepository();
 
     const response = await estimateCostRoute(
@@ -133,7 +141,7 @@ describe("cost estimate route approval request flow", () => {
 
   it("does not create an approval when the cost guard blocks the operation", async () => {
     clearEnv();
-    setEnv("HERMES_AUTH_MODE", "mock");
+    useMockTenant("00000000-0000-0000-0000-000000000103");
 
     const response = await estimateCostRoute(
       jsonRequest("http://localhost/api/cost/estimate", {
@@ -152,9 +160,48 @@ describe("cost estimate route approval request flow", () => {
     expect(body.approval).toBeUndefined();
   });
 
+  it("uses persisted server usage instead of client-supplied usage totals", async () => {
+    clearEnv();
+    const approver = useMockTenant("00000000-0000-0000-0000-000000000104");
+    const repository = new MemoryHermesRepository();
+    await repository.saveCostUsage(jsonRequest("http://localhost/api/test", {}), {
+      tenantId: approver.tenantId,
+      userId: approver.userId,
+      provider: "mock-ai",
+      operationType: "image_generation",
+      estimatedCredits: 48,
+      estimatedCostKrw: 4800,
+      status: "estimated",
+      createdAt: new Date().toISOString()
+    });
+
+    const response = await estimateCostRoute(
+      jsonRequest("http://localhost/api/cost/estimate", {
+        ...baseEstimate,
+        todayActualCostKrw: 0,
+        monthActualCostKrw: 0,
+        approvalRequest: {
+          create: true,
+          objectId: "creative-control-1"
+        }
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "blocked",
+      usageSummary: {
+        todayActualCostKrw: 4800,
+        monthActualCostKrw: 4800
+      }
+    });
+    expect(body.approval).toBeUndefined();
+  });
+
   it("supports the estimate to approval to variant execution flow without budget mutation", async () => {
     clearEnv();
-    setEnv("HERMES_AUTH_MODE", "mock");
+    const approver = useMockTenant("00000000-0000-0000-0000-000000000105");
     const repository = new MemoryHermesRepository();
 
     const estimateResponse = await estimateCostRoute(

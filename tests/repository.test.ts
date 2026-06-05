@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   MemoryHermesRepository,
   costUsageFromEstimate,
-  requestAuditMetadata
+  requestAuditMetadata,
+  summarizeCostUsageRows
 } from "@/lib/repositories/hermes-repository";
 import { createApprovalRequest } from "@/lib/approval/approval-policy";
 import type { UserContext } from "@/lib/types";
@@ -76,6 +77,80 @@ describe("Hermes repository", () => {
 
     expect(usageList).toHaveLength(1);
     expect(JSON.stringify(usageList)).not.toContain("daily_budget");
+  });
+
+  it("summarizes tenant cost usage by server-side created time", async () => {
+    const repository = new MemoryHermesRepository();
+    const summaryOwner = {
+      ...owner,
+      tenantId: "tenant-summary"
+    };
+    const now = new Date("2026-06-05T09:00:00.000Z");
+    await repository.saveCostUsage(request, {
+      tenantId: summaryOwner.tenantId,
+      userId: summaryOwner.userId,
+      provider: "mock-ai",
+      operationType: "image_generation",
+      estimatedCredits: 10,
+      estimatedCostKrw: 1000,
+      status: "estimated",
+      createdAt: "2026-06-05T08:00:00.000Z"
+    });
+    await repository.saveCostUsage(request, {
+      tenantId: summaryOwner.tenantId,
+      userId: summaryOwner.userId,
+      provider: "mock-ai",
+      operationType: "video_generation",
+      estimatedCredits: 30,
+      estimatedCostKrw: 3000,
+      actualCostKrw: 2500,
+      status: "succeeded",
+      createdAt: "2026-06-04T08:00:00.000Z"
+    });
+    await repository.saveCostUsage(request, {
+      tenantId: "tenant-summary-other",
+      userId: summaryOwner.userId,
+      provider: "mock-ai",
+      operationType: "image_generation",
+      estimatedCredits: 50,
+      estimatedCostKrw: 5000,
+      status: "estimated",
+      createdAt: "2026-06-05T08:00:00.000Z"
+    });
+
+    await expect(repository.summarizeCostUsage(request, summaryOwner, now)).resolves.toEqual({
+      todayActualCostKrw: 1000,
+      monthActualCostKrw: 3500
+    });
+  });
+
+  it("summarizes raw cost rows from Supabase snake_case fields", () => {
+    expect(
+      summarizeCostUsageRows(
+        [
+          {
+            created_at: "2026-06-05T01:00:00.000Z",
+            estimated_cost_krw: "700",
+            status: "estimated"
+          },
+          {
+            created_at: "2026-06-04T01:00:00.000Z",
+            estimated_cost_krw: "300",
+            actual_cost_krw: "200",
+            status: "succeeded"
+          },
+          {
+            created_at: "2026-06-05T01:00:00.000Z",
+            estimated_cost_krw: "999",
+            status: "failed"
+          }
+        ],
+        new Date("2026-06-05T09:00:00.000Z")
+      )
+    ).toEqual({
+      todayActualCostKrw: 700,
+      monthActualCostKrw: 900
+    });
   });
 
   it("adds request metadata to memory audit logs", async () => {
