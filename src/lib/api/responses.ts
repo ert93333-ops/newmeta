@@ -200,6 +200,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_OAUTH_STATE_SECRET_REQUIRED") {
       return fail(error.message, "Meta OAuth state signing secret is required.", 501);
     }
+    if (error.message === "PUBLIC_APP_URL_REQUIRED") {
+      return fail(error.message, "Public app URL is required for OAuth browser handoff.", 501);
+    }
     if (error.message === "META_OAUTH_STATE_REQUIRED") {
       return fail(error.message, "Meta OAuth state is required.", 403);
     }

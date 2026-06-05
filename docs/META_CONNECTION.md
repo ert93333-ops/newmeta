@@ -30,7 +30,7 @@ In local mock mode this route may fall back to mock app metadata for safe develo
 
 The dashboard Meta Connection panel is the browser entry point for this route. It first uses `/api/me` with the current Supabase browser session bearer to load visible tenant memberships when available. It persists the selected tenant id to both `sessionStorage` and `localStorage` under `hermes:tenant-id`, sends that tenant as the `x-tenant-id` header, and forwards the current Supabase browser session bearer when one exists. The panel does not render any Meta token, app secret, or direct credential input.
 
-`GET /api/integrations/meta/callback` is the browser redirect target. It does not exchange or store Meta tokens. Instead it forwards `code` and `state` to `/meta/oauth/callback` in the URL fragment so the code is not sent back to the server as a query string on the client handoff page.
+`GET /api/integrations/meta/callback` is the browser redirect target. It does not exchange or store Meta tokens. Instead it forwards `code` and `state` to `/meta/oauth/callback` in the URL fragment so the code is not sent back to the server as a query string on the client handoff page. Production handoff requires `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`; if neither is configured, the route returns `PUBLIC_APP_URL_REQUIRED` instead of falling back to the request origin.
 
 `/meta/oauth/callback` reads the fragment client-side, clears it from browser history, retrieves the current Supabase browser session when available, and calls `POST /api/integrations/meta/callback`. Production callers must still provide the same tenant context used to create the connect URL, for example through the `hermes:tenant-id` browser storage key.
 

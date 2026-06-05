@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
-import { resolveUserContext } from "@/lib/api/context";
+import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { connectMetaOAuth } from "@/lib/meta/oauth";
 import { verifyMetaOAuthState } from "@/lib/meta/oauth-state";
 import { getRepository } from "@/lib/repositories/hermes-repository";
@@ -69,9 +69,12 @@ function redirectToClientCallback(
 }
 
 function publicAppOrigin(request: Request): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const configured = process.env.HERMES_APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (configured) {
     return configured;
+  }
+  if (isProductionRuntime()) {
+    throw new Error("PUBLIC_APP_URL_REQUIRED");
   }
   const url = new URL(request.url);
   return url.origin;

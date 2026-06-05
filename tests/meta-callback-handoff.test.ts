@@ -8,7 +8,7 @@ const callbackRouteSource = readFileSync(
   "utf8"
 );
 
-const ENV_KEYS = ["NEXT_PUBLIC_APP_URL"] as const;
+const ENV_KEYS = ["NODE_ENV", "HERMES_APP_URL", "NEXT_PUBLIC_APP_URL"] as const;
 const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const mutableEnv = process.env as unknown as Record<string, string | undefined>;
 
@@ -29,7 +29,7 @@ describe("Meta OAuth browser callback handoff", () => {
   });
 
   it("redirects Meta GET callbacks to the client handoff page with code and state in the fragment", async () => {
-    mutableEnv.NEXT_PUBLIC_APP_URL = "https://app.newmeta.test";
+    mutableEnv.HERMES_APP_URL = "https://app.newmeta.test";
     const response = await GET(
       new Request("https://app.newmeta.test/api/integrations/meta/callback?code=meta-code&state=signed-state")
     );
@@ -43,6 +43,20 @@ describe("Meta OAuth browser callback handoff", () => {
     expect(redirectUrl.search).toBe("");
     expect(fragment.get("code")).toBe("meta-code");
     expect(fragment.get("state")).toBe("signed-state");
+  });
+
+  it("fails closed in production when no public app url is configured", async () => {
+    mutableEnv.NODE_ENV = "production";
+    delete mutableEnv.HERMES_APP_URL;
+    delete mutableEnv.NEXT_PUBLIC_APP_URL;
+
+    const response = await GET(
+      new Request("https://app.newmeta.test/api/integrations/meta/callback?code=meta-code&state=signed-state")
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("PUBLIC_APP_URL_REQUIRED");
   });
 
   it("forwards Meta OAuth errors without attempting token exchange", async () => {
