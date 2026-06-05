@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/integrations/meta/callback/route";
 import { mockContext } from "@/lib/api/context";
 import { createMetaOAuthState } from "@/lib/meta/oauth-state";
@@ -11,7 +11,15 @@ const callbackRouteSource = readFileSync(
   "utf8"
 );
 
-const ENV_KEYS = ["HERMES_AUTH_MODE", "HERMES_META_OAUTH_MODE", "TOKEN_ENCRYPTION_KEY"] as const;
+const ENV_KEYS = [
+  "HERMES_AUTH_MODE",
+  "HERMES_META_OAUTH_MODE",
+  "TOKEN_ENCRYPTION_KEY",
+  "META_APP_ID",
+  "META_APP_SECRET",
+  "META_REDIRECT_URI",
+  "META_GRAPH_VERSION"
+] as const;
 const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const mutableEnv = process.env as unknown as Record<string, string | undefined>;
 
@@ -24,6 +32,7 @@ function restoreEnv(): void {
       mutableEnv[key] = value;
     }
   }
+  vi.unstubAllGlobals();
 }
 
 describe("Meta OAuth callback response security", () => {
@@ -133,5 +142,45 @@ describe("Meta OAuth callback response security", () => {
       expect.arrayContaining(["ads_read", "ads_management", "business_management"])
     );
     expect(body.connection?.scopes).not.toContain("forged_scope");
+  });
+
+  it("fails closed when live Meta OAuth does not grant all required scopes", async () => {
+    mutableEnv.HERMES_META_OAUTH_MODE = "live";
+    mutableEnv.META_APP_ID = "123456789";
+    mutableEnv.META_APP_SECRET = "server-app-secret";
+    mutableEnv.META_REDIRECT_URI = "https://app.newmeta.test/api/integrations/meta/callback";
+    mutableEnv.META_GRAPH_VERSION = "v24.0";
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            access_token: "live-meta-token",
+            expires_in: 7200,
+            token_type: "bearer"
+          })
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            data: [
+              { permission: "ads_read", status: "granted" },
+              { permission: "ads_management", status: "granted" }
+            ]
+          })
+        )
+    );
+    const state = createMetaOAuthState(mockContext()).value;
+    const response = await POST(
+      new Request("http://localhost/api/integrations/meta/callback", {
+        method: "POST",
+        body: JSON.stringify({ code: "live-code", state })
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("META_REQUIRED_SCOPES_MISSING");
+    expect(body.error.details.missingScopes).toEqual(["business_management"]);
   });
 });

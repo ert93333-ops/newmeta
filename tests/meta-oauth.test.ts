@@ -128,4 +128,48 @@ describe("Meta OAuth exchange", () => {
 
     await expect(fetchMetaGrantedScopes("live-meta-token")).rejects.toThrow("META_OAUTH_PERMISSIONS_FETCH_FAILED:400");
   });
+
+  it("fails closed when Meta does not grant all required OAuth scopes", async () => {
+    mutableEnv.HERMES_META_OAUTH_MODE = "live";
+    mutableEnv.META_APP_ID = "123456789";
+    mutableEnv.META_APP_SECRET = "server-app-secret";
+    mutableEnv.META_REDIRECT_URI = "https://app.newmeta.test/api/integrations/meta/callback";
+    mutableEnv.META_GRAPH_VERSION = "v24.0";
+    mutableEnv.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "live-meta-token",
+          expires_in: 7200,
+          token_type: "bearer"
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            { permission: "ads_read", status: "granted" },
+            { permission: "ads_management", status: "granted" }
+          ]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { connectMetaOAuth } = await import("@/lib/meta/oauth");
+
+    await expect(
+      connectMetaOAuth({
+        request: new Request("http://localhost/api/integrations/meta/callback"),
+        context: {
+          userId: "00000000-0000-0000-0000-000000000001",
+          tenantId: "00000000-0000-0000-0000-000000000010",
+          role: "owner"
+        },
+        repository: {
+          saveMetaConnection: vi.fn(),
+          saveAuditLog: vi.fn()
+        } as never,
+        code: "oauth-code"
+      })
+    ).rejects.toThrow("META_REQUIRED_SCOPES_MISSING");
+  });
 });

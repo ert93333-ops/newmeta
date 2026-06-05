@@ -34,7 +34,7 @@ The dashboard Meta Connection panel is the browser entry point for this route. I
 
 `/meta/oauth/callback` reads the fragment client-side, clears it from browser history, retrieves the current Supabase browser session when available, and calls `POST /api/integrations/meta/callback`. Production callers must still provide the same tenant context used to create the connect URL, for example through the `hermes:tenant-id` browser storage key.
 
-`POST /api/integrations/meta/callback` requires both the authorization `code` and matching `state`. It verifies the state before exchanging the code server-side, resolves granted scopes from Meta server-side, encrypts the resulting Meta token with AES-GCM, and stores only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
+`POST /api/integrations/meta/callback` requires both the authorization `code` and matching `state`. It verifies the state before exchanging the code server-side, resolves granted scopes from Meta server-side, verifies that the required scope set was actually granted, encrypts the resulting Meta token with AES-GCM, and stores only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
 
 Read routes resolve their adapter server-side from the latest tenant-scoped `meta_connections` row. When the stored connection metadata says `mode=live`, the route decrypts the access token with `TOKEN_ENCRYPTION_KEY` and uses `MetaGraphApiAdapter`. When no connection exists, only non-production runtime may fall back to `MockMetaAdapter`; production fails closed with `META_CONNECTION_REQUIRED`. Stored mock connections are also local-only and fail closed in production.
 
@@ -54,7 +54,7 @@ If a later live create step fails after earlier Meta objects were already create
 
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
-The OAuth callback request accepts authorization `code` and signed `state` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary. A browser-supplied `scopes` array is not authoritative; Hermes stores server-resolved granted scopes only.
+The OAuth callback request accepts authorization `code` and signed `state` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary. A browser-supplied `scopes` array is not authoritative; Hermes stores server-resolved granted scopes only and refuses live connections that are missing required scopes.
 
 Release deployments must configure `HERMES_OAUTH_STATE_SECRET` with at least 32 characters. Non-production mock mode can fall back to `TOKEN_ENCRYPTION_KEY` for local-only state signing, but production fails closed without the dedicated state secret.
 

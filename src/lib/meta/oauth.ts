@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isProductionRuntime } from "@/lib/api/context";
-import { DEFAULT_META_GRANTED_SCOPES } from "@/lib/meta/oauth-scopes";
+import { DEFAULT_META_GRANTED_SCOPES, REQUIRED_META_OAUTH_SCOPES } from "@/lib/meta/oauth-scopes";
 import type { HermesRepository, MetaConnectionInput } from "@/lib/repositories/hermes-repository";
 import { encryptToken } from "@/lib/security/token-crypto";
 import type { UserContext } from "@/lib/types";
@@ -30,12 +30,19 @@ export interface StoredMetaConnectionResult {
   mode: MetaOAuthMode;
 }
 
+export class MetaRequiredScopesMissingError extends Error {
+  constructor(readonly missingScopes: string[]) {
+    super("META_REQUIRED_SCOPES_MISSING");
+  }
+}
+
 export async function connectMetaOAuth(input: MetaOAuthConnectInput): Promise<StoredMetaConnectionResult> {
   const mode = resolveMetaOAuthMode();
   const tokenResult =
     mode === "mock" ? mockMetaOAuthToken(input.code) : await exchangeMetaAuthorizationCode(input.code);
   const grantedScopes =
     mode === "mock" ? Array.from(DEFAULT_META_GRANTED_SCOPES) : await fetchMetaGrantedScopes(tokenResult.accessToken);
+  assertRequiredMetaOAuthScopes(grantedScopes);
   const encryptionKey = readRequiredEnv("TOKEN_ENCRYPTION_KEY", "TOKEN_ENCRYPTION_KEY_REQUIRED");
   const encrypted = encryptToken(tokenResult.accessToken, encryptionKey, process.env.TOKEN_ENCRYPTION_KEY_ID ?? "primary");
   const expiresAt = tokenResult.expiresIn
@@ -176,6 +183,14 @@ export async function fetchMetaGrantedScopes(accessToken: string): Promise<strin
   }
 
   return grantedScopes;
+}
+
+function assertRequiredMetaOAuthScopes(grantedScopes: string[]): void {
+  const granted = new Set(grantedScopes);
+  const missingScopes = REQUIRED_META_OAUTH_SCOPES.filter((scope) => !granted.has(scope));
+  if (missingScopes.length > 0) {
+    throw new MetaRequiredScopesMissingError(missingScopes);
+  }
 }
 
 function mockMetaOAuthToken(code: string): MetaOAuthTokenResult {

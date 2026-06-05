@@ -15,6 +15,7 @@ import {
   CostSettingsNotConfiguredError
 } from "@/lib/settings/cost-settings";
 import { MetaGraphRequestError } from "@/lib/meta/graph-meta-adapter";
+import { MetaRequiredScopesMissingError } from "@/lib/meta/oauth";
 import {
   assertNoCredentialPayload,
   isCredentialPayloadBlockedError,
@@ -88,6 +89,11 @@ export function handleError(error: unknown): NextResponse {
         providerMessage: error.providerMessage
       }
     );
+  }
+  if (error instanceof MetaRequiredScopesMissingError) {
+    return fail(error.message, "Meta OAuth did not grant all required scopes.", 403, {
+      missingScopes: error.missingScopes
+    });
   }
   if (isPaidOperationDomainExecutorRequiredError(error)) {
     return fail(
