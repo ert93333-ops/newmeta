@@ -1,5 +1,6 @@
 import { ApprovalCenterPanel } from "@/app/approval-center-panel";
 import { MetaConnectionPanel } from "@/app/meta-connection-panel";
+import { SettingsPanel } from "@/app/settings-panel";
 
 const navItems = [
   "Dashboard",
@@ -98,7 +99,9 @@ export default function Home() {
 
         <MetaConnectionPanel />
 
-        <section className="panel" id="settings">
+        <SettingsPanel />
+
+        <section className="panel" id="security-checks">
           <h2>Security and Approval Checks</h2>
           <div className="checks">
             {checks.map((check) => (

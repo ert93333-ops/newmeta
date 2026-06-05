@@ -293,6 +293,86 @@ textarea {
   gap: 12px;
 }
 
+.settings-panel {
+  scroll-margin-top: 18px;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 16px;
+}
+
+.settings-form,
+.settings-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-toolbar,
+.settings-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.settings-toolbar .field {
+  flex: 1 1 auto;
+}
+
+.settings-refresh {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-summary {
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.settings-summary-head {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-summary-head strong {
+  font-size: 14px;
+}
+
+.settings-summary-head small,
+.settings-note span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-checks .check-row strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-note {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
+  gap: 8px 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.settings-note strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
 .check-row {
   display: flex;
   justify-content: space-between;
@@ -612,17 +692,23 @@ textarea {
   .checks,
   .approval-layout,
   .meta-connect-form,
-  .scope-groups {
+  .scope-groups,
+  .settings-layout,
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
   .header,
-  .panel-heading {
+  .panel-heading,
+  .settings-toolbar,
+  .settings-actions {
     display: grid;
   }
 
   .meta-connect-button,
-  .meta-oauth-link {
+  .meta-oauth-link,
+  .settings-refresh,
+  .approve-button {
     width: 100%;
   }
 

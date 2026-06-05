@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PATCH as patchSettings } from "@/app/api/settings/[...path]/route";
+import { GET as getSettings, PATCH as patchSettings } from "@/app/api/settings/[...path]/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
 import type { UserContext } from "@/lib/types";
 
@@ -89,6 +89,68 @@ describe("settings route", () => {
 
     expect(response.status).toBe(403);
     expect((body.error as { code?: string }).code).toBe("BUDGET_MUTATION_HARD_BLOCKED");
+  });
+
+  it("hard-blocks budget settings reads", async () => {
+    clearSupabaseEnv();
+    mockResolveUserContext.mockResolvedValue(marketerContext);
+
+    const response = await getSettings(new Request("http://localhost/api/settings/budget"), params(["budget"]));
+    const body = await json(response);
+
+    expect(response.status).toBe(403);
+    expect((body.error as { code?: string }).code).toBe("BUDGET_MUTATION_HARD_BLOCKED");
+  });
+
+  it("returns tenant-scoped settings for viewer reads", async () => {
+    clearSupabaseEnv();
+    const provider = "cost-guard-read-route";
+    const repository = new MemoryHermesRepository();
+    await repository.saveIntegrationSettings(new Request("http://localhost/api/test"), {
+      tenantId: marketerContext.tenantId,
+      createdBy: marketerContext.userId,
+      provider,
+      settingsJson: {
+        providerName: "mock-ai",
+        dailyCostCapKrw: 5000
+      }
+    });
+    mockResolveUserContext.mockResolvedValue({
+      ...marketerContext,
+      role: "viewer"
+    } satisfies UserContext);
+
+    const response = await getSettings(new Request(`http://localhost/api/settings/${provider}`), params([provider]));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      provider,
+      configured: true,
+      setting: {
+        tenantId: marketerContext.tenantId,
+        provider,
+        settingsJson: {
+          providerName: "mock-ai",
+          dailyCostCapKrw: 5000
+        }
+      }
+    });
+  });
+
+  it("returns configured false when no settings row exists", async () => {
+    clearSupabaseEnv();
+    mockResolveUserContext.mockResolvedValue(marketerContext);
+
+    const response = await getSettings(new Request("http://localhost/api/settings/missing-provider"), params(["missing-provider"]));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      provider: "missing-provider",
+      configured: false,
+      setting: null
+    });
   });
 
   it("rejects viewer settings writes", async () => {

@@ -3,6 +3,28 @@ import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 import { assertRole } from "@/lib/security/rbac";
 
+export async function GET(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  try {
+    const context = await resolveUserContext(request);
+    const { path } = await params;
+
+    if (path.some((segment) => segment.toLowerCase().includes("budget"))) {
+      return fail("BUDGET_MUTATION_HARD_BLOCKED", "Budget mutation settings are not available.", 403);
+    }
+
+    const provider = path.join("/");
+    const setting = await getRepository().getIntegrationSettings(request, context, provider);
+
+    return ok({
+      provider,
+      configured: Boolean(setting),
+      setting
+    });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     const context = await resolveUserContext(request);
