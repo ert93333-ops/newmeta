@@ -14,6 +14,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `GET /api/me` returns `memberships` and `activeTenant`. If `x-tenant-id` is provided, it verifies the requested tenant is one of the authenticated user's memberships and returns `TENANT_ACCESS_DENIED` otherwise. Without `x-tenant-id`, it returns the first visible membership as `activeTenant` so browser clients can choose a tenant before calling tenant-scoped APIs.
 
+`GET /api/tenants/:id` returns only membership-scoped tenant metadata for the requested tenant: `id`, `name`, `role`, `isInternal`, and `crossTenantLearningOptIn`. The route resolves identity from the current bearer token, denies tenants outside the caller's memberships with `TENANT_ACCESS_DENIED`, and never falls back to a cross-tenant tenant lookup.
+
 `PATCH /api/settings/*` requires the authenticated tenant context plus at least `marketer` role. It persists the request body to the tenant's `integration_settings` row keyed by the route path, writes an audit log with before/after JSON, and rejects any route path containing `budget` with `BUDGET_MUTATION_HARD_BLOCKED` even when the body itself is non-executable.
 
 ## Meta
