@@ -31,6 +31,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/performance-fusion/reports`
 - `POST /api/variants/design`
 
+`POST /api/render/jobs` keeps deterministic final/QA render checks approval-free when no paid operation is requested. When `operationType` is `image_generation` or `video_generation`, it becomes a paid AI generation queue endpoint: callers must provide an approved same-tenant `ai_paid_generation` approval for the matching operation type. On success, the API marks that approval `executed`, records a `running` cost usage reservation linked by `relatedJobId = approval.id`, queues a `creative_jobs` worker job, and writes an audit log. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; reused approvals return `APPROVAL_REQUIRED`.
+
 `POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed`, writes an audit log, and records a succeeded cost usage entry linked by `relatedJobId = approval.id`. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
 
 ## Draft and Approval

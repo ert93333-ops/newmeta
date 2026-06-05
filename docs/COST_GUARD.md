@@ -27,6 +27,8 @@ Approval required:
 - variant batches
 - external provider credit spend
 
+Image and video generation queueing must be bound to an approved `ai_paid_generation` approval request with a matching `objectType` of `image_generation` or `video_generation`. The render job API consumes the approval, queues a worker job, and records a `running` cost usage reservation linked by `relatedJobId = approval.id`.
+
 Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches.
 
 The generic approval execution route does not execute `ai_paid_generation`. Paid generation approvals must be consumed by their domain route or worker so generation output, validation, audit logging, and cost usage logging cannot drift apart.
