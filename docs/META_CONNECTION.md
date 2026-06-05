@@ -26,6 +26,10 @@ External customer connections must use OAuth / Business Login. Customers must no
 
 `GET /api/integrations/meta/connect-url` returns a Meta OAuth URL containing a signed, 10-minute `state` value. The state is bound to the current authenticated user and tenant through HMAC-derived hashes, not raw user or tenant ids.
 
+`GET /api/integrations/meta/callback` is the browser redirect target. It does not exchange or store Meta tokens. Instead it forwards `code` and `state` to `/meta/oauth/callback` in the URL fragment so the code is not sent back to the server as a query string on the client handoff page.
+
+`/meta/oauth/callback` reads the fragment client-side, clears it from browser history, retrieves the current Supabase browser session when available, and calls `POST /api/integrations/meta/callback`. Production callers must still provide the same tenant context used to create the connect URL, for example through the `hermes:tenant-id` browser storage key.
+
 `POST /api/integrations/meta/callback` requires both the authorization `code` and matching `state`. It verifies the state before exchanging the code server-side, encrypting the resulting Meta token with AES-GCM, and storing only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
 
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.

@@ -379,3 +379,53 @@ textarea {
     display: grid;
   }
 }
+
+.oauth-callback-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.oauth-callback-panel {
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 24px;
+}
+
+.oauth-callback-panel h1 {
+  margin: 8px 0;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.oauth-callback-panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.oauth-status {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.oauth-status.pending,
+.oauth-status.working {
+  background: #fff4df;
+  color: var(--warn);
+}
+
+.oauth-status.connected {
+  background: #e6f4ee;
+  color: var(--good);
+}
+
+.oauth-status.blocked {
+  background: #fee4e2;
+  color: var(--bad);
+}

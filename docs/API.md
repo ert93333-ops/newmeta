@@ -15,6 +15,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 ## Meta
 
 - `GET /api/integrations/meta/connect-url`
+- `GET /api/integrations/meta/callback`
 - `POST /api/integrations/meta/callback`
 - `DELETE /api/integrations/meta/:id`
 - `GET /api/meta/ad-accounts`
@@ -23,6 +24,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 `POST /api/integrations/meta/callback` accepts an OAuth authorization code, exchanges it server-side, encrypts the resulting Meta token, stores it in `meta_connections`, writes an audit record, and returns only connection metadata such as `encryptedTokenStored`. Local mock exchange is disabled for release by `npm run env:release-gates`.
 
 `GET /api/integrations/meta/connect-url` includes a signed, expiring `state` query parameter in `connectUrl`. `POST /api/integrations/meta/callback` must receive that same `state`; missing, expired, tampered, or cross-tenant state returns `META_OAUTH_STATE_REQUIRED`, `META_OAUTH_STATE_EXPIRED`, `META_OAUTH_STATE_INVALID`, or `META_OAUTH_STATE_TENANT_MISMATCH` before any token exchange or persistence.
+
+`GET /api/integrations/meta/callback` only performs browser handoff. It redirects Meta's GET callback to `/meta/oauth/callback#code=...&state=...` and never exchanges or persists tokens itself. The client handoff page clears the fragment and calls the guarded POST route with the current Supabase session and tenant context.
 
 ## Creative and Diagnosis
 
