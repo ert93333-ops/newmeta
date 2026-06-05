@@ -16,6 +16,7 @@ const REQUIRED_RELEASE_ENV = [
   "SUPABASE_SECRET_KEY",
   "SUPABASE_DB_URL",
   "TOKEN_ENCRYPTION_KEY",
+  "HERMES_OAUTH_STATE_SECRET",
   "META_APP_ID",
   "META_APP_SECRET",
   "META_REDIRECT_URI",
@@ -128,6 +129,10 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   const workerSecret = value(env, "HERMES_WORKER_SECRET");
   if (workerSecret && workerSecret.length < 32) {
     addIssue(issues, "WEAK_WORKER_SECRET", "HERMES_WORKER_SECRET must be at least 32 characters.");
+  }
+  const oauthStateSecret = value(env, "HERMES_OAUTH_STATE_SECRET");
+  if (oauthStateSecret && oauthStateSecret.length < 32) {
+    addIssue(issues, "WEAK_OAUTH_STATE_SECRET", "HERMES_OAUTH_STATE_SECRET must be at least 32 characters.");
   }
 
   return {

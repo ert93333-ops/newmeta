@@ -42,7 +42,7 @@ For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=moc
 npm run env:release-gates
 ```
 
-The gate fails closed on missing production Supabase/Meta/worker env, placeholder values, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, and secret-looking `NEXT_PUBLIC_*` names.
+The gate fails closed on missing production Supabase/Meta/worker/OAuth-state env, placeholder values, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
 ## Important Files
 

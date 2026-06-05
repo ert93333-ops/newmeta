@@ -9,6 +9,7 @@ function validReleaseEnv(): Record<string, string> {
     SUPABASE_SECRET_KEY: "sb_secret_test_value",
     SUPABASE_DB_URL: "postgresql://postgres:strong-password@db.project.supabase.co:5432/postgres",
     TOKEN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    HERMES_OAUTH_STATE_SECRET: "oauth-state-secret-with-at-least-32-characters",
     META_APP_ID: "123456789",
     META_APP_SECRET: "meta-secret-value",
     META_REDIRECT_URI: "https://app.newmeta.test/api/integrations/meta/callback",
@@ -49,6 +50,12 @@ describe("release env gate", () => {
     const result = checkReleaseEnv({ ...validReleaseEnv(), TOKEN_ENCRYPTION_KEY: "not-base64" });
 
     expect(result.issues.map((issue) => issue.code)).toContain("INVALID_TOKEN_KEY");
+  });
+
+  it("blocks weak OAuth state secrets", () => {
+    const result = checkReleaseEnv({ ...validReleaseEnv(), HERMES_OAUTH_STATE_SECRET: "short" });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("WEAK_OAUTH_STATE_SECRET");
   });
 
   it("blocks localhost callback URLs", () => {

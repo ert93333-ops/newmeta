@@ -9,6 +9,7 @@ const ENV_KEYS = [
   "NODE_ENV",
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
+  "HERMES_OAUTH_STATE_SECRET",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -81,6 +82,29 @@ describe("API GET auth boundary", () => {
 
     expect(response.status).toBe(401);
     expect((body.error as { code?: string }).code).toBe("SUPABASE_AUTH_REQUIRED");
+  });
+
+  it("adds a signed state to Meta connect URLs without raw tenant or user ids", async () => {
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+    mutableEnv.HERMES_OAUTH_STATE_SECRET = "state-secret-with-at-least-32-characters";
+
+    const response = await getMetaConnectUrl(new Request("http://localhost/api/integrations/meta/connect-url"));
+    const body = await json(response);
+    const connectUrl = new URL(String(body.connectUrl));
+    const state = connectUrl.searchParams.get("state") ?? "";
+    const [encodedPayload] = state.split(".");
+    const decodedStatePayload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    const serializedStatePayload = JSON.stringify(decodedStatePayload);
+
+    expect(response.status).toBe(200);
+    expect(body.stateBound).toBe(true);
+    expect(body.stateExpiresAt).toEqual(expect.any(String));
+    expect(state).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u);
+    expect(serializedStatePayload).not.toContain("00000000-0000-0000-0000-000000000001");
+    expect(serializedStatePayload).not.toContain("00000000-0000-0000-0000-000000000010");
   });
 
   it("keeps authenticated GET routes wrapped in handleError", () => {

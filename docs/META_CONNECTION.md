@@ -24,10 +24,14 @@ Optional expansion scopes:
 
 External customer connections must use OAuth / Business Login. Customers must not paste access tokens.
 
-`POST /api/integrations/meta/callback` exchanges the authorization code server-side, encrypts the resulting Meta token with AES-GCM, and stores only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
+`GET /api/integrations/meta/connect-url` returns a Meta OAuth URL containing a signed, 10-minute `state` value. The state is bound to the current authenticated user and tenant through HMAC-derived hashes, not raw user or tenant ids.
+
+`POST /api/integrations/meta/callback` requires both the authorization `code` and matching `state`. It verifies the state before exchanging the code server-side, encrypting the resulting Meta token with AES-GCM, and storing only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
 
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
-The OAuth callback request accepts authorization `code` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.
+The OAuth callback request accepts authorization `code` and signed `state` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.
+
+Release deployments must configure `HERMES_OAUTH_STATE_SECRET` with at least 32 characters. Non-production mock mode can fall back to `TOKEN_ENCRYPTION_KEY` for local-only state signing, but production fails closed without the dedicated state secret.
 
 All create methods create PAUSED entities only. ACTIVE transition is separate and approval-gated.

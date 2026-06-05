@@ -94,6 +94,19 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_OAUTH_TOKEN_MISSING") {
       return fail(error.message, "Meta OAuth token exchange response did not include a usable token.", 502);
     }
+    if (error.message === "META_OAUTH_STATE_SECRET_REQUIRED") {
+      return fail(error.message, "Meta OAuth state signing secret is required.", 501);
+    }
+    if (error.message === "META_OAUTH_STATE_REQUIRED") {
+      return fail(error.message, "Meta OAuth state is required.", 403);
+    }
+    if (
+      error.message === "META_OAUTH_STATE_INVALID" ||
+      error.message === "META_OAUTH_STATE_EXPIRED" ||
+      error.message === "META_OAUTH_STATE_TENANT_MISMATCH"
+    ) {
+      return fail(error.message, "Meta OAuth state verification failed.", 403);
+    }
     if (error.message.startsWith("META_OAUTH_CODE_EXCHANGE_FAILED:")) {
       return fail("META_OAUTH_CODE_EXCHANGE_FAILED", "Meta OAuth code exchange failed.", 502, {
         status: error.message.split(":").at(-1)

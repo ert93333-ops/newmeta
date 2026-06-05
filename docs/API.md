@@ -22,6 +22,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `POST /api/integrations/meta/callback` accepts an OAuth authorization code, exchanges it server-side, encrypts the resulting Meta token, stores it in `meta_connections`, writes an audit record, and returns only connection metadata such as `encryptedTokenStored`. Local mock exchange is disabled for release by `npm run env:release-gates`.
 
+`GET /api/integrations/meta/connect-url` includes a signed, expiring `state` query parameter in `connectUrl`. `POST /api/integrations/meta/callback` must receive that same `state`; missing, expired, tampered, or cross-tenant state returns `META_OAUTH_STATE_REQUIRED`, `META_OAUTH_STATE_EXPIRED`, `META_OAUTH_STATE_INVALID`, or `META_OAUTH_STATE_TENANT_MISMATCH` before any token exchange or persistence.
+
 ## Creative and Diagnosis
 
 - `POST /api/creative-assets`

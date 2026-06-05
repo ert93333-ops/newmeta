@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/integrations/meta/callback/route";
+import { mockContext } from "@/lib/api/context";
+import { createMetaOAuthState } from "@/lib/meta/oauth-state";
 
 const callbackRouteSource = readFileSync(
   join(process.cwd(), "src", "app", "api", "integrations", "meta", "callback", "route.ts"),
@@ -46,10 +48,11 @@ describe("Meta OAuth callback response security", () => {
   });
 
   it("omits token-shaped fields from the actual callback response", async () => {
+    const state = createMetaOAuthState(mockContext()).value;
     const response = await POST(
       new Request("http://localhost/api/integrations/meta/callback", {
         method: "POST",
-        body: JSON.stringify({ code: "mock-code", scopes: ["ads_read"] })
+        body: JSON.stringify({ code: "mock-code", scopes: ["ads_read"], state })
       })
     );
     const body = (await response.json()) as Record<string, unknown>;
@@ -62,10 +65,11 @@ describe("Meta OAuth callback response security", () => {
   });
 
   it("stores encrypted token material only in the server-side repository boundary", async () => {
+    const state = createMetaOAuthState(mockContext()).value;
     const response = await POST(
       new Request("http://localhost/api/integrations/meta/callback", {
         method: "POST",
-        body: JSON.stringify({ code: "mock-code-for-storage", scopes: ["ads_read"] })
+        body: JSON.stringify({ code: "mock-code-for-storage", scopes: ["ads_read"], state })
       })
     );
     const body = (await response.json()) as { connection?: { id?: string } };
@@ -81,6 +85,19 @@ describe("Meta OAuth callback response security", () => {
     expect(stored?.tokenIv).toEqual(expect.any(String));
     expect(stored?.tokenAuthTag).toEqual(expect.any(String));
     expect(JSON.stringify(stored)).not.toContain("mock-code-for-storage");
+  });
+
+  it("requires Meta OAuth state before storing a connection", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/integrations/meta/callback", {
+        method: "POST",
+        body: JSON.stringify({ code: "mock-code", scopes: ["ads_read"] })
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("META_OAUTH_STATE_REQUIRED");
   });
 
   it("rejects direct access token payloads at the callback boundary", async () => {
