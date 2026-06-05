@@ -29,6 +29,8 @@ Approval required:
 
 Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches.
 
+The generic approval execution route does not execute `ai_paid_generation`. Paid generation approvals must be consumed by their domain route or worker so generation output, validation, audit logging, and cost usage logging cannot drift apart.
+
 `POST /api/cost/estimate` can create the required pending `ai_paid_generation` request when callers explicitly pass `approvalRequest.create = true`. This happens only for `approval_required` decisions; `blocked` cost decisions never create an approval request.
 
 Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw` and `monthActualCostKrw` values are ignored at the API boundary so callers cannot lower their effective usage by editing the request body.

@@ -71,6 +71,24 @@ function approvedRequest() {
   );
 }
 
+function approvedPaidGenerationRequest() {
+  return approveRequest(
+    createApprovalRequest({
+      context: requester,
+      action: "ai_paid_generation",
+      objectType: "variant_batch",
+      objectId: "creative-control-1",
+      afterJson: {
+        operationType: "variant_batch",
+        providerName: "mock-ai",
+        estimatedCredits: 5,
+        estimatedCostKrw: 5
+      }
+    }),
+    approver
+  );
+}
+
 describe("approval execution", () => {
   afterEach(() => {
     restoreEnv();
@@ -106,6 +124,14 @@ describe("approval execution", () => {
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "live");
 
     expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
+  });
+
+  it("does not let the generic executor dispatch paid AI generation", () => {
+    clearEnv();
+    setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
+
+    expect(() => planApprovalExecution("ai_paid_generation")).toThrow("PAID_OPERATION_EXECUTOR_REQUIRED");
+    expect(() => executeApprovedAction(approvedPaidGenerationRequest())).toThrow("PAID_OPERATION_EXECUTOR_REQUIRED");
   });
 
   it("rechecks stored approval payloads for budget mutations before dispatch", () => {
@@ -177,6 +203,31 @@ describe("approval execution", () => {
     expect(body.error.code).toBe("APPROVAL_EXPIRED");
     expect(stored?.status).toBe("approved");
     expect(stored?.executionResultJson).toBeUndefined();
+  });
+
+  it("keeps paid AI generation approvals approved when generic execution is requested", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const approval = approvedPaidGenerationRequest();
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(new Request("http://localhost/api/test"), approver, approval.id);
+    const usage = await repository.listCostUsage(new Request("http://localhost/api/test"), approver);
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("PAID_OPERATION_EXECUTOR_REQUIRED");
+    expect(body.error.details.action).toBe("ai_paid_generation");
+    expect(stored?.status).toBe("approved");
+    expect(stored?.executionResultJson).toBeUndefined();
+    expect(usage).toHaveLength(0);
   });
 
   it("persists action-specific execution details before returning success", async () => {

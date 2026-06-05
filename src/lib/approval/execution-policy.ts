@@ -4,6 +4,7 @@ import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
 import type { ApprovalAction, ApprovalRequest } from "@/lib/types";
 
 export type ApprovalExecutionMode = "mock" | "live";
+type GenericApprovalAction = Exclude<ApprovalAction, "ai_paid_generation">;
 
 export interface ApprovalExecutionPlan {
   mode: ApprovalExecutionMode;
@@ -23,7 +24,15 @@ interface MockExecutionTemplate {
   objectPrefix: string;
 }
 
-const MOCK_EXECUTION_TEMPLATES: Record<ApprovalAction, MockExecutionTemplate> = {
+export class PaidOperationDomainExecutorRequiredError extends Error {
+  readonly code = "PAID_OPERATION_EXECUTOR_REQUIRED";
+
+  constructor(readonly action: ApprovalAction) {
+    super("PAID_OPERATION_EXECUTOR_REQUIRED");
+  }
+}
+
+const MOCK_EXECUTION_TEMPLATES: Record<GenericApprovalAction, MockExecutionTemplate> = {
   meta_upload_image: {
     result: "mock_uploaded_image",
     externalStatus: "PAUSED_READY",
@@ -90,11 +99,6 @@ const MOCK_EXECUTION_TEMPLATES: Record<ApprovalAction, MockExecutionTemplate> = 
   catalog_mutation: {
     result: "mock_catalog_mutation",
     objectPrefix: "catalog"
-  },
-  ai_paid_generation: {
-    result: "mock_paid_generation",
-    externalStatus: "GENERATED",
-    objectPrefix: "generation"
   }
 };
 
@@ -103,6 +107,7 @@ export function configuredApprovalExecutionMode(): ApprovalExecutionMode {
 }
 
 export function planApprovalExecution(action: ApprovalAction): ApprovalExecutionPlan {
+  const executableAction = genericApprovalAction(action);
   const mode = configuredApprovalExecutionMode();
 
   if (mode === "mock") {
@@ -111,7 +116,7 @@ export function planApprovalExecution(action: ApprovalAction): ApprovalExecution
     }
     return {
       mode,
-      result: MOCK_EXECUTION_TEMPLATES[action].result
+      result: MOCK_EXECUTION_TEMPLATES[executableAction].result
     };
   }
 
@@ -121,13 +126,14 @@ export function planApprovalExecution(action: ApprovalAction): ApprovalExecution
 export function executeApprovedAction(approval: ApprovalRequest): ApprovalExecutionResult {
   assertApprovalNotExpired(approval);
   assertNoBudgetMutation(approval);
-  const plan = planApprovalExecution(approval.action);
-  const template = MOCK_EXECUTION_TEMPLATES[approval.action];
+  const action = genericApprovalAction(approval.action);
+  const plan = planApprovalExecution(action);
+  const template = MOCK_EXECUTION_TEMPLATES[action];
   const externalObjectId = approval.objectId ?? `${template.objectPrefix}_${approval.id}`;
 
   return {
     ...plan,
-    operation: approval.action,
+    operation: action,
     externalObjectId,
     externalStatus: template.externalStatus,
     details: {
@@ -136,4 +142,17 @@ export function executeApprovedAction(approval: ApprovalRequest): ApprovalExecut
       mockSafe: plan.mode === "mock"
     }
   };
+}
+
+export function isPaidOperationDomainExecutorRequiredError(
+  error: unknown
+): error is PaidOperationDomainExecutorRequiredError {
+  return error instanceof PaidOperationDomainExecutorRequiredError;
+}
+
+function genericApprovalAction(action: ApprovalAction): GenericApprovalAction {
+  if (action === "ai_paid_generation") {
+    throw new PaidOperationDomainExecutorRequiredError(action);
+  }
+  return action;
 }

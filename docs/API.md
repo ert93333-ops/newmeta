@@ -72,6 +72,8 @@ Approval requests expire before execution. Draft approvals expire after 24 hours
 
 Approval execution goes through an action-specific executor registry. Local mock execution returns action-specific results such as `mock_created_ad_paused`, but production must not return a fake execution success; if `HERMES_APPROVAL_EXECUTION_MODE=mock` or the live executor is not configured, execution fails closed with `MOCK_EXECUTION_DISABLED_IN_PRODUCTION` or `LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED`.
 
+Paid AI approvals are not executable through the generic approval route. `ai_paid_generation` returns `PAID_OPERATION_EXECUTOR_REQUIRED` from `POST /api/approvals/:id/execute` and must instead be consumed by the relevant domain route or worker, such as `POST /api/variants/design`, so output validation and cost usage logging happen in the same execution path.
+
 Successful execution persists the action-specific execution result on `approval_requests.execution_result_json` before the API returns success.
 
 ## Cost and Data

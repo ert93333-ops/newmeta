@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isPaidOperationDomainExecutorRequiredError } from "@/lib/approval/execution-policy";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
 import {
   assertNoBudgetMutation,
@@ -51,6 +52,14 @@ export function handleError(error: unknown): NextResponse {
     return fail(error.code, "Paid AI operations require an approved approval request before execution.", 403, {
       operationType: error.operationType
     });
+  }
+  if (isPaidOperationDomainExecutorRequiredError(error)) {
+    return fail(
+      error.code,
+      "Paid AI operations must be executed by their domain route or worker so cost logging and output validation run together.",
+      501,
+      { action: error.action }
+    );
   }
   if (isCredentialPayloadBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });
