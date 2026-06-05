@@ -255,6 +255,79 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps creative analysis persistence tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const job = await repository.saveCreativeAnalysisJob(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      assetId: "asset-1",
+      status: "succeeded",
+      analysisType: "image",
+      resultJson: {
+        recommendations: ["Move text inside the safe area."]
+      }
+    });
+    await repository.saveCreativeFeatures(request, [
+      {
+        tenantId: owner.tenantId,
+        createdBy: owner.userId,
+        assetId: "asset-1",
+        featureType: "checks",
+        featureJson: { safeArea: { passed: false } }
+      }
+    ]);
+    await repository.saveCreativeComponentScores(request, [
+      {
+        tenantId: owner.tenantId,
+        createdBy: owner.userId,
+        assetId: "asset-1",
+        scoreName: "Hook Score",
+        scoreValue: 78,
+        evidenceJson: ["hook copy found"]
+      }
+    ]);
+    await repository.saveVideoSegments(request, [
+      {
+        tenantId: owner.tenantId,
+        createdBy: owner.userId,
+        assetId: "asset-1",
+        startSeconds: 0,
+        endSeconds: 0.5,
+        segmentJson: { range: "0.0~0.5" }
+      }
+    ]);
+
+    await expect(repository.getCreativeAnalysisJob(request, owner, job.id!)).resolves.toMatchObject({
+      id: job.id,
+      tenantId: owner.tenantId,
+      assetId: "asset-1",
+      analysisType: "image"
+    });
+    await expect(repository.listCreativeFeatures(request, owner, "asset-1")).resolves.toMatchObject([
+      {
+        assetId: "asset-1",
+        featureType: "checks"
+      }
+    ]);
+    await expect(repository.listCreativeComponentScores(request, owner, "asset-1")).resolves.toMatchObject([
+      {
+        assetId: "asset-1",
+        scoreName: "Hook Score",
+        scoreValue: 78
+      }
+    ]);
+    await expect(repository.listVideoSegments(request, owner, "asset-1")).resolves.toMatchObject([
+      {
+        assetId: "asset-1",
+        startSeconds: 0,
+        endSeconds: 0.5
+      }
+    ]);
+    await expect(
+      repository.getCreativeAnalysisJob(request, { ...owner, tenantId: "tenant-b" }, job.id!)
+    ).resolves.toBeNull();
+  });
+
   it("returns the latest connected Meta connection for the tenant and provider", async () => {
     const repository = new MemoryHermesRepository();
     await repository.saveMetaConnection(request, {

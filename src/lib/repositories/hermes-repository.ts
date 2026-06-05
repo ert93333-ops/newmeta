@@ -149,6 +149,53 @@ export interface BottleneckHypothesisRecord {
   updatedAt?: string;
 }
 
+export interface CreativeAnalysisJobRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId: string;
+  status: string;
+  analysisType: string;
+  resultJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreativeFeatureRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId: string;
+  featureType: string;
+  featureJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreativeComponentScoreRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId: string;
+  scoreName: string;
+  scoreValue: number;
+  evidenceJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideoSegmentRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId: string;
+  startSeconds: number;
+  endSeconds: number;
+  segmentJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -216,6 +263,42 @@ export interface HermesRepository {
     context: UserContext,
     bottleneckJobId: string
   ): Promise<BottleneckHypothesisRecord[]>;
+  saveCreativeAnalysisJob(
+    request: Request,
+    job: CreativeAnalysisJobRecord
+  ): Promise<CreativeAnalysisJobRecord>;
+  getCreativeAnalysisJob(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<CreativeAnalysisJobRecord | null>;
+  saveCreativeFeatures(
+    request: Request,
+    features: CreativeFeatureRecord[]
+  ): Promise<CreativeFeatureRecord[]>;
+  listCreativeFeatures(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeFeatureRecord[]>;
+  saveCreativeComponentScores(
+    request: Request,
+    scores: CreativeComponentScoreRecord[]
+  ): Promise<CreativeComponentScoreRecord[]>;
+  listCreativeComponentScores(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeComponentScoreRecord[]>;
+  saveVideoSegments(
+    request: Request,
+    segments: VideoSegmentRecord[]
+  ): Promise<VideoSegmentRecord[]>;
+  listVideoSegments(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<VideoSegmentRecord[]>;
 }
 
 interface HermesMemoryStore {
@@ -228,6 +311,10 @@ interface HermesMemoryStore {
   bottleneckAnalysisJobs: Map<string, BottleneckAnalysisJobRecord>;
   bottleneckStageScores: Map<string, BottleneckStageScoreRecord>;
   bottleneckHypotheses: Map<string, BottleneckHypothesisRecord>;
+  creativeAnalysisJobs: Map<string, CreativeAnalysisJobRecord>;
+  creativeFeatures: Map<string, CreativeFeatureRecord>;
+  creativeComponentScores: Map<string, CreativeComponentScoreRecord>;
+  videoSegments: Map<string, VideoSegmentRecord>;
   metaConnections: Map<string, MetaConnectionInput>;
   integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
@@ -248,6 +335,10 @@ function getMemoryStore(): HermesMemoryStore {
       bottleneckAnalysisJobs: new Map(),
       bottleneckStageScores: new Map(),
       bottleneckHypotheses: new Map(),
+      creativeAnalysisJobs: new Map(),
+      creativeFeatures: new Map(),
+      creativeComponentScores: new Map(),
+      videoSegments: new Map(),
       metaConnections: new Map(),
       integrationSettings: new Map(),
       costUsage: [],
@@ -519,6 +610,114 @@ export class MemoryHermesRepository implements HermesRepository {
   ): Promise<BottleneckHypothesisRecord[]> {
     return Array.from(getMemoryStore().bottleneckHypotheses.values()).filter((hypothesis) => {
       return hypothesis.tenantId === context.tenantId && hypothesis.bottleneckJobId === bottleneckJobId;
+    });
+  }
+
+  async saveCreativeAnalysisJob(
+    _request: Request,
+    job: CreativeAnalysisJobRecord
+  ): Promise<CreativeAnalysisJobRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...job,
+      id: job.id ?? crypto.randomUUID(),
+      createdAt: job.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().creativeAnalysisJobs.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getCreativeAnalysisJob(
+    _request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<CreativeAnalysisJobRecord | null> {
+    const job = getMemoryStore().creativeAnalysisJobs.get(id);
+    if (!job || job.tenantId !== context.tenantId) {
+      return null;
+    }
+    return job;
+  }
+
+  async saveCreativeFeatures(
+    _request: Request,
+    features: CreativeFeatureRecord[]
+  ): Promise<CreativeFeatureRecord[]> {
+    const now = new Date().toISOString();
+    return features.map((feature) => {
+      const persisted = {
+        ...feature,
+        id: feature.id ?? crypto.randomUUID(),
+        createdAt: feature.createdAt ?? now,
+        updatedAt: now
+      };
+      getMemoryStore().creativeFeatures.set(persisted.id, persisted);
+      return persisted;
+    });
+  }
+
+  async listCreativeFeatures(
+    _request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeFeatureRecord[]> {
+    return Array.from(getMemoryStore().creativeFeatures.values()).filter((feature) => {
+      return feature.tenantId === context.tenantId && feature.assetId === assetId;
+    });
+  }
+
+  async saveCreativeComponentScores(
+    _request: Request,
+    scores: CreativeComponentScoreRecord[]
+  ): Promise<CreativeComponentScoreRecord[]> {
+    const now = new Date().toISOString();
+    return scores.map((score) => {
+      const persisted = {
+        ...score,
+        id: score.id ?? crypto.randomUUID(),
+        createdAt: score.createdAt ?? now,
+        updatedAt: now
+      };
+      getMemoryStore().creativeComponentScores.set(persisted.id, persisted);
+      return persisted;
+    });
+  }
+
+  async listCreativeComponentScores(
+    _request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeComponentScoreRecord[]> {
+    return Array.from(getMemoryStore().creativeComponentScores.values()).filter((score) => {
+      return score.tenantId === context.tenantId && score.assetId === assetId;
+    });
+  }
+
+  async saveVideoSegments(
+    _request: Request,
+    segments: VideoSegmentRecord[]
+  ): Promise<VideoSegmentRecord[]> {
+    const now = new Date().toISOString();
+    return segments.map((segment) => {
+      const persisted = {
+        ...segment,
+        id: segment.id ?? crypto.randomUUID(),
+        createdAt: segment.createdAt ?? now,
+        updatedAt: now
+      };
+      getMemoryStore().videoSegments.set(persisted.id, persisted);
+      return persisted;
+    });
+  }
+
+  async listVideoSegments(
+    _request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<VideoSegmentRecord[]> {
+    return Array.from(getMemoryStore().videoSegments.values()).filter((segment) => {
+      return segment.tenantId === context.tenantId && segment.assetId === assetId;
     });
   }
 }
@@ -951,6 +1150,148 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_BOTTLENECK_HYPOTHESIS_SELECT_FAILED:${error.message}`);
     return (data ?? []).map((row) => fromBottleneckHypothesisRow(row as BottleneckHypothesisRow));
   }
+
+  async saveCreativeAnalysisJob(
+    request: Request,
+    job: CreativeAnalysisJobRecord
+  ): Promise<CreativeAnalysisJobRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveCreativeAnalysisJob(request, job);
+
+    const { data, error } = await supabase
+      .from("creative_analysis_jobs")
+      .insert(toCreativeAnalysisJobInsertRow(job))
+      .select("*")
+      .single();
+    if (error) throw new Error(`SUPABASE_CREATIVE_ANALYSIS_JOB_INSERT_FAILED:${error.message}`);
+    return fromCreativeAnalysisJobRow(data as CreativeAnalysisJobRow);
+  }
+
+  async getCreativeAnalysisJob(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<CreativeAnalysisJobRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getCreativeAnalysisJob(request, context, id);
+
+    const { data, error } = await supabase
+      .from("creative_analysis_jobs")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_CREATIVE_ANALYSIS_JOB_SELECT_FAILED:${error.message}`);
+    return data ? fromCreativeAnalysisJobRow(data as CreativeAnalysisJobRow) : null;
+  }
+
+  async saveCreativeFeatures(
+    request: Request,
+    features: CreativeFeatureRecord[]
+  ): Promise<CreativeFeatureRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveCreativeFeatures(request, features);
+    if (features.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("creative_features")
+      .insert(features.map((feature) => toCreativeFeatureInsertRow(feature)))
+      .select("*");
+    if (error) throw new Error(`SUPABASE_CREATIVE_FEATURE_INSERT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromCreativeFeatureRow(row as CreativeFeatureRow));
+  }
+
+  async listCreativeFeatures(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeFeatureRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listCreativeFeatures(request, context, assetId);
+
+    const { data, error } = await supabase
+      .from("creative_features")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("asset_id", assetId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(`SUPABASE_CREATIVE_FEATURE_SELECT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromCreativeFeatureRow(row as CreativeFeatureRow));
+  }
+
+  async saveCreativeComponentScores(
+    request: Request,
+    scores: CreativeComponentScoreRecord[]
+  ): Promise<CreativeComponentScoreRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveCreativeComponentScores(request, scores);
+    if (scores.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("creative_component_scores")
+      .insert(scores.map((score) => toCreativeComponentScoreInsertRow(score)))
+      .select("*");
+    if (error) throw new Error(`SUPABASE_CREATIVE_SCORE_INSERT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromCreativeComponentScoreRow(row as CreativeComponentScoreRow));
+  }
+
+  async listCreativeComponentScores(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<CreativeComponentScoreRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listCreativeComponentScores(request, context, assetId);
+
+    const { data, error } = await supabase
+      .from("creative_component_scores")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("asset_id", assetId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(`SUPABASE_CREATIVE_SCORE_SELECT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromCreativeComponentScoreRow(row as CreativeComponentScoreRow));
+  }
+
+  async saveVideoSegments(
+    request: Request,
+    segments: VideoSegmentRecord[]
+  ): Promise<VideoSegmentRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveVideoSegments(request, segments);
+    if (segments.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("video_segments")
+      .insert(segments.map((segment) => toVideoSegmentInsertRow(segment)))
+      .select("*");
+    if (error) throw new Error(`SUPABASE_VIDEO_SEGMENT_INSERT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromVideoSegmentRow(row as VideoSegmentRow));
+  }
+
+  async listVideoSegments(
+    request: Request,
+    context: UserContext,
+    assetId: string
+  ): Promise<VideoSegmentRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listVideoSegments(request, context, assetId);
+
+    const { data, error } = await supabase
+      .from("video_segments")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("asset_id", assetId)
+      .order("start_seconds", { ascending: true });
+    if (error) throw new Error(`SUPABASE_VIDEO_SEGMENT_SELECT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromVideoSegmentRow(row as VideoSegmentRow));
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -1107,6 +1448,53 @@ interface BottleneckHypothesisRow {
   hypothesis: string;
   confidence: string;
   evidence_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreativeAnalysisJobRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id: string;
+  status: string;
+  analysis_type: string;
+  result_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreativeFeatureRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id: string;
+  feature_type: string;
+  feature_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreativeComponentScoreRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id: string;
+  score_name: string;
+  score_value: number;
+  evidence_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface VideoSegmentRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id: string;
+  start_seconds: number;
+  end_seconds: number;
+  segment_json: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -1431,6 +1819,108 @@ function fromBottleneckHypothesisRow(row: BottleneckHypothesisRow): BottleneckHy
     hypothesis: row.hypothesis,
     confidence: row.confidence,
     evidenceJson: row.evidence_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toCreativeAnalysisJobInsertRow(job: CreativeAnalysisJobRecord): Record<string, unknown> {
+  return {
+    id: job.id,
+    tenant_id: job.tenantId,
+    created_by: job.createdBy,
+    asset_id: job.assetId,
+    status: job.status,
+    analysis_type: job.analysisType,
+    result_json: job.resultJson ?? {}
+  };
+}
+
+function fromCreativeAnalysisJobRow(row: CreativeAnalysisJobRow): CreativeAnalysisJobRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id,
+    status: row.status,
+    analysisType: row.analysis_type,
+    resultJson: row.result_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toCreativeFeatureInsertRow(feature: CreativeFeatureRecord): Record<string, unknown> {
+  return {
+    id: feature.id,
+    tenant_id: feature.tenantId,
+    created_by: feature.createdBy,
+    asset_id: feature.assetId,
+    feature_type: feature.featureType,
+    feature_json: feature.featureJson ?? {}
+  };
+}
+
+function fromCreativeFeatureRow(row: CreativeFeatureRow): CreativeFeatureRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id,
+    featureType: row.feature_type,
+    featureJson: row.feature_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toCreativeComponentScoreInsertRow(score: CreativeComponentScoreRecord): Record<string, unknown> {
+  return {
+    id: score.id,
+    tenant_id: score.tenantId,
+    created_by: score.createdBy,
+    asset_id: score.assetId,
+    score_name: score.scoreName,
+    score_value: score.scoreValue,
+    evidence_json: score.evidenceJson ?? []
+  };
+}
+
+function fromCreativeComponentScoreRow(row: CreativeComponentScoreRow): CreativeComponentScoreRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id,
+    scoreName: row.score_name,
+    scoreValue: row.score_value,
+    evidenceJson: row.evidence_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toVideoSegmentInsertRow(segment: VideoSegmentRecord): Record<string, unknown> {
+  return {
+    id: segment.id,
+    tenant_id: segment.tenantId,
+    created_by: segment.createdBy,
+    asset_id: segment.assetId,
+    start_seconds: segment.startSeconds,
+    end_seconds: segment.endSeconds,
+    segment_json: segment.segmentJson ?? {}
+  };
+}
+
+function fromVideoSegmentRow(row: VideoSegmentRow): VideoSegmentRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id,
+    startSeconds: row.start_seconds,
+    endSeconds: row.end_seconds,
+    segmentJson: row.segment_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
