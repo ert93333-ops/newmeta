@@ -50,7 +50,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/performance-fusion/reports`
 - `POST /api/variants/design`
 
-`POST /api/placement/validate` is an authenticated tenant-scoped analysis route. It does not require approval, but it still requires tenant auth before evaluating placement compatibility or `#1487569` risk so anonymous callers cannot use internal validation APIs.
+`POST /api/placement/validate` is an authenticated tenant-scoped persistence route. It does not require approval, but it still requires tenant auth before evaluating placement compatibility or `#1487569` risk so anonymous callers cannot use internal validation APIs. On success, it saves a `placement_validation_reports` row, writes an audit log, and returns the persisted report metadata plus the validation result instead of a purely ephemeral response.
 
 `POST /api/performance-fusion/reports` is an authenticated tenant-scoped persistence route. It computes the fusion report, saves a `performance_fusion_reports` row, and writes an audit log instead of returning an ephemeral analysis object only. Callers may attach `assetId` and `bottleneckJobId` for traceability, but the route still preserves the report's `correlation_not_causation` language guard.
 

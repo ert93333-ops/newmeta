@@ -98,6 +98,19 @@ export interface PerformanceFusionReportRecord {
   updatedAt?: string;
 }
 
+export interface PlacementValidationReportRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId?: string;
+  placements: string[];
+  status: string;
+  error1487569Risk: boolean;
+  reportJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -129,6 +142,15 @@ export interface HermesRepository {
     context: UserContext,
     id: string
   ): Promise<PerformanceFusionReportRecord | null>;
+  savePlacementValidationReport(
+    request: Request,
+    report: PlacementValidationReportRecord
+  ): Promise<PlacementValidationReportRecord>;
+  getPlacementValidationReport(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PlacementValidationReportRecord | null>;
 }
 
 interface HermesMemoryStore {
@@ -137,6 +159,7 @@ interface HermesMemoryStore {
   assets: Map<string, Record<string, unknown>>;
   adDrafts: Map<string, AdDraftRecord>;
   performanceFusionReports: Map<string, PerformanceFusionReportRecord>;
+  placementValidationReports: Map<string, PlacementValidationReportRecord>;
   metaConnections: Map<string, MetaConnectionInput>;
   integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
@@ -153,6 +176,7 @@ function getMemoryStore(): HermesMemoryStore {
       assets: new Map(),
       adDrafts: new Map(),
       performanceFusionReports: new Map(),
+      placementValidationReports: new Map(),
       metaConnections: new Map(),
       integrationSettings: new Map(),
       costUsage: [],
@@ -313,6 +337,33 @@ export class MemoryHermesRepository implements HermesRepository {
     id: string
   ): Promise<PerformanceFusionReportRecord | null> {
     const report = getMemoryStore().performanceFusionReports.get(id);
+    if (!report || report.tenantId !== context.tenantId) {
+      return null;
+    }
+    return report;
+  }
+
+  async savePlacementValidationReport(
+    _request: Request,
+    report: PlacementValidationReportRecord
+  ): Promise<PlacementValidationReportRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...report,
+      id: report.id ?? crypto.randomUUID(),
+      createdAt: report.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().placementValidationReports.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getPlacementValidationReport(
+    _request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PlacementValidationReportRecord | null> {
+    const report = getMemoryStore().placementValidationReports.get(id);
     if (!report || report.tenantId !== context.tenantId) {
       return null;
     }
@@ -612,6 +663,40 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_PERFORMANCE_FUSION_SELECT_FAILED:${error.message}`);
     return data ? fromPerformanceFusionReportRow(data as PerformanceFusionReportRow) : null;
   }
+
+  async savePlacementValidationReport(
+    request: Request,
+    report: PlacementValidationReportRecord
+  ): Promise<PlacementValidationReportRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.savePlacementValidationReport(request, report);
+
+    const { data, error } = await supabase
+      .from("placement_validation_reports")
+      .insert(toPlacementValidationReportInsertRow(report))
+      .select("*")
+      .single();
+    if (error) throw new Error(`SUPABASE_PLACEMENT_VALIDATION_INSERT_FAILED:${error.message}`);
+    return fromPlacementValidationReportRow(data as PlacementValidationReportRow);
+  }
+
+  async getPlacementValidationReport(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PlacementValidationReportRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getPlacementValidationReport(request, context, id);
+
+    const { data, error } = await supabase
+      .from("placement_validation_reports")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_PLACEMENT_VALIDATION_SELECT_FAILED:${error.message}`);
+    return data ? fromPlacementValidationReportRow(data as PlacementValidationReportRow) : null;
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -717,6 +802,19 @@ interface PerformanceFusionReportRow {
   bottleneck_job_id?: string | null;
   report_json: unknown;
   language_guard: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PlacementValidationReportRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id?: string | null;
+  placements: string[];
+  status: string;
+  error_1487569_risk: boolean;
+  report_json: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -931,6 +1029,34 @@ function fromPerformanceFusionReportRow(row: PerformanceFusionReportRow): Perfor
     bottleneckJobId: row.bottleneck_job_id ?? undefined,
     reportJson: row.report_json,
     languageGuard: row.language_guard,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toPlacementValidationReportInsertRow(report: PlacementValidationReportRecord): Record<string, unknown> {
+  return {
+    id: report.id,
+    tenant_id: report.tenantId,
+    created_by: report.createdBy,
+    asset_id: report.assetId,
+    placements: report.placements,
+    status: report.status,
+    error_1487569_risk: report.error1487569Risk,
+    report_json: report.reportJson ?? {}
+  };
+}
+
+function fromPlacementValidationReportRow(row: PlacementValidationReportRow): PlacementValidationReportRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id ?? undefined,
+    placements: row.placements,
+    status: row.status,
+    error1487569Risk: row.error_1487569_risk,
+    reportJson: row.report_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

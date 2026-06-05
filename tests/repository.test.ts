@@ -168,6 +168,34 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps placement validation reports tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const persisted = await repository.savePlacementValidationReport(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      assetId: "asset-1",
+      placements: ["facebook_feed", "instagram_stories"],
+      status: "requires_variant",
+      error1487569Risk: true,
+      reportJson: {
+        ratio: 0.8,
+        issues: ["instagram_stories requires a 9:16 variant"]
+      }
+    });
+
+    await expect(repository.getPlacementValidationReport(request, owner, persisted.id!)).resolves.toMatchObject({
+      id: persisted.id,
+      tenantId: owner.tenantId,
+      assetId: "asset-1",
+      status: "requires_variant",
+      error1487569Risk: true,
+      placements: ["facebook_feed", "instagram_stories"]
+    });
+    await expect(
+      repository.getPlacementValidationReport(request, { ...owner, tenantId: "tenant-b" }, persisted.id!)
+    ).resolves.toBeNull();
+  });
+
   it("returns the latest connected Meta connection for the tenant and provider", async () => {
     const repository = new MemoryHermesRepository();
     await repository.saveMetaConnection(request, {

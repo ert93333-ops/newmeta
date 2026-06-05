@@ -123,7 +123,7 @@ describe("analysis route auth boundary", () => {
     );
     const body = await json(response);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect(body.status).toBe("requires_variant");
   });
 });
