@@ -341,6 +341,23 @@ textarea {
   gap: 10px;
 }
 
+.approval-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  padding: 12px;
+  font-size: 13px;
+}
+
+.approval-empty.blocked {
+  background: #fee4e2;
+  color: var(--bad);
+}
+
 .approval-row {
   display: flex;
   align-items: center;
@@ -398,6 +415,16 @@ textarea {
   color: var(--good);
 }
 
+.risk-chip.read {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.risk-chip.hard_blocked {
+  background: #17202a;
+  color: #fff;
+}
+
 .approval-form {
   display: grid;
   gap: 14px;
@@ -416,6 +443,31 @@ textarea {
 .approval-form-head svg {
   color: var(--warn);
   flex: 0 0 auto;
+}
+
+.approval-form-empty {
+  align-content: center;
+  color: var(--muted);
+}
+
+.approval-meta {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) minmax(0, 1fr);
+  gap: 8px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+
+.approval-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.approval-meta strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
 }
 
 .field {
