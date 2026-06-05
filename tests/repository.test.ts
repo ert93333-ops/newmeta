@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MemoryHermesRepository,
   costUsageFromEstimate,
+  costUsageFromExecutedApproval,
   requestAuditMetadata,
   summarizeCostUsageRows
 } from "@/lib/repositories/hermes-repository";
@@ -150,6 +151,62 @@ describe("Hermes repository", () => {
     ).toEqual({
       todayActualCostKrw: 700,
       monthActualCostKrw: 900
+    });
+  });
+
+  it("counts the final actual cost once when estimate and execution share a related job", () => {
+    expect(
+      summarizeCostUsageRows(
+        [
+          {
+            related_job_id: "approval-1",
+            created_at: "2026-06-05T01:00:00.000Z",
+            estimated_cost_krw: "500",
+            status: "estimated"
+          },
+          {
+            related_job_id: "approval-1",
+            created_at: "2026-06-05T02:00:00.000Z",
+            estimated_cost_krw: "500",
+            actual_cost_krw: "450",
+            status: "succeeded"
+          }
+        ],
+        new Date("2026-06-05T09:00:00.000Z")
+      )
+    ).toEqual({
+      todayActualCostKrw: 450,
+      monthActualCostKrw: 450
+    });
+  });
+
+  it("creates succeeded cost usage from an executed paid approval", () => {
+    const approval = createApprovalRequest({
+      context: marketer,
+      action: "ai_paid_generation",
+      objectType: "variant_batch",
+      objectId: "creative-control-1",
+      afterJson: {
+        operationType: "variant_batch",
+        providerName: "mock-ai",
+        model: "mock-variant",
+        estimatedCredits: 5,
+        estimatedCostKrw: 500
+      }
+    });
+
+    expect(costUsageFromExecutedApproval(approval, owner)).toMatchObject({
+      tenantId: owner.tenantId,
+      userId: owner.userId,
+      provider: "mock-ai",
+      model: "mock-variant",
+      operationType: "variant_batch",
+      estimatedCredits: 5,
+      actualCredits: 5,
+      estimatedCostKrw: 500,
+      actualCostKrw: 500,
+      relatedJobId: approval.id,
+      status: "succeeded"
     });
   });
 

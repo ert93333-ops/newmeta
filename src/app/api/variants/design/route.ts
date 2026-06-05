@@ -3,7 +3,7 @@ import { resolveUserContext } from "@/lib/api/context";
 import { designVariants } from "@/lib/variants/variant-designer";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { assertPaidOperationApproval, PaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
-import { getRepository } from "@/lib/repositories/hermes-repository";
+import { costUsageFromExecutedApproval, getRepository } from "@/lib/repositories/hermes-repository";
 import type { VariantDesignInput } from "@/lib/variants/variant-designer";
 
 interface VariantDesignRequest extends VariantDesignInput {
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       variantCount: variantDesign.variants.length
     });
     const persisted = await repository.updateApproval(request, executed);
+    await repository.saveCostUsage(request, costUsageFromExecutedApproval(persisted, context));
 
     await repository.saveAuditLog(request, {
       tenantId: context.tenantId,

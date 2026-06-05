@@ -33,4 +33,6 @@ Variant design execution must be bound to an approved `ai_paid_generation` appro
 
 Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw` and `monthActualCostKrw` values are ignored at the API boundary so callers cannot lower their effective usage by editing the request body.
 
+Paid approval estimates and execution results share `relatedJobId = approval.id`. Summary calculations count the final succeeded/actual-cost row once when it exists; otherwise the estimate remains counted as a reservation.
+
 Automatic retry is limited to one failed generation retry.

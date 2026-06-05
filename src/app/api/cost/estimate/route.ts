@@ -25,9 +25,9 @@ export async function POST(request: Request) {
       monthActualCostKrw: usageSummary.monthActualCostKrw
     };
     const decision = guardCost(guardedInput);
-    await repository.saveCostUsage(request, costUsageFromEstimate(guardedInput, context, decision.estimatedCostKrw));
 
     if (decision.status !== "approval_required" || input.approvalRequest?.create !== true) {
+      await repository.saveCostUsage(request, costUsageFromEstimate(guardedInput, context, decision.estimatedCostKrw));
       return ok({ ...decision, usageSummary });
     }
 
@@ -51,6 +51,10 @@ export async function POST(request: Request) {
     });
 
     await repository.saveApproval(request, approval);
+    await repository.saveCostUsage(
+      request,
+      costUsageFromEstimate(guardedInput, context, decision.estimatedCostKrw, approval.id)
+    );
     await repository.saveAuditLog(request, {
       tenantId: context.tenantId,
       userId: context.userId,

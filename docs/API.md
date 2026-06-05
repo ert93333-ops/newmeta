@@ -31,7 +31,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/performance-fusion/reports`
 - `POST /api/variants/design`
 
-`POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed` and writes an audit log. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
+`POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed`, writes an audit log, and records a succeeded cost usage entry linked by `relatedJobId = approval.id`. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
 
 ## Draft and Approval
 
@@ -96,7 +96,7 @@ Successful execution persists the action-specific execution result on `approval_
 }
 ```
 
-The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked.
+The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked. When an approval is created, the estimate log is linked with `relatedJobId = approval.id` so a later succeeded execution log can replace the reservation in cost summaries instead of double-counting it.
 
 `GET /api/cost/usage` returns both the raw tenant-scoped usage rows and the server-calculated daily/monthly summary used by the cost guard.
 

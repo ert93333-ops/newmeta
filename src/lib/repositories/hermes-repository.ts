@@ -424,7 +424,12 @@ function toAssetRow(asset: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-export function costUsageFromEstimate(input: CostEstimateInput, context: UserContext, estimatedCostKrw: number): CostUsageInput {
+export function costUsageFromEstimate(
+  input: CostEstimateInput,
+  context: UserContext,
+  estimatedCostKrw: number,
+  relatedJobId?: string
+): CostUsageInput {
   return {
     tenantId: context.tenantId,
     userId: context.userId,
@@ -433,20 +438,38 @@ export function costUsageFromEstimate(input: CostEstimateInput, context: UserCon
     operationType: input.operationType,
     estimatedCredits: input.estimatedCredits ?? 0,
     estimatedCostKrw,
+    relatedJobId,
     status: "estimated"
+  };
+}
+
+export function costUsageFromExecutedApproval(approval: ApprovalRequest, context: UserContext): CostUsageInput {
+  const estimatedCredits = readNumberField(approval.afterJson, "estimatedCredits") ?? 0;
+  const estimatedCostKrw = readNumberField(approval.afterJson, "estimatedCostKrw") ?? 0;
+
+  return {
+    tenantId: context.tenantId,
+    userId: context.userId,
+    provider: readStringField(approval.afterJson, "providerName") ?? "unknown",
+    model: readStringField(approval.afterJson, "model"),
+    operationType: readStringField(approval.afterJson, "operationType") ?? approval.objectType,
+    estimatedCredits,
+    actualCredits: readNumberField(approval.afterJson, "actualCredits") ?? estimatedCredits,
+    estimatedCostKrw,
+    actualCostKrw: readNumberField(approval.afterJson, "actualCostKrw") ?? estimatedCostKrw,
+    relatedJobId: approval.id,
+    status: "succeeded"
   };
 }
 
 export function summarizeCostUsageRows(rows: unknown[], now = new Date()): CostUsageSummary {
   const todayStart = dayStartUtc(now).getTime();
   const monthStart = monthStartUtc(now).getTime();
+  const groupedRows = groupCostUsageRows(rows);
 
-  return rows.reduce<CostUsageSummary>(
-    (summary, row) => {
-      if (!shouldCountCostUsage(row)) {
-        return summary;
-      }
-
+  return Array.from(groupedRows.values()).reduce<CostUsageSummary>(
+    (summary, group) => {
+      const row = chooseCostUsageRow(group, now);
       const createdAtMs = readCostUsageCreatedAt(row, now);
       const costKrw = readCostUsageCostKrw(row);
       if (createdAtMs >= monthStart) {
@@ -462,6 +485,46 @@ export function summarizeCostUsageRows(rows: unknown[], now = new Date()): CostU
       monthActualCostKrw: 0
     }
   );
+}
+
+function groupCostUsageRows(rows: unknown[]): Map<string, unknown[]> {
+  return rows.reduce<Map<string, unknown[]>>((groups, row, index) => {
+    if (!shouldCountCostUsage(row)) {
+      return groups;
+    }
+
+    const relatedJobId = readStringField(row, "relatedJobId") ?? readStringField(row, "related_job_id");
+    const key = relatedJobId ? `job:${relatedJobId}` : `row:${index}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+    return groups;
+  }, new Map());
+}
+
+function chooseCostUsageRow(rows: unknown[], now: Date): unknown {
+  return rows.reduce((chosen, row) => {
+    const rowPriority = costUsagePriority(row);
+    const chosenPriority = costUsagePriority(chosen);
+    if (rowPriority > chosenPriority) {
+      return row;
+    }
+    if (rowPriority === chosenPriority && readCostUsageCreatedAt(row, now) > readCostUsageCreatedAt(chosen, now)) {
+      return row;
+    }
+    return chosen;
+  });
+}
+
+function costUsagePriority(row: unknown): number {
+  const status = readStringField(row, "status")?.toLowerCase();
+  if (status === "succeeded" || status === "executed") {
+    return 3;
+  }
+  if (status === "running") {
+    return 2;
+  }
+  return 1;
 }
 
 function shouldCountCostUsage(row: unknown): boolean {

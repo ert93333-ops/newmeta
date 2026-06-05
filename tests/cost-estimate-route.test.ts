@@ -137,6 +137,14 @@ describe("cost estimate route approval request flow", () => {
       requiresSecondApproval: false
     });
     expect(stored?.id).toBe(body.approval.id);
+
+    const usage = await repository.listCostUsage(jsonRequest("http://localhost/api/test", {}), approver);
+    expect(usage.at(-1)).toMatchObject({
+      operationType: "variant_batch",
+      estimatedCostKrw: 500,
+      relatedJobId: body.approval.id,
+      status: "estimated"
+    });
   });
 
   it("does not create an approval when the cost guard blocks the operation", async () => {
@@ -226,6 +234,8 @@ describe("cost estimate route approval request flow", () => {
       })
     );
     const variantBody = await variantResponse.json();
+    const usage = await repository.listCostUsage(jsonRequest("http://localhost/api/test", {}), approver);
+    const summary = await repository.summarizeCostUsage(jsonRequest("http://localhost/api/test", {}), approver);
 
     expect(variantResponse.status).toBe(201);
     expect(variantBody.approval).toMatchObject({
@@ -235,6 +245,16 @@ describe("cost estimate route approval request flow", () => {
         operation: "ai_paid_generation",
         operationType: "variant_batch"
       }
+    });
+    expect(usage.filter((item) => typeof item === "object" && item !== null && "relatedJobId" in item)).toHaveLength(2);
+    expect(usage.at(-1)).toMatchObject({
+      relatedJobId: estimateBody.approval.id,
+      status: "succeeded",
+      actualCostKrw: 500
+    });
+    expect(summary).toEqual({
+      todayActualCostKrw: 500,
+      monthActualCostKrw: 500
     });
     expect(JSON.stringify(variantBody)).not.toContain("daily_budget");
   });
