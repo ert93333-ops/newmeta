@@ -64,6 +64,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/approvals/:id/reject`
 - `POST /api/approvals/:id/execute`
 
+`POST /api/drafts/create-paused` reruns draft preflight on the server. If preflight is blocked, the route fails closed with `DRAFT_PREFLIGHT_BLOCKED` and includes the blocker details. If preflight passes and no `approvalRequestId` is supplied, the route creates a pending same-tenant `meta_create_ad_paused` approval and returns `202 approval_required` with guard metadata. If an approved matching `approvalRequestId` is supplied, the route persists an `ad_drafts` row with `meta_status = PAUSED`, marks that approval `executed`, and writes an audit log. Executed approvals cannot be reused.
+
 `GET /api/approvals` returns only the authenticated tenant's approval requests in newest-first order. Each item includes the approval and current guard metadata so approval-center clients can display typed confirmation, expiry, and second-approval requirements without recomputing policy client-side.
 
 `POST /api/approvals` and `POST /api/approvals/:id/approve` include approval guard metadata:

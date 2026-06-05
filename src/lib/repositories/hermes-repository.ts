@@ -68,6 +68,24 @@ export interface IntegrationSettingsRecord {
   updatedAt?: string;
 }
 
+export interface AdDraftRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  adAccountId?: string;
+  assetId?: string;
+  approvalRequestId?: string;
+  metaCampaignId?: string;
+  metaAdsetId?: string;
+  metaAdId?: string;
+  draftType: string;
+  metaStatus: "PAUSED" | "ACTIVE" | "ARCHIVED" | "DELETED";
+  preflightJson: unknown;
+  payloadJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -88,12 +106,15 @@ export interface HermesRepository {
     provider: string
   ): Promise<IntegrationSettingsRecord | null>;
   saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord>;
+  saveAdDraft(request: Request, draft: AdDraftRecord): Promise<AdDraftRecord>;
+  getAdDraft(request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null>;
 }
 
 interface HermesMemoryStore {
   approvals: Map<string, ApprovalRequest>;
   jobs: Map<string, Record<string, unknown>>;
   assets: Map<string, Record<string, unknown>>;
+  adDrafts: Map<string, AdDraftRecord>;
   metaConnections: Map<string, MetaConnectionInput>;
   integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
@@ -108,6 +129,7 @@ function getMemoryStore(): HermesMemoryStore {
       approvals: new Map(),
       jobs: new Map(),
       assets: new Map(),
+      adDrafts: new Map(),
       metaConnections: new Map(),
       integrationSettings: new Map(),
       costUsage: [],
@@ -225,6 +247,26 @@ export class MemoryHermesRepository implements HermesRepository {
     };
     getMemoryStore().integrationSettings.set(settingKey(settings.tenantId, settings.provider), persisted);
     return persisted;
+  }
+
+  async saveAdDraft(_request: Request, draft: AdDraftRecord): Promise<AdDraftRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...draft,
+      id: draft.id ?? crypto.randomUUID(),
+      createdAt: draft.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().adDrafts.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getAdDraft(_request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null> {
+    const draft = getMemoryStore().adDrafts.get(id);
+    if (!draft || draft.tenantId !== context.tenantId) {
+      return null;
+    }
+    return draft;
   }
 }
 
@@ -463,6 +505,29 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (!data) throw new Error("SUPABASE_SETTINGS_UPDATE_MISSED");
     return fromIntegrationSettingsRow(data as IntegrationSettingsRow);
   }
+
+  async saveAdDraft(request: Request, draft: AdDraftRecord): Promise<AdDraftRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveAdDraft(request, draft);
+
+    const { data, error } = await supabase.from("ad_drafts").insert(toAdDraftInsertRow(draft)).select("*").single();
+    if (error) throw new Error(`SUPABASE_AD_DRAFT_INSERT_FAILED:${error.message}`);
+    return fromAdDraftRow(data as AdDraftRow);
+  }
+
+  async getAdDraft(request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getAdDraft(request, context, id);
+
+    const { data, error } = await supabase
+      .from("ad_drafts")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_AD_DRAFT_SELECT_FAILED:${error.message}`);
+    return data ? fromAdDraftRow(data as AdDraftRow) : null;
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -540,6 +605,24 @@ interface MetaConnectionRow {
   status: string;
   metadata_json?: unknown;
   created_at: string;
+}
+
+interface AdDraftRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  ad_account_id?: string | null;
+  asset_id?: string | null;
+  approval_request_id?: string | null;
+  meta_campaign_id?: string | null;
+  meta_adset_id?: string | null;
+  meta_ad_id?: string | null;
+  draft_type: string;
+  meta_status: AdDraftRecord["metaStatus"];
+  preflight_json: unknown;
+  payload_json: unknown;
+  created_at: string;
+  updated_at: string;
 }
 
 function toApprovalRow(approval: ApprovalRequest): Record<string, unknown> {
@@ -688,6 +771,44 @@ function fromIntegrationSettingsRow(row: IntegrationSettingsRow): IntegrationSet
     createdBy: row.created_by ?? undefined,
     provider: row.provider,
     settingsJson: row.settings_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toAdDraftInsertRow(draft: AdDraftRecord): Record<string, unknown> {
+  return {
+    id: draft.id,
+    tenant_id: draft.tenantId,
+    created_by: draft.createdBy,
+    ad_account_id: draft.adAccountId,
+    asset_id: draft.assetId,
+    approval_request_id: draft.approvalRequestId,
+    meta_campaign_id: draft.metaCampaignId,
+    meta_adset_id: draft.metaAdsetId,
+    meta_ad_id: draft.metaAdId,
+    draft_type: draft.draftType,
+    meta_status: draft.metaStatus,
+    preflight_json: draft.preflightJson ?? {},
+    payload_json: draft.payloadJson ?? {}
+  };
+}
+
+function fromAdDraftRow(row: AdDraftRow): AdDraftRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    adAccountId: row.ad_account_id ?? undefined,
+    assetId: row.asset_id ?? undefined,
+    approvalRequestId: row.approval_request_id ?? undefined,
+    metaCampaignId: row.meta_campaign_id ?? undefined,
+    metaAdsetId: row.meta_adset_id ?? undefined,
+    metaAdId: row.meta_ad_id ?? undefined,
+    draftType: row.draft_type,
+    metaStatus: row.meta_status,
+    preflightJson: row.preflight_json,
+    payloadJson: row.payload_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
