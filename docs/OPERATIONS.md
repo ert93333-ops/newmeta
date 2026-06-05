@@ -30,6 +30,14 @@ SUPABASE_DB_URL=postgres://... npm exec tsx worker/hermes-worker.ts
 
 Use a secret-bearing server environment only. Do not run worker code in the browser.
 
+The worker lifecycle is DB-owned:
+
+- `private.claim_creative_job(worker_name)` claims one queued job with `FOR UPDATE SKIP LOCKED`.
+- `private.complete_creative_job(job_id, worker_name, result)` marks only that worker's running job as `succeeded`.
+- `private.fail_creative_job(job_id, worker_name, error, result)` requeues while `attempts < max_attempts`, then marks the job `failed`.
+
+The default `max_attempts = 2` gives one retry after the first failed execution. These functions are private and executable by `service_role`; they are not exposed as public API routes.
+
 ## Auth Mode
 
 Set `HERMES_AUTH_MODE=mock` only for local development without Supabase Auth. Runtime production is detected when `NODE_ENV=production` or `VERCEL_ENV=production`.

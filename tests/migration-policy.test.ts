@@ -7,6 +7,10 @@ describe("Supabase migration guardrails", () => {
     join(process.cwd(), "supabase/migrations/20260531162030_hermes_foundation_schema.sql"),
     "utf8"
   );
+  const workerLifecycleMigration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260605015446_worker_job_lifecycle.sql"),
+    "utf8"
+  );
 
   it("enables RLS and keeps security definer functions out of public schema", () => {
     expect(migration).toContain("enable row level security");
@@ -24,5 +28,15 @@ describe("Supabase migration guardrails", () => {
     expect(migration).toContain("function private.claim_creative_job");
     expect(migration).toContain("for update skip locked");
     expect(migration).not.toContain("function public.claim_creative_job");
+  });
+
+  it("keeps worker completion and retry lifecycle functions private", () => {
+    expect(workerLifecycleMigration).toContain("function private.complete_creative_job");
+    expect(workerLifecycleMigration).toContain("function private.fail_creative_job");
+    expect(workerLifecycleMigration).toContain("attempts < max_attempts");
+    expect(workerLifecycleMigration).toContain("grant execute on function private.complete_creative_job");
+    expect(workerLifecycleMigration).toContain("grant execute on function private.fail_creative_job");
+    expect(workerLifecycleMigration).not.toContain("function public.complete_creative_job");
+    expect(workerLifecycleMigration).not.toContain("function public.fail_creative_job");
   });
 });
