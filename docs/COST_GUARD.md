@@ -41,6 +41,8 @@ The generic approval execution route does not execute `ai_paid_generation`. Paid
 
 Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw`, `monthActualCostKrw`, cap values, and provider pricing values are ignored at the API boundary so callers cannot lower their effective usage or underquote a paid approval by editing the request body.
 
+`GET /api/cost/usage` follows the same rule. It requires a `providerName` query parameter, resolves that provider's stored tenant settings server-side, and returns the computed `effectiveDailyCapKrw` from those settings instead of hardcoded policy values.
+
 Paid approval estimates and execution results share `relatedJobId = approval.id`. Summary calculations count the final succeeded/actual-cost row once when it exists, remove the reservation when a final failed/cancelled row exists, and otherwise keep the estimate or running row counted as a reservation.
 
 Automatic retry is limited to one failed generation retry.

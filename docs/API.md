@@ -140,7 +140,7 @@ Successful execution persists the action-specific execution result on `approval_
 
 The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked. When an approval is created, the estimate log is linked with `relatedJobId = approval.id` so a later terminal worker log can replace or close the reservation in cost summaries instead of double-counting it.
 
-`GET /api/cost/usage` returns both the raw tenant-scoped usage rows and the server-calculated daily/monthly summary used by the cost guard.
+`GET /api/cost/usage` is a tenant-scoped server-policy route. Callers must supply `providerName` as a query parameter, for example `/api/cost/usage?providerName=mock-ai`. The route resolves that provider's stored tenant `integration_settings` row server-side, returns the raw usage rows plus the daily/monthly summary, and includes a `policy` block containing the resolved provider plan/caps and the computed `effectiveDailyCapKrw`. Missing `providerName` returns `COST_PROVIDER_REQUIRED`; missing or malformed stored settings return `COST_SETTINGS_NOT_CONFIGURED` or `COST_SETTINGS_INVALID`.
 
 `POST /api/data-deletion-requests` does not immediately delete or queue tenant data deletion work. It creates a destructive `tenant_data_deletion` approval request, writes an audit record, and returns typed-confirmation guard metadata. Actual deletion execution must happen only after the two-step destructive approval flow.
 
