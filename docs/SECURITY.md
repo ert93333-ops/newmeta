@@ -39,6 +39,7 @@ Tenant-scoped settings writes go through `PATCH /api/settings/*`, require `marke
 - Budget mutation: hard block, no approval escape hatch.
 - Cost guard settings must be server-owned. `POST /api/cost/estimate` may accept a provider lookup key from the client, but pricing, credits, and caps must come from tenant-scoped `integration_settings`, not request-body overrides.
 - Approval execution must go through the action-specific executor registry and fail closed in production unless a real live executor is configured; mock execution is local-only.
+- `POST /api/drafts/create-paused` must not bypass that rule. If the route cannot execute a real live Meta PAUSED draft creation, it must fail closed instead of consuming an approval and persisting a false-success draft.
 - Approval execution must persist the executor result, and Supabase approval updates must confirm that a row was actually updated so RLS or tenant mismatches cannot be reported as successful execution.
 
 ## Audit

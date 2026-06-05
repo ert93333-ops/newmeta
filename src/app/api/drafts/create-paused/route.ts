@@ -8,7 +8,10 @@ import {
 import { handleError, ok, parseWriteJson, fail } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { runDraftPreflight, type DraftPreflightInput } from "@/lib/drafts/preflight";
+import { resolveMetaAdapter } from "@/lib/meta/resolve-meta-adapter";
 import { getRepository } from "@/lib/repositories/hermes-repository";
+import type { CreativeAssetRecord } from "@/lib/repositories/hermes-repository";
+import type { CreativeAssetMetadata } from "@/lib/types";
 
 interface CreatePausedDraftRequest extends Partial<DraftPreflightInput> {
   approvalRequestId?: unknown;
@@ -30,6 +33,11 @@ export async function POST(request: Request) {
     const body = (await parseWriteJson(request)) as CreatePausedDraftRequest;
     const draftId = readOptionalString(body.draftId) ?? randomUUID();
     const draftType = readOptionalString(body.draftType) ?? "ad";
+    if (draftType !== "ad") {
+      return fail("DRAFT_TYPE_NOT_SUPPORTED", "Only ad-level PAUSED draft execution is currently supported.", 501, {
+        draftType
+      });
+    }
     const payload = body.payload ?? body;
     const preflight = runDraftPreflight({
       manifest: readManifest(body.manifest),
@@ -98,16 +106,64 @@ export async function POST(request: Request) {
     }
     assertExecutableApproval(approval, context);
 
+    const assetId = readOptionalString(body.assetId) ?? readOptionalString(body.manifest?.asset?.id);
+    if (!assetId) {
+      return fail("CREATIVE_ASSET_ID_REQUIRED", "Draft execution requires a persisted asset id.", 400);
+    }
+    const asset = await repository.getAsset(request, context, assetId);
+    if (!asset) {
+      return fail("CREATIVE_ASSET_NOT_FOUND", "Draft execution requires a same-tenant persisted asset.", 404, {
+        assetId
+      });
+    }
+
+    const adAccountId = readOptionalString(body.adAccountId);
+    if (!adAccountId) {
+      return fail("META_AD_ACCOUNT_REQUIRED", "Draft execution requires a Meta ad account id.", 400);
+    }
+
+    const resolvedAdapter = await resolveMetaAdapter({
+      request,
+      context,
+      repository
+    });
+    if (resolvedAdapter.mode === "live") {
+      return fail(
+        "LIVE_META_DRAFT_EXECUTOR_NOT_CONFIGURED",
+        "Live Meta PAUSED draft execution is not configured yet.",
+        501,
+        {
+          connectionId: resolvedAdapter.connectionId
+        }
+      );
+    }
+
+    const executionInput = buildPausedDraftExecutionInput({
+      draftId,
+      adAccountId,
+      manifest: readManifest(body.manifest),
+      pageId: readOptionalString(body.pageId)!,
+      instagramActorId: readOptionalString(body.instagramActorId),
+      linkUrl: readOptionalString(body.linkUrl) ?? readManifest(body.manifest).linkUrl!,
+      asset,
+      approval,
+      payload,
+      existingCampaignId: readOptionalString(body.metaCampaignId),
+      existingAdsetId: readOptionalString(body.metaAdsetId),
+      existingAdId: readOptionalString(body.metaAdId)
+    });
+    const execution = await executePausedDraftThroughAdapter(resolvedAdapter.adapter, executionInput);
+
     const draft = await repository.saveAdDraft(request, {
       id: draftId,
       tenantId: context.tenantId,
       createdBy: context.userId,
-      adAccountId: readOptionalString(body.adAccountId),
-      assetId: readOptionalString(body.assetId),
+      adAccountId,
+      assetId,
       approvalRequestId: approval.id,
-      metaCampaignId: readOptionalString(body.metaCampaignId),
-      metaAdsetId: readOptionalString(body.metaAdsetId),
-      metaAdId: readOptionalString(body.metaAdId),
+      metaCampaignId: execution.campaignId,
+      metaAdsetId: execution.adsetId,
+      metaAdId: execution.adId,
       draftType,
       metaStatus: "PAUSED",
       preflightJson: preflight,
@@ -117,7 +173,16 @@ export async function POST(request: Request) {
       operation: "meta_create_ad_paused",
       result: "paused_draft_created",
       draftId: draft.id,
-      metaStatus: draft.metaStatus
+      metaStatus: draft.metaStatus,
+      adapterMode: resolvedAdapter.mode,
+      connectionSource: resolvedAdapter.source,
+      connectionId: resolvedAdapter.connectionId,
+      imageHash: execution.imageHash,
+      videoId: execution.videoId,
+      creativeId: execution.creativeId,
+      campaignId: execution.campaignId,
+      adsetId: execution.adsetId,
+      adId: execution.adId
     });
     const persistedApproval = await repository.updateApproval(request, executed);
 
@@ -130,6 +195,7 @@ export async function POST(request: Request) {
       approvalRequestId: persistedApproval.id,
       beforeJson: approval,
       afterJson: {
+        execution,
         approval: persistedApproval,
         draft
       },
@@ -155,4 +221,156 @@ function readOptionalString(value: unknown): string | undefined {
   }
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
+}
+
+interface PausedDraftExecutionInput {
+  draftId: string;
+  adAccountId: string;
+  manifest: DraftPreflightInput["manifest"];
+  pageId: string;
+  instagramActorId?: string;
+  linkUrl: string;
+  asset: CreativeAssetRecord;
+  approval: ReturnType<typeof createApprovalRequest>;
+  payload: unknown;
+  existingCampaignId?: string;
+  existingAdsetId?: string;
+  existingAdId?: string;
+}
+
+interface PausedDraftExecutionResult {
+  imageHash?: string;
+  videoId?: string;
+  creativeId: string;
+  campaignId: string;
+  adsetId: string;
+  adId: string;
+}
+
+async function executePausedDraftThroughAdapter(
+  adapter: Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"],
+  input: PausedDraftExecutionInput
+): Promise<PausedDraftExecutionResult> {
+  const uploadResult =
+    input.asset.assetType === "video"
+      ? await adapter.uploadVideo({
+          adAccountId: input.adAccountId,
+          asset: toCreativeAssetMetadata(input.asset),
+          approval: input.approval
+        })
+      : await adapter.uploadImage({
+          adAccountId: input.adAccountId,
+          asset: toCreativeAssetMetadata(input.asset),
+          approval: input.approval
+        });
+
+  const creative = await adapter.createCreative({
+    adAccountId: input.adAccountId,
+    name: readPayloadString(input.payload, "creativeName") ?? `Hermes creative ${input.draftId}`,
+    pageId: input.pageId,
+    instagramActorId: input.instagramActorId,
+    linkUrl: input.linkUrl,
+    imageHash: "imageHash" in uploadResult ? uploadResult.imageHash : undefined,
+    videoId: "videoId" in uploadResult ? uploadResult.videoId : undefined,
+    approval: input.approval
+  });
+
+  const campaignId =
+    input.existingCampaignId ??
+    (
+      await adapter.createCampaignPaused({
+        adAccountId: input.adAccountId,
+        name: readPayloadString(input.payload, "campaignName") ?? `Hermes campaign ${input.draftId}`,
+        objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
+        approval: input.approval
+      })
+    ).campaignId;
+
+  const adsetId =
+    input.existingAdsetId ??
+    (
+      await adapter.createAdSetPaused({
+        adAccountId: input.adAccountId,
+        campaignId,
+        name: readPayloadString(input.payload, "adsetName") ?? `Hermes adset ${input.draftId}`,
+        optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
+        targeting: readPayloadRecord(input.payload, "targeting") ?? {},
+        approval: input.approval
+      })
+    ).adsetId;
+
+  const adId =
+    input.existingAdId ??
+    (
+      await adapter.createAdPaused({
+        adAccountId: input.adAccountId,
+        adsetId,
+        name: readPayloadString(input.payload, "adName") ?? `Hermes ad ${input.draftId}`,
+        creativeId: creative.creativeId,
+        approval: input.approval
+      })
+    ).adId;
+
+  return {
+    imageHash: "imageHash" in uploadResult ? uploadResult.imageHash : undefined,
+    videoId: "videoId" in uploadResult ? uploadResult.videoId : undefined,
+    creativeId: creative.creativeId,
+    campaignId,
+    adsetId,
+    adId
+  };
+}
+
+function buildPausedDraftExecutionInput(input: {
+  draftId: string;
+  adAccountId: string;
+  manifest: DraftPreflightInput["manifest"];
+  pageId: string;
+  instagramActorId?: string;
+  linkUrl: string;
+  asset: CreativeAssetRecord;
+  approval: ReturnType<typeof createApprovalRequest>;
+  payload: unknown;
+  existingCampaignId?: string;
+  existingAdsetId?: string;
+  existingAdId?: string;
+}): PausedDraftExecutionInput {
+  return input;
+}
+
+function toCreativeAssetMetadata(asset: CreativeAssetRecord): CreativeAssetMetadata {
+  return {
+    id: asset.id,
+    type: asset.assetType,
+    width: asset.width,
+    height: asset.height,
+    durationSeconds: asset.durationSeconds,
+    mimeType: asset.mimeType,
+    fileSizeBytes: readAssetFileSizeBytes(asset)
+  };
+}
+
+function readAssetFileSizeBytes(asset: CreativeAssetRecord): number | undefined {
+  if (typeof asset.metadataJson !== "object" || asset.metadataJson === null || !("fileSizeBytes" in asset.metadataJson)) {
+    return undefined;
+  }
+  const value = (asset.metadataJson as Record<string, unknown>).fileSizeBytes;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function readPayloadString(payload: unknown, key: string): string | undefined {
+  if (typeof payload !== "object" || payload === null || !(key in payload)) {
+    return undefined;
+  }
+  return readOptionalString((payload as Record<string, unknown>)[key]);
+}
+
+function readPayloadRecord(payload: unknown, key: string): Record<string, unknown> | undefined {
+  if (typeof payload !== "object" || payload === null || !(key in payload)) {
+    return undefined;
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

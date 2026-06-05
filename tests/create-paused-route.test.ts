@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { POST as createPausedDraft } from "@/app/api/drafts/create-paused/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
+import { encryptToken } from "@/lib/security/token-crypto";
 import type { CreativeManifest, UserContext } from "@/lib/types";
 
 const ENV_KEYS = [
@@ -9,6 +10,7 @@ const ENV_KEYS = [
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
   "HERMES_DEFAULT_TENANT_ID",
+  "TOKEN_ENCRYPTION_KEY",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -189,6 +191,18 @@ describe("create paused draft route", () => {
     const repository = new MemoryHermesRepository();
     const approval = approvedDraftApproval("draft-approved-1");
     await repository.saveApproval(request({}), approval);
+    await repository.saveAsset(request({}), {
+      id: "asset_123",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {
+        fileSizeBytes: 2048
+      }
+    });
 
     const response = await createPausedDraft(
       request({
@@ -216,16 +230,22 @@ describe("create paused draft route", () => {
       id: "draft-approved-1",
       approvalRequestId: approval.id,
       metaStatus: "PAUSED",
-      draftType: "ad"
+      draftType: "ad",
+      metaCampaignId: expect.stringMatching(/^cmp_/),
+      metaAdsetId: expect.stringMatching(/^adset_/),
+      metaAdId: expect.stringMatching(/^ad_/)
     });
     expect(body.approval).toMatchObject({
       id: approval.id,
       status: "executed",
       executionResultJson: {
-        result: "paused_draft_created"
+        result: "paused_draft_created",
+        adapterMode: "mock",
+        creativeId: expect.stringMatching(/^creative_/)
       }
     });
     expect(storedDraft?.approvalRequestId).toBe(approval.id);
+    expect(storedDraft?.metaCampaignId).toMatch(/^cmp_/);
     expect(storedApproval?.status).toBe("executed");
   });
 
@@ -234,11 +254,23 @@ describe("create paused draft route", () => {
     const repository = new MemoryHermesRepository();
     const approval = approvedDraftApproval("draft-approved-reuse");
     await repository.saveApproval(request({}), approval);
+    await repository.saveAsset(request({}), {
+      id: "asset-reuse-1",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {}
+    });
 
     await createPausedDraft(
       request({
         draftId: "draft-approved-reuse",
         approvalRequestId: approval.id,
+        adAccountId: "act_123",
+        assetId: "asset-reuse-1",
         manifest,
         pageId: "page_1"
       })
@@ -255,5 +287,81 @@ describe("create paused draft route", () => {
 
     expect(secondResponse.status).toBe(403);
     expect(secondBody.error?.code).toBe("APPROVAL_REQUIRED");
+  });
+
+  it("fails closed when the approved draft references a missing persisted asset", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    const approval = approvedDraftApproval("draft-missing-asset");
+    await repository.saveApproval(request({}), approval);
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-missing-asset",
+        approvalRequestId: approval.id,
+        adAccountId: "act_123",
+        assetId: "asset-missing-1",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+
+    expect(response.status).toBe(404);
+    expect(body.error?.code).toBe("CREATIVE_ASSET_NOT_FOUND");
+  });
+
+  it("fails closed when a live Meta connection exists but the live draft executor is not implemented", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    const approval = approvedDraftApproval("draft-live-blocked");
+    await repository.saveApproval(request({}), approval);
+    await repository.saveAsset(request({}), {
+      id: "asset-live-1",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-1",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-blocked",
+        approvalRequestId: approval.id,
+        adAccountId: "act_live_123",
+        assetId: "asset-live-1",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+    const storedApproval = await repository.getApproval(request({}), requester, approval.id);
+    const storedDraft = await repository.getAdDraft(request({}), requester, "draft-live-blocked");
+
+    expect(response.status).toBe(501);
+    expect(body.error?.code).toBe("LIVE_META_DRAFT_EXECUTOR_NOT_CONFIGURED");
+    expect(storedApproval?.status).toBe("approved");
+    expect(storedDraft).toBeNull();
   });
 });
