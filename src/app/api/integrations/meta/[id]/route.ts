@@ -9,6 +9,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await parseWriteJson(request);
     const { id } = await params;
     const repository = getRepository();
+    const connection = await repository.getMetaConnection(request, context, id);
+    if (!connection) {
+      throw new Error("META_CONNECTION_NOT_FOUND");
+    }
     const approval = createApprovalRequest({
       context,
       action: "meta_disconnect_connection",
@@ -16,7 +20,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       objectId: id,
       beforeJson: {
         connectionId: id,
-        status: "connected_or_unknown"
+        provider: connection.provider,
+        connectionMode: connection.connectionMode,
+        status: connection.status,
+        scopes: connection.scopes,
+        expiresAt: connection.expiresAt
       },
       afterJson: {
         status: "disconnect_requested",

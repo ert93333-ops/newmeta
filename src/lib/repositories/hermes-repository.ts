@@ -227,6 +227,7 @@ export interface HermesRepository {
   saveAsset(request: Request, asset: CreativeAssetRecord): Promise<CreativeAssetRecord>;
   getAsset(request: Request, context: UserContext, id: string): Promise<CreativeAssetRecord | null>;
   saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
+  getMetaConnection(request: Request, context: UserContext, id: string): Promise<MetaConnectionRecord | null>;
   getLatestMetaConnection(request: Request, context: UserContext, provider: string): Promise<MetaConnectionRecord | null>;
   getIntegrationSettings(
     request: Request,
@@ -455,6 +456,14 @@ export class MemoryHermesRepository implements HermesRepository {
 
   async saveMetaConnection(_request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
     getMemoryStore().metaConnections.set(connection.id, connection);
+    return connection;
+  }
+
+  async getMetaConnection(_request: Request, context: UserContext, id: string): Promise<MetaConnectionRecord | null> {
+    const connection = getMemoryStore().metaConnections.get(id);
+    if (!connection || connection.tenantId !== context.tenantId) {
+      return null;
+    }
     return connection;
   }
 
@@ -938,6 +947,20 @@ export class SupabaseHermesRepository implements HermesRepository {
     const { error } = await supabase.from("meta_connections").insert(toMetaConnectionRow(connection));
     if (error) throw new Error(`SUPABASE_META_CONNECTION_INSERT_FAILED:${error.message}`);
     return connection;
+  }
+
+  async getMetaConnection(request: Request, context: UserContext, id: string): Promise<MetaConnectionRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getMetaConnection(request, context, id);
+
+    const { data, error } = await supabase
+      .from("meta_connections")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_META_CONNECTION_SELECT_FAILED:${error.message}`);
+    return data ? fromMetaConnectionRow(data as MetaConnectionRow) : null;
   }
 
   async getLatestMetaConnection(

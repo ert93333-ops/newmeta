@@ -144,6 +144,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_CONNECTION_REQUIRED") {
       return fail(error.message, "A live Meta connection is required for this operation.", 409);
     }
+    if (error.message === "META_CONNECTION_NOT_FOUND") {
+      return fail(error.message, "Meta connection was not found for this tenant.", 404);
+    }
     if (error.message === "META_CONNECTION_EXPIRED") {
       return fail(error.message, "The stored Meta connection has expired and must be reconnected.", 409);
     }

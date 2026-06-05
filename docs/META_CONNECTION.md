@@ -38,6 +38,8 @@ The dashboard Meta Connection panel is the browser entry point for this route. I
 
 Read routes resolve their adapter server-side from the latest tenant-scoped `meta_connections` row. When the stored connection metadata says `mode=live`, the route decrypts the access token with `TOKEN_ENCRYPTION_KEY` and uses `MetaGraphApiAdapter`. When no connection exists, only non-production runtime may fall back to `MockMetaAdapter`; production fails closed with `META_CONNECTION_REQUIRED`. Stored live connections are also revalidated against the required scope set at runtime, so older incomplete rows fail closed with `META_REQUIRED_SCOPES_MISSING`. Stored mock connections are local-only and fail closed in production.
 
+`DELETE /api/integrations/meta/:id` is also tenant-scoped at lookup time. Hermes now requires the exact `meta_connections.id` to exist for the current tenant before it writes a destructive disconnect approval. Unknown ids and cross-tenant ids fail closed with `META_CONNECTION_NOT_FOUND` instead of leaving an approval record that targets an arbitrary object id.
+
 The live PAUSED draft executor also uses `MetaGraphApiAdapter` server-side. It performs the write chain with server-only `Authorization: Bearer` headers for:
 
 - `/{ad_account_id}/adimages` or `/{ad_account_id}/advideos`

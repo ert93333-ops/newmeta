@@ -69,6 +69,22 @@ describe("Meta connection disconnect route", () => {
   it("creates a destructive approval instead of immediately disconnecting Meta tokens", async () => {
     clearEnv();
     mutableEnv.HERMES_AUTH_MODE = "mock";
+    const repository = new MemoryHermesRepository();
+
+    await repository.saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "connection-approval",
+      tenantId,
+      createdBy: mockContext.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-live",
+      tokenIv: "iv-live",
+      tokenAuthTag: "tag-live",
+      tokenKid: "primary",
+      scopes: ["ads_read", "ads_management", "business_management"],
+      expiresAt: "2026-06-06T00:00:00.000Z",
+      status: "connected"
+    });
 
     const response = await disconnectMetaConnection(
       new Request("http://localhost/api/integrations/meta/connection-approval", {
@@ -78,7 +94,7 @@ describe("Meta connection disconnect route", () => {
     );
     const body = await json(response);
     const approval = body.approval as { id: string; action: string; status: string; riskLevel: string };
-    const stored = await new MemoryHermesRepository().getApproval(
+    const stored = await repository.getApproval(
       new Request("http://localhost/api/test"),
       mockContext,
       approval.id
@@ -101,8 +117,63 @@ describe("Meta connection disconnect route", () => {
       status: "pending",
       riskLevel: "destructive"
     });
+    expect(stored?.beforeJson).toMatchObject({
+      connectionId: "connection-approval",
+      provider: "meta",
+      connectionMode: "oauth",
+      status: "connected",
+      scopes: ["ads_read", "ads_management", "business_management"],
+      expiresAt: "2026-06-06T00:00:00.000Z"
+    });
     expect(stored?.id).toBe(approval.id);
     expect(JSON.stringify(body)).not.toContain("encrypted_access_token");
+  });
+
+  it("fails closed when the Meta connection does not exist for the tenant", async () => {
+    clearEnv();
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+
+    const response = await disconnectMetaConnection(
+      new Request("http://localhost/api/integrations/meta/connection-missing", {
+        method: "DELETE"
+      }),
+      params("connection-missing")
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(404);
+    expect((body.error as { code?: string }).code).toBe("META_CONNECTION_NOT_FOUND");
+  });
+
+  it("fails closed when the Meta connection belongs to another tenant", async () => {
+    clearEnv();
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+    const repository = new MemoryHermesRepository();
+
+    await repository.saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "connection-other-tenant",
+      tenantId: "tenant-other",
+      createdBy: mockContext.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-other",
+      tokenIv: "iv-other",
+      tokenAuthTag: "tag-other",
+      tokenKid: "primary",
+      scopes: ["ads_read", "ads_management", "business_management"],
+      status: "connected"
+    });
+
+    const response = await disconnectMetaConnection(
+      new Request("http://localhost/api/integrations/meta/connection-other-tenant", {
+        method: "DELETE"
+      }),
+      params("connection-other-tenant")
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(404);
+    expect((body.error as { code?: string }).code).toBe("META_CONNECTION_NOT_FOUND");
   });
 
   it("hard-blocks budget mutation payloads on disconnect requests", async () => {

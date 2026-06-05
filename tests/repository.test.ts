@@ -407,6 +407,31 @@ describe("Hermes repository", () => {
     await expect(repository.getLatestMetaConnection(request, { ...owner, tenantId: "tenant-c" }, "meta")).resolves.toBeNull();
   });
 
+  it("returns a Meta connection only for the owning tenant", async () => {
+    const repository = new MemoryHermesRepository();
+    await repository.saveMetaConnection(request, {
+      id: "meta-conn-tenant-a",
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-a",
+      tokenIv: "iv-a",
+      tokenAuthTag: "tag-a",
+      tokenKid: "primary",
+      scopes: ["ads_read", "ads_management", "business_management"],
+      status: "connected"
+    });
+
+    await expect(repository.getMetaConnection(request, owner, "meta-conn-tenant-a")).resolves.toMatchObject({
+      id: "meta-conn-tenant-a",
+      tenantId: owner.tenantId,
+      provider: "meta"
+    });
+    await expect(repository.getMetaConnection(request, { ...owner, tenantId: "tenant-b" }, "meta-conn-tenant-a")).resolves.toBeNull();
+    await expect(repository.getMetaConnection(request, owner, "meta-conn-missing")).resolves.toBeNull();
+  });
+
   it("summarizes tenant cost usage by server-side created time", async () => {
     const repository = new MemoryHermesRepository();
     const summaryOwner = {
