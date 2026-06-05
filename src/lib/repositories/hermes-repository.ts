@@ -271,6 +271,10 @@ export interface HermesRepository {
     context: UserContext,
     id: string
   ): Promise<DataDeletionRequestRecord | null>;
+  updateDataDeletionRequest(
+    request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord>;
   savePerformanceFusionReport(
     request: Request,
     report: PerformanceFusionReportRecord
@@ -617,6 +621,21 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return deletionRequest;
+  }
+
+  async updateDataDeletionRequest(
+    _request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord> {
+    const existing = deletionRequest.id ? getMemoryStore().dataDeletionRequests.get(deletionRequest.id) : undefined;
+    const persisted = {
+      ...deletionRequest,
+      id: deletionRequest.id ?? crypto.randomUUID(),
+      createdAt: deletionRequest.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    getMemoryStore().dataDeletionRequests.set(persisted.id, persisted);
+    return persisted;
   }
 
   async savePerformanceFusionReport(
@@ -1230,6 +1249,33 @@ export class SupabaseHermesRepository implements HermesRepository {
       .maybeSingle();
     if (error) throw new Error(`SUPABASE_DATA_DELETION_SELECT_FAILED:${error.message}`);
     return data ? fromDataDeletionRequestRow(data as DataDeletionRequestRow) : null;
+  }
+
+  async updateDataDeletionRequest(
+    request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.updateDataDeletionRequest(request, deletionRequest);
+    if (!deletionRequest.id) {
+      throw new Error("SUPABASE_DATA_DELETION_UPDATE_MISSING_ID");
+    }
+
+    const { data, error } = await supabase
+      .from("data_deletion_requests")
+      .update({
+        requested_by: deletionRequest.requestedBy,
+        scope: deletionRequest.scope,
+        status: deletionRequest.status,
+        result_json: deletionRequest.resultJson ?? {}
+      })
+      .eq("id", deletionRequest.id)
+      .eq("tenant_id", deletionRequest.tenantId)
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_DATA_DELETION_UPDATE_FAILED:${error.message}`);
+    if (!data) throw new Error("SUPABASE_DATA_DELETION_UPDATE_MISSED");
+    return fromDataDeletionRequestRow(data as DataDeletionRequestRow);
   }
 
   async savePerformanceFusionReport(

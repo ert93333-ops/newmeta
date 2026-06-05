@@ -24,6 +24,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           : undefined;
     const approved = approveRequest(approval, actor, { typedConfirmation });
     await repository.updateApproval(request, approved);
+    if (approved.action === "tenant_data_deletion" && approved.objectId) {
+      const deletionRequest = await repository.getDataDeletionRequest(request, actor, approved.objectId);
+      if (deletionRequest) {
+        await repository.updateDataDeletionRequest(request, {
+          ...deletionRequest,
+          resultJson: {
+            ...asRecord(deletionRequest.resultJson),
+            approvalRequestId: approved.id,
+            approvalStatus: approved.status,
+            approvedBy: approved.approvedBy,
+            secondApprovedBy: approved.secondApprovedBy,
+            approvalExpiresAt: approved.expiresAt,
+            readyForExecution: approved.requiresSecondApproval ? Boolean(approved.secondApprovedBy) : true
+          }
+        });
+      }
+    }
     await repository.saveAuditLog(request, {
       tenantId: actor.tenantId,
       userId: actor.userId,
@@ -39,4 +56,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     return handleError(error);
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return { ...(value as Record<string, unknown>) };
+  }
+  return {};
 }
