@@ -54,6 +54,8 @@ npm run env:release-gates
 
 The gate blocks missing required Supabase/Meta/worker/OAuth-state env, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
+Before enabling paid estimate/approval flows, persist tenant cost settings through `PATCH /api/settings/<providerName>` so `POST /api/cost/estimate` can resolve server-owned pricing and caps for that provider. Without that row, the route fails closed with `COST_SETTINGS_NOT_CONFIGURED`.
+
 For a real Supabase Auth smoke test, run:
 
 ```bash

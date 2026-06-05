@@ -35,6 +35,11 @@ const DEFAULT_REFERENCE_DAILY_AD_BUDGET_KRW = 50000;
 const DEFAULT_DAILY_CAP_KRW = 5000;
 const DEFAULT_HARD_CAP_KRW = 7500;
 
+export function estimateOperationCredits(input: CostEstimateInput): number {
+  const units = input.units ?? 1;
+  return input.estimatedCredits ?? defaultCreditsForOperation(input.operationType, input.settings) * units;
+}
+
 export function resolveEffectiveDailyCap(settings: CostSettings): number {
   const referenceBudget = settings.referenceDailyAdBudgetKrw ?? DEFAULT_REFERENCE_DAILY_AD_BUDGET_KRW;
   const budgetRatioCap = Math.floor(referenceBudget * 0.1);
@@ -44,11 +49,8 @@ export function resolveEffectiveDailyCap(settings: CostSettings): number {
 }
 
 export function estimateOperationCostKrw(input: CostEstimateInput): number {
-  const units = input.units ?? 1;
   const creditUnitCost = input.settings.creditUnitCostKrw ?? deriveCreditUnitCost(input.settings);
-  const credits =
-    input.estimatedCredits ??
-    defaultCreditsForOperation(input.operationType, input.settings) * units;
+  const credits = estimateOperationCredits(input);
   return Math.ceil(credits * creditUnitCost);
 }
 

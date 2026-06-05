@@ -2,6 +2,8 @@
 
 Cost settings are not hardcoded. Store provider costs in `integration_settings` and usage in `cost_usage_logs`.
 
+`POST /api/cost/estimate` must resolve those settings server-side from the authenticated tenant's `integration_settings` row keyed by `settings.providerName`. Client payloads may identify the provider, units, and operation, but they must not be able to override stored caps or pricing. If the provider row is absent or malformed, the route fails closed.
+
 Settings:
 
 - provider name
@@ -37,7 +39,7 @@ The generic approval execution route does not execute `ai_paid_generation`. Paid
 
 `POST /api/cost/estimate` can create the required pending `ai_paid_generation` request when callers explicitly pass `approvalRequest.create = true`. This happens only for `approval_required` decisions; `blocked` cost decisions never create an approval request.
 
-Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw` and `monthActualCostKrw` values are ignored at the API boundary so callers cannot lower their effective usage by editing the request body.
+Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw`, `monthActualCostKrw`, cap values, and provider pricing values are ignored at the API boundary so callers cannot lower their effective usage or underquote a paid approval by editing the request body.
 
 Paid approval estimates and execution results share `relatedJobId = approval.id`. Summary calculations count the final succeeded/actual-cost row once when it exists, remove the reservation when a final failed/cancelled row exists, and otherwise keep the estimate or running row counted as a reservation.
 

@@ -1,9 +1,10 @@
 import { approvalGuardDetails, createApprovalRequest } from "@/lib/approval/approval-policy";
-import { guardCost } from "@/lib/guards/cost-guard";
+import { estimateOperationCredits, guardCost } from "@/lib/guards/cost-guard";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import type { CostEstimateInput } from "@/lib/types";
 import { resolveUserContext } from "@/lib/api/context";
 import { costUsageFromEstimate, getRepository } from "@/lib/repositories/hermes-repository";
+import { loadServerCostSettings, readCostProviderName } from "@/lib/settings/cost-settings";
 
 interface CostEstimateRequest extends CostEstimateInput {
   approvalRequest?: {
@@ -18,9 +19,20 @@ export async function POST(request: Request) {
     const context = await resolveUserContext(request);
     const input = (await parseWriteJson(request)) as CostEstimateRequest;
     const repository = getRepository();
+    const providerName = readCostProviderName(input.settings?.providerName);
+    const settings = await loadServerCostSettings(request, context, repository, providerName);
     const usageSummary = await repository.summarizeCostUsage(request, context);
     const guardedInput = {
-      ...input,
+      operationType: input.operationType,
+      units: input.units,
+      model: input.model,
+      estimatedCredits: estimateOperationCredits({
+        operationType: input.operationType,
+        units: input.units,
+        model: input.model,
+        settings
+      }),
+      settings,
       todayActualCostKrw: usageSummary.todayActualCostKrw,
       monthActualCostKrw: usageSummary.monthActualCostKrw
     };
@@ -39,11 +51,11 @@ export async function POST(request: Request) {
       afterJson: {
         operationType: input.operationType,
         units: input.units,
-        model: input.model,
-        estimatedCredits: input.estimatedCredits,
+        model: guardedInput.model,
+        estimatedCredits: guardedInput.estimatedCredits,
         estimatedCostKrw: decision.estimatedCostKrw,
         effectiveDailyCapKrw: decision.effectiveDailyCapKrw,
-        providerName: input.settings.providerName,
+        providerName: guardedInput.settings.providerName,
         status: decision.status,
         usageSummary
       },

@@ -116,6 +116,8 @@ Successful execution persists the action-specific execution result on `approval_
 }
 ```
 
+`settings.providerName` is only the server lookup key. The API loads pricing, credits, and caps from the authenticated tenant's `integration_settings` row for that provider and ignores client-supplied cap/pricing overrides. If the provider row is missing or invalid, the route fails closed with `COST_SETTINGS_NOT_CONFIGURED` or `COST_SETTINGS_INVALID`.
+
 The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked. When an approval is created, the estimate log is linked with `relatedJobId = approval.id` so a later terminal worker log can replace or close the reservation in cost summaries instead of double-counting it.
 
 `GET /api/cost/usage` returns both the raw tenant-scoped usage rows and the server-calculated daily/monthly summary used by the cost guard.

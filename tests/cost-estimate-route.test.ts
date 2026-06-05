@@ -20,13 +20,8 @@ const mutableEnv = process.env as unknown as Record<string, string | undefined>;
 const baseEstimate: CostEstimateInput = {
   operationType: "variant_batch",
   units: 1,
-  estimatedCredits: 5,
   settings: {
-    providerName: "mock-ai",
-    creditUnitCostKrw: 100,
-    dailyCostCapKrw: 5000,
-    hardDailyCapKrw: 7500,
-    referenceDailyAdBudgetKrw: 50000
+    providerName: "mock-ai"
   }
 };
 
@@ -72,6 +67,29 @@ function useMockTenant(tenantId: string): UserContext {
   };
 }
 
+async function saveServerCostSettings(
+  repository: MemoryHermesRepository,
+  context: UserContext,
+  overrides?: Partial<CostEstimateInput["settings"]>
+) {
+  await repository.saveIntegrationSettings(jsonRequest("http://localhost/api/test", {}), {
+    tenantId: context.tenantId,
+    createdBy: context.userId,
+    provider: "mock-ai",
+    settingsJson: {
+      providerName: "mock-ai",
+      creditUnitCostKrw: 100,
+      imageGenerationCreditCost: 5,
+      videoGenerationCreditCost: 30,
+      analysisCreditCost: 1,
+      dailyCostCapKrw: 5000,
+      hardDailyCapKrw: 7500,
+      referenceDailyAdBudgetKrw: 50000,
+      ...overrides
+    }
+  });
+}
+
 describe("cost estimate route approval request flow", () => {
   afterEach(() => {
     restoreEnv();
@@ -79,7 +97,8 @@ describe("cost estimate route approval request flow", () => {
 
   it("returns approval_required without creating an approval by default", async () => {
     clearEnv();
-    useMockTenant("00000000-0000-0000-0000-000000000101");
+    const context = useMockTenant("00000000-0000-0000-0000-000000000101");
+    await saveServerCostSettings(new MemoryHermesRepository(), context);
 
     const response = await estimateCostRoute(jsonRequest("http://localhost/api/cost/estimate", baseEstimate));
     const body = await response.json();
@@ -101,6 +120,7 @@ describe("cost estimate route approval request flow", () => {
     clearEnv();
     const approver = useMockTenant("00000000-0000-0000-0000-000000000102");
     const repository = new MemoryHermesRepository();
+    await saveServerCostSettings(repository, approver);
 
     const response = await estimateCostRoute(
       jsonRequest("http://localhost/api/cost/estimate", {
@@ -149,12 +169,13 @@ describe("cost estimate route approval request flow", () => {
 
   it("does not create an approval when the cost guard blocks the operation", async () => {
     clearEnv();
-    useMockTenant("00000000-0000-0000-0000-000000000103");
+    const context = useMockTenant("00000000-0000-0000-0000-000000000103");
+    await saveServerCostSettings(new MemoryHermesRepository(), context);
 
     const response = await estimateCostRoute(
       jsonRequest("http://localhost/api/cost/estimate", {
         ...baseEstimate,
-        estimatedCredits: 100,
+        units: 20,
         approvalRequest: {
           create: true,
           objectId: "creative-control-1"
@@ -172,6 +193,7 @@ describe("cost estimate route approval request flow", () => {
     clearEnv();
     const approver = useMockTenant("00000000-0000-0000-0000-000000000104");
     const repository = new MemoryHermesRepository();
+    await saveServerCostSettings(repository, approver);
     await repository.saveCostUsage(jsonRequest("http://localhost/api/test", {}), {
       tenantId: approver.tenantId,
       userId: approver.userId,
@@ -211,6 +233,7 @@ describe("cost estimate route approval request flow", () => {
     clearEnv();
     const approver = useMockTenant("00000000-0000-0000-0000-000000000105");
     const repository = new MemoryHermesRepository();
+    await saveServerCostSettings(repository, approver);
 
     const estimateResponse = await estimateCostRoute(
       jsonRequest("http://localhost/api/cost/estimate", {
@@ -257,5 +280,75 @@ describe("cost estimate route approval request flow", () => {
       monthActualCostKrw: 500
     });
     expect(JSON.stringify(variantBody)).not.toContain("daily_budget");
+  });
+
+  it("fails closed when server cost settings are missing for the provider", async () => {
+    clearEnv();
+    useMockTenant("00000000-0000-0000-0000-000000000106");
+
+    const response = await estimateCostRoute(jsonRequest("http://localhost/api/cost/estimate", baseEstimate));
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error).toMatchObject({
+      code: "COST_SETTINGS_NOT_CONFIGURED",
+      details: {
+        providerName: "mock-ai"
+      }
+    });
+  });
+
+  it("ignores client-supplied caps and pricing in favor of persisted server cost settings", async () => {
+    clearEnv();
+    const approver = useMockTenant("00000000-0000-0000-0000-000000000107");
+    const repository = new MemoryHermesRepository();
+    await saveServerCostSettings(repository, approver, {
+      creditUnitCostKrw: 100,
+      imageGenerationCreditCost: 5,
+      dailyCostCapKrw: 5000
+    });
+
+    const response = await estimateCostRoute(
+      jsonRequest("http://localhost/api/cost/estimate", {
+        ...baseEstimate,
+        settings: {
+          providerName: "mock-ai",
+          creditUnitCostKrw: 1,
+          imageGenerationCreditCost: 1,
+          dailyCostCapKrw: 999999
+        }
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "approval_required",
+      estimatedCostKrw: 500,
+      effectiveDailyCapKrw: 5000
+    });
+  });
+
+  it("fails closed when persisted server cost settings are malformed", async () => {
+    clearEnv();
+    const approver = useMockTenant("00000000-0000-0000-0000-000000000108");
+    const repository = new MemoryHermesRepository();
+    await repository.saveIntegrationSettings(jsonRequest("http://localhost/api/test", {}), {
+      tenantId: approver.tenantId,
+      createdBy: approver.userId,
+      provider: "mock-ai",
+      settingsJson: "not-an-object"
+    });
+
+    const response = await estimateCostRoute(jsonRequest("http://localhost/api/cost/estimate", baseEstimate));
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error).toMatchObject({
+      code: "COST_SETTINGS_INVALID",
+      details: {
+        providerName: "mock-ai"
+      }
+    });
   });
 });

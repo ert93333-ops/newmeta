@@ -34,7 +34,7 @@ npm run dev
 
 Copy `.env.example` to `.env.local` for local Supabase/Meta credentials. Use `MockMetaAdapter` for safe development without ad spend.
 
-For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth. `/api/me` can bootstrap the authenticated user's tenant memberships from a Supabase bearer token; tenant-scoped routes require the bearer token plus `x-tenant-id`. `PATCH /api/settings/*` now persists tenant-scoped settings through `integration_settings` and requires `marketer` or above.
+For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth. `/api/me` can bootstrap the authenticated user's tenant memberships from a Supabase bearer token; tenant-scoped routes require the bearer token plus `x-tenant-id`. `PATCH /api/settings/*` now persists tenant-scoped settings through `integration_settings` and requires `marketer` or above. `POST /api/cost/estimate` reads provider pricing and caps from the tenant's stored `integration_settings` row keyed by `settings.providerName` and fails closed when that row is missing.
 
 For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=mock`, and run:
 

@@ -1,4 +1,5 @@
 import type { ApprovalRequest, CostEstimateInput, UserContext } from "@/lib/types";
+import { estimateOperationCredits } from "@/lib/guards/cost-guard";
 import { redactCredentialPayload } from "@/lib/guards/credential-guard";
 import { createSupabaseClient, getBearerAuthorization, hasSupabaseConfig } from "@/lib/supabase/server";
 
@@ -630,7 +631,7 @@ export function costUsageFromEstimate(
     provider: input.settings.providerName,
     model: input.model,
     operationType: input.operationType,
-    estimatedCredits: input.estimatedCredits ?? 0,
+    estimatedCredits: estimateOperationCredits(input),
     estimatedCostKrw,
     relatedJobId,
     status: "estimated"

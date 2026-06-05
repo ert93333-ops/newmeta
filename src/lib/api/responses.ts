@@ -7,6 +7,11 @@ import {
 } from "@/lib/guards/budget-guard";
 import { isPaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
 import {
+  CostProviderRequiredError,
+  CostSettingsInvalidError,
+  CostSettingsNotConfiguredError
+} from "@/lib/settings/cost-settings";
+import {
   assertNoCredentialPayload,
   isCredentialPayloadBlockedError,
   redactCredentialPayload
@@ -51,6 +56,19 @@ export function handleError(error: unknown): NextResponse {
   if (isPaidOperationApprovalRequiredError(error)) {
     return fail(error.code, "Paid AI operations require an approved approval request before execution.", 403, {
       operationType: error.operationType
+    });
+  }
+  if (error instanceof CostProviderRequiredError) {
+    return fail(error.code, "Provider name is required for cost estimation.", 400);
+  }
+  if (error instanceof CostSettingsNotConfiguredError) {
+    return fail(error.code, "Server cost settings are not configured for this provider.", 501, {
+      providerName: error.providerName
+    });
+  }
+  if (error instanceof CostSettingsInvalidError) {
+    return fail(error.code, "Stored server cost settings are invalid for this provider.", 501, {
+      providerName: error.providerName
     });
   }
   if (isPaidOperationDomainExecutorRequiredError(error)) {
