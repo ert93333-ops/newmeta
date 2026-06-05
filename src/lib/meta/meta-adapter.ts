@@ -75,6 +75,7 @@ export interface CreateAdSetRequest {
   adAccountId: string;
   campaignId: string;
   name: string;
+  objective?: string;
   optimizationGoal: string;
   targeting: Record<string, unknown>;
   billingEvent?: string;

@@ -479,6 +479,65 @@ describe("create paused draft route", () => {
     expect(approvals.find((item) => item.objectId === "draft-live-missing-source-before-approval")).toBeUndefined();
   });
 
+  it("fails closed before creating approval when a live offsite-conversion draft lacks promotedObject", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-live-missing-promoted-object",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      sourceUrl: "https://cdn.example.com/assets/live-missing-promoted-object.png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 14).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-missing-promoted-object",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-missing-promoted-object",
+        adAccountId: "act_live_123",
+        assetId: "asset-live-missing-promoted-object",
+        manifest,
+        pageId: "page_1",
+        payload: {
+          objective: "OUTCOME_SALES",
+          optimizationGoal: "OFFSITE_CONVERSIONS",
+          targeting: {
+            geo_locations: {
+              countries: ["KR"]
+            }
+          }
+        }
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(422);
+    expect(body.error?.code).toBe("META_PROMOTED_OBJECT_REQUIRED");
+    expect(approvals.find((item) => item.objectId === "draft-live-missing-promoted-object")).toBeUndefined();
+  });
+
   it("executes the full live Meta paused-draft chain server-side when a stored connection and source URL exist", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();

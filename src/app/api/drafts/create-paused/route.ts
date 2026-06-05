@@ -8,6 +8,7 @@ import {
 import { handleError, ok, parseWriteJson, fail } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { runDraftPreflight, type DraftPreflightInput } from "@/lib/drafts/preflight";
+import { assertLiveMetaAdSetInput } from "@/lib/meta/live-draft-validation";
 import { resolveMetaAdapter } from "@/lib/meta/resolve-meta-adapter";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { CreativeAssetRecord } from "@/lib/repositories/hermes-repository";
@@ -292,6 +293,7 @@ async function executePausedDraftThroughAdapter(
         adAccountId: input.adAccountId,
         campaignId,
         name: readPayloadString(input.payload, "adsetName") ?? `Hermes adset ${input.draftId}`,
+        objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
         optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
         targeting: readPayloadRecord(input.payload, "targeting") ?? {},
         billingEvent: readPayloadString(input.payload, "billingEvent"),
@@ -396,6 +398,15 @@ async function resolvePausedDraftReadiness(input: {
         assetId: asset.id
       }
     );
+  }
+
+  if (resolvedAdapter.mode === "live") {
+    assertLiveMetaAdSetInput({
+      objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
+      optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
+      targeting: readPayloadRecord(input.payload, "targeting") ?? {},
+      promotedObject: readPayloadRecord(input.payload, "promotedObject")
+    });
   }
 
   return {

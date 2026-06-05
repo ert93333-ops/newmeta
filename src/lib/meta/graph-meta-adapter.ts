@@ -9,6 +9,7 @@ import type {
   MetaAdapter,
   UploadAssetRequest
 } from "@/lib/meta/meta-adapter";
+import { assertLiveMetaAdSetInput } from "@/lib/meta/live-draft-validation";
 import { MockMetaAdapter } from "@/lib/meta/mock-meta-adapter";
 import type { MetaAdAccount, MetaInsight } from "@/lib/types";
 
@@ -206,6 +207,12 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
 
   override async createAdSetPaused(input: CreateAdSetRequest): Promise<{ adsetId: string; status: "PAUSED" }> {
     assertExecutableApproval(input.approval, { ...graphExecutor, tenantId: input.approval.tenantId });
+    assertLiveMetaAdSetInput({
+      objective: input.objective ?? "OUTCOME_SALES",
+      optimizationGoal: input.optimizationGoal,
+      targeting: input.targeting,
+      promotedObject: input.promotedObject
+    });
     const body = await this.graphPost<Record<string, unknown>>(`${input.adAccountId}/adsets`, {
       name: input.name,
       campaign_id: input.campaignId,

@@ -44,7 +44,7 @@ The live PAUSED draft executor also uses `MetaGraphApiAdapter` server-side. It p
 - `/{ad_account_id}/adsets`
 - `/{ad_account_id}/ads`
 
-Live draft execution requires a persisted creative asset `sourceUrl`. Video creatives additionally require a `thumbnailUrl` in the route payload so the preview image does not have to be inferred from the token-protected upload path.
+Live draft execution requires a persisted creative asset `sourceUrl`. Video creatives additionally require a `thumbnailUrl` in the route payload so the preview image does not have to be inferred from the token-protected upload path. Before approval creation or execution, the server also validates the live ad set payload: targeting must be non-empty, `OFFSITE_CONVERSIONS` requires `promotedObject.pixel_id` plus a conversion event, catalog sales require `promotedObject.product_catalog_id`, and app promotion requires `promotedObject.application_id` plus `object_store_url`.
 
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 

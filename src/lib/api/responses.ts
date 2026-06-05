@@ -132,6 +132,31 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_VIDEO_THUMBNAIL_REQUIRED") {
       return fail(error.message, "Live Meta video draft execution requires a thumbnailUrl preview image.", 422);
     }
+    if (error.message === "META_TARGETING_REQUIRED") {
+      return fail(error.message, "Live Meta draft execution requires non-empty ad set targeting.", 422);
+    }
+    if (error.message === "META_PROMOTED_OBJECT_REQUIRED") {
+      return fail(error.message, "Live Meta draft execution requires a promotedObject for this optimization goal.", 422);
+    }
+    if (error.message === "META_PIXEL_ID_REQUIRED") {
+      return fail(error.message, "Live Meta offsite conversion draft execution requires promotedObject.pixel_id.", 422);
+    }
+    if (error.message === "META_CONVERSION_EVENT_REQUIRED") {
+      return fail(
+        error.message,
+        "Live Meta offsite conversion draft execution requires a conversion event on promotedObject.",
+        422
+      );
+    }
+    if (error.message === "META_PRODUCT_CATALOG_REQUIRED") {
+      return fail(error.message, "Live Meta catalog sales drafts require promotedObject.product_catalog_id.", 422);
+    }
+    if (error.message === "META_APPLICATION_ID_REQUIRED") {
+      return fail(error.message, "Live Meta app promotion drafts require promotedObject.application_id.", 422);
+    }
+    if (error.message === "META_OBJECT_STORE_URL_REQUIRED") {
+      return fail(error.message, "Live Meta app promotion drafts require promotedObject.object_store_url.", 422);
+    }
     if (error.message === "META_PAGE_ID_REQUIRED") {
       return fail(error.message, "Meta creative creation requires a page id.", 400);
     }

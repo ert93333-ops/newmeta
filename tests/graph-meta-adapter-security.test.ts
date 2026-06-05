@@ -137,4 +137,70 @@ describe("MetaGraphApiAdapter token handling", () => {
     expect(form.get("object_story_spec")).toContain("\"image_hash\":\"hash_123\"");
     expect(form.get("object_story_spec")).toContain("\"type\":\"SHOP_NOW\"");
   });
+
+  it("blocks live offsite-conversion ad sets without promotedObject before calling Meta", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ id: "adset-live-1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+    const approval = approveRequest(
+      createApprovalRequest({
+        context: requester,
+        action: "meta_create_ad_paused",
+        objectType: "ad_draft"
+      }),
+      approver
+    );
+
+    await expect(
+      adapter.createAdSetPaused({
+        adAccountId: "act_123",
+        campaignId: "cmp_123",
+        name: "Live adset",
+        objective: "OUTCOME_SALES",
+        optimizationGoal: "OFFSITE_CONVERSIONS",
+        targeting: {
+          geo_locations: {
+            countries: ["KR"]
+          }
+        },
+        approval
+      })
+    ).rejects.toThrow("META_PROMOTED_OBJECT_REQUIRED");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks live ad sets with empty targeting before calling Meta", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ id: "adset-live-1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+    const approval = approveRequest(
+      createApprovalRequest({
+        context: requester,
+        action: "meta_create_ad_paused",
+        objectType: "ad_draft"
+      }),
+      approver
+    );
+
+    await expect(
+      adapter.createAdSetPaused({
+        adAccountId: "act_123",
+        campaignId: "cmp_123",
+        name: "Live adset",
+        objective: "OUTCOME_SALES",
+        optimizationGoal: "OFFSITE_CONVERSIONS",
+        targeting: {},
+        promotedObject: {
+          pixel_id: "pixel_123",
+          custom_event_type: "PURCHASE"
+        },
+        approval
+      })
+    ).rejects.toThrow("META_TARGETING_REQUIRED");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
