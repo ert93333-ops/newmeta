@@ -36,6 +36,16 @@ The dashboard Meta Connection panel is the browser entry point for this route. I
 
 Read routes resolve their adapter server-side from the latest tenant-scoped `meta_connections` row. When the stored connection metadata says `mode=live`, the route decrypts the access token with `TOKEN_ENCRYPTION_KEY` and uses `MetaGraphApiAdapter`. When no connection exists, only non-production runtime may fall back to `MockMetaAdapter`; production fails closed with `META_CONNECTION_REQUIRED`. Stored mock connections are also local-only and fail closed in production.
 
+The live PAUSED draft executor also uses `MetaGraphApiAdapter` server-side. It performs the write chain with server-only `Authorization: Bearer` headers for:
+
+- `/{ad_account_id}/adimages` or `/{ad_account_id}/advideos`
+- `/{ad_account_id}/adcreatives`
+- `/{ad_account_id}/campaigns`
+- `/{ad_account_id}/adsets`
+- `/{ad_account_id}/ads`
+
+Live draft execution requires a persisted creative asset `sourceUrl`. Video creatives additionally require a `thumbnailUrl` in the route payload so the preview image does not have to be inferred from the token-protected upload path.
+
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
 The OAuth callback request accepts authorization `code` and signed `state` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.

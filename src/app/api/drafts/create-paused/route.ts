@@ -127,17 +127,26 @@ export async function POST(request: Request) {
       context,
       repository
     });
-    if (resolvedAdapter.mode === "live") {
+    if (resolvedAdapter.mode === "live" && !asset.sourceUrl) {
       return fail(
-        "LIVE_META_DRAFT_EXECUTOR_NOT_CONFIGURED",
-        "Live Meta PAUSED draft execution is not configured yet.",
-        501,
+        "META_ASSET_SOURCE_URL_REQUIRED",
+        "Live Meta draft execution requires a persisted public source URL for the creative asset.",
+        422,
         {
-          connectionId: resolvedAdapter.connectionId
+          assetId: asset.id
         }
       );
     }
-
+    if (resolvedAdapter.mode === "live" && asset.assetType === "video" && !readPayloadString(payload, "thumbnailUrl")) {
+      return fail(
+        "META_VIDEO_THUMBNAIL_REQUIRED",
+        "Live Meta video draft execution requires a thumbnailUrl for the creative preview.",
+        422,
+        {
+          assetId: asset.id
+        }
+      );
+    }
     const executionInput = buildPausedDraftExecutionInput({
       draftId,
       adAccountId,
@@ -251,16 +260,20 @@ async function executePausedDraftThroughAdapter(
   adapter: Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"],
   input: PausedDraftExecutionInput
 ): Promise<PausedDraftExecutionResult> {
-  const uploadResult =
-    input.asset.assetType === "video"
+    const uploadResult =
+      input.asset.assetType === "video"
       ? await adapter.uploadVideo({
           adAccountId: input.adAccountId,
           asset: toCreativeAssetMetadata(input.asset),
+          sourceUrl: input.asset.sourceUrl,
+          storagePath: input.asset.storagePath,
           approval: input.approval
         })
       : await adapter.uploadImage({
           adAccountId: input.adAccountId,
           asset: toCreativeAssetMetadata(input.asset),
+          sourceUrl: input.asset.sourceUrl,
+          storagePath: input.asset.storagePath,
           approval: input.approval
         });
 
@@ -271,7 +284,13 @@ async function executePausedDraftThroughAdapter(
     instagramActorId: input.instagramActorId,
     linkUrl: input.linkUrl,
     imageHash: "imageHash" in uploadResult ? uploadResult.imageHash : undefined,
+    imageUrl: input.asset.assetType === "image" ? input.asset.sourceUrl : undefined,
     videoId: "videoId" in uploadResult ? uploadResult.videoId : undefined,
+    thumbnailUrl: readPayloadString(input.payload, "thumbnailUrl"),
+    message: readPayloadString(input.payload, "message"),
+    headline: readPayloadString(input.payload, "headline"),
+    description: readPayloadString(input.payload, "description"),
+    callToActionType: readPayloadString(input.payload, "callToActionType"),
     approval: input.approval
   });
 
@@ -282,6 +301,8 @@ async function executePausedDraftThroughAdapter(
         adAccountId: input.adAccountId,
         name: readPayloadString(input.payload, "campaignName") ?? `Hermes campaign ${input.draftId}`,
         objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
+        buyingType: readPayloadString(input.payload, "buyingType"),
+        specialAdCategories: readPayloadStringArray(input.payload, "specialAdCategories"),
         approval: input.approval
       })
     ).campaignId;
@@ -295,6 +316,13 @@ async function executePausedDraftThroughAdapter(
         name: readPayloadString(input.payload, "adsetName") ?? `Hermes adset ${input.draftId}`,
         optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
         targeting: readPayloadRecord(input.payload, "targeting") ?? {},
+        billingEvent: readPayloadString(input.payload, "billingEvent"),
+        bidStrategy: readPayloadString(input.payload, "bidStrategy"),
+        promotedObject: readPayloadRecord(input.payload, "promotedObject"),
+        attributionSpec: readPayloadArray(input.payload, "attributionSpec"),
+        destinationType: readPayloadString(input.payload, "destinationType"),
+        startTime: readPayloadString(input.payload, "startTime"),
+        endTime: readPayloadString(input.payload, "endTime"),
         approval: input.approval
       })
     ).adsetId;
@@ -307,6 +335,8 @@ async function executePausedDraftThroughAdapter(
         adsetId,
         name: readPayloadString(input.payload, "adName") ?? `Hermes ad ${input.draftId}`,
         creativeId: creative.creativeId,
+        trackingSpecs: readPayloadArray(input.payload, "trackingSpecs"),
+        urlTags: readPayloadString(input.payload, "urlTags"),
         approval: input.approval
       })
     ).adId;
@@ -373,4 +403,21 @@ function readPayloadRecord(payload: unknown, key: string): Record<string, unknow
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function readPayloadArray(payload: unknown, key: string): unknown[] | undefined {
+  if (typeof payload !== "object" || payload === null || !(key in payload)) {
+    return undefined;
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  return Array.isArray(value) ? value : undefined;
+}
+
+function readPayloadStringArray(payload: unknown, key: string): string[] | undefined {
+  const value = readPayloadArray(payload, key);
+  if (!value) {
+    return undefined;
+  }
+  const strings = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return strings.length > 0 ? strings : undefined;
 }

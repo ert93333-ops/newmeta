@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { MetaGraphApiAdapter } from "@/lib/meta/graph-meta-adapter";
 
 class TestableMetaGraphApiAdapter extends MetaGraphApiAdapter {
@@ -10,6 +11,18 @@ class TestableMetaGraphApiAdapter extends MetaGraphApiAdapter {
     return this.graphPost<T>(path, body);
   }
 }
+
+const requester = {
+  userId: "requester",
+  tenantId: "tenant_1",
+  role: "marketer" as const
+};
+
+const approver = {
+  userId: "approver",
+  tenantId: "tenant_1",
+  role: "owner" as const
+};
 
 describe("MetaGraphApiAdapter token handling", () => {
   afterEach(() => {
@@ -44,7 +57,8 @@ describe("MetaGraphApiAdapter token handling", () => {
     expect(url.toString()).toBe("https://graph.facebook.com/v24.0/act_123/adcreatives");
     expect(url.searchParams.has("access_token")).toBe(false);
     expect(headers.authorization).toBe("Bearer server-token");
-    expect(init.body).toBe(JSON.stringify({ name: "Paused creative" }));
+    expect(init.body).toBeInstanceOf(URLSearchParams);
+    expect((init.body as URLSearchParams).toString()).toBe("name=Paused+creative");
   });
 
   it("blocks credential-shaped query params before calling Meta", async () => {
@@ -86,5 +100,41 @@ describe("MetaGraphApiAdapter token handling", () => {
 
     await expect(adapter.getForTest("me/adaccounts")).rejects.toThrow("META_GRAPH_REQUEST_FAILED:400");
     await expect(adapter.getForTest("me/adaccounts")).rejects.not.toThrow("server-token");
+  });
+
+  it("serializes live creative payloads as form data while keeping nested values intact", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ id: "creative-live-1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+    const approval = approveRequest(
+      createApprovalRequest({
+        context: requester,
+        action: "meta_create_ad_paused",
+        objectType: "ad_draft"
+      }),
+      approver
+    );
+    await adapter.createCreative({
+      adAccountId: "act_123",
+      name: "Live creative",
+      pageId: "page_123",
+      linkUrl: "https://example.com/products/test",
+      imageHash: "hash_123",
+      message: "Primary text",
+      headline: "Hook",
+      description: "Description",
+      callToActionType: "SHOP_NOW",
+      approval
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    const form = init.body as URLSearchParams;
+
+    expect(url.toString()).toBe("https://graph.facebook.com/v24.0/act_123/adcreatives");
+    expect(form.get("name")).toBe("Live creative");
+    expect(form.get("object_story_spec")).toContain("\"page_id\":\"page_123\"");
+    expect(form.get("object_story_spec")).toContain("\"image_hash\":\"hash_123\"");
+    expect(form.get("object_story_spec")).toContain("\"type\":\"SHOP_NOW\"");
   });
 });

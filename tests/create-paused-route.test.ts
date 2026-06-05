@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { POST as createPausedDraft } from "@/app/api/drafts/create-paused/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
@@ -112,6 +112,7 @@ function approvedDraftApproval(draftId: string) {
 describe("create paused draft route", () => {
   afterEach(() => {
     restoreEnv();
+    vi.unstubAllGlobals();
   });
 
   it("requires production authentication before creating draft approvals", async () => {
@@ -311,13 +312,13 @@ describe("create paused draft route", () => {
     expect(body.error?.code).toBe("CREATIVE_ASSET_NOT_FOUND");
   });
 
-  it("fails closed when a live Meta connection exists but the live draft executor is not implemented", async () => {
+  it("fails closed for live draft execution when the persisted asset lacks a public source URL", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();
-    const approval = approvedDraftApproval("draft-live-blocked");
+    const approval = approvedDraftApproval("draft-live-missing-source");
     await repository.saveApproval(request({}), approval);
     await repository.saveAsset(request({}), {
-      id: "asset-live-1",
+      id: "asset-live-missing-source",
       tenantId,
       createdBy: requester.userId,
       assetType: "image",
@@ -347,21 +348,160 @@ describe("create paused draft route", () => {
 
     const response = await createPausedDraft(
       request({
-        draftId: "draft-live-blocked",
+        draftId: "draft-live-missing-source",
         approvalRequestId: approval.id,
         adAccountId: "act_live_123",
-        assetId: "asset-live-1",
+        assetId: "asset-live-missing-source",
         manifest,
         pageId: "page_1"
       })
     );
     const body = (await response.json()) as { error?: { code?: string } };
     const storedApproval = await repository.getApproval(request({}), requester, approval.id);
-    const storedDraft = await repository.getAdDraft(request({}), requester, "draft-live-blocked");
+    const storedDraft = await repository.getAdDraft(request({}), requester, "draft-live-missing-source");
 
-    expect(response.status).toBe(501);
-    expect(body.error?.code).toBe("LIVE_META_DRAFT_EXECUTOR_NOT_CONFIGURED");
+    expect(response.status).toBe(422);
+    expect(body.error?.code).toBe("META_ASSET_SOURCE_URL_REQUIRED");
     expect(storedApproval?.status).toBe("approved");
     expect(storedDraft).toBeNull();
+  });
+
+  it("executes the full live Meta paused-draft chain server-side when a stored connection and source URL exist", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    const approval = approvedDraftApproval("draft-live-success");
+    await repository.saveApproval(request({}), approval);
+    await repository.saveAsset(request({}), {
+      id: "asset-live-success",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      sourceUrl: "https://cdn.example.com/assets/live-success.png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 12).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-success",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const fetchMock = vi
+      .fn(async () => Response.json({ images: { "live-success.png": { hash: "hash_live_123" } } }))
+      .mockImplementationOnce(async () =>
+        Response.json({
+          images: {
+            "live-success.png": {
+              hash: "hash_live_123"
+            }
+          }
+        })
+      )
+      .mockImplementationOnce(async () => Response.json({ id: "creative_live_123" }))
+      .mockImplementationOnce(async () => Response.json({ id: "cmp_live_123" }))
+      .mockImplementationOnce(async () => Response.json({ id: "adset_live_123" }))
+      .mockImplementationOnce(async () => Response.json({ id: "ad_live_123" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-success",
+        approvalRequestId: approval.id,
+        adAccountId: "act_live_123",
+        assetId: "asset-live-success",
+        manifest,
+        pageId: "page_1",
+        payload: {
+          campaignName: "Live campaign",
+          adsetName: "Live adset",
+          adName: "Live ad",
+          creativeName: "Live creative",
+          objective: "OUTCOME_SALES",
+          optimizationGoal: "OFFSITE_CONVERSIONS",
+          targeting: {
+            geo_locations: {
+              countries: ["KR"]
+            }
+          },
+          promotedObject: {
+            pixel_id: "pixel_123",
+            custom_event_type: "PURCHASE"
+          },
+          billingEvent: "IMPRESSIONS",
+          bidStrategy: "LOWEST_COST_WITHOUT_CAP",
+          headline: "Hook",
+          description: "Description",
+          message: "Primary text",
+          callToActionType: "SHOP_NOW"
+        }
+      })
+    );
+    const body = (await response.json()) as {
+      draft: {
+        id: string;
+        metaCampaignId?: string;
+        metaAdsetId?: string;
+        metaAdId?: string;
+      };
+      approval: {
+        status: string;
+        executionResultJson?: {
+          adapterMode?: string;
+          imageHash?: string;
+          creativeId?: string;
+          campaignId?: string;
+          adsetId?: string;
+          adId?: string;
+        };
+      };
+    };
+
+    expect(response.status).toBe(201);
+    expect(body.draft).toMatchObject({
+      id: "draft-live-success",
+      metaCampaignId: "cmp_live_123",
+      metaAdsetId: "adset_live_123",
+      metaAdId: "ad_live_123"
+    });
+    expect(body.approval).toMatchObject({
+      status: "executed",
+      executionResultJson: {
+        adapterMode: "live",
+        imageHash: "hash_live_123",
+        creativeId: "creative_live_123",
+        campaignId: "cmp_live_123",
+        adsetId: "adset_live_123",
+        adId: "ad_live_123"
+      }
+    });
+
+    const calls = fetchMock.mock.calls as unknown as Array<[URL, RequestInit]>;
+    expect(calls).toHaveLength(5);
+    for (const [url, init] of calls) {
+      expect(url.toString()).toContain("https://graph.facebook.com/");
+      expect(url.searchParams.has("access_token")).toBe(false);
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer server-token");
+    }
+
+    const firstForm = calls[0][1].body as URLSearchParams;
+    const secondForm = calls[1][1].body as URLSearchParams;
+    expect(firstForm.get("url")).toBe("https://cdn.example.com/assets/live-success.png");
+    expect(secondForm.get("object_story_spec")).toContain("\"image_hash\":\"hash_live_123\"");
+    expect(JSON.stringify(body)).not.toContain("server-token");
   });
 });

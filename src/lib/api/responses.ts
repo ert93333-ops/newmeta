@@ -112,6 +112,28 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "META_CONNECTION_EXPIRED") {
       return fail(error.message, "The stored Meta connection has expired and must be reconnected.", 409);
     }
+    if (error.message === "META_ASSET_SOURCE_URL_REQUIRED") {
+      return fail(error.message, "Live Meta draft execution requires a persisted public asset source URL.", 422);
+    }
+    if (error.message === "META_VIDEO_THUMBNAIL_REQUIRED") {
+      return fail(error.message, "Live Meta video draft execution requires a thumbnailUrl preview image.", 422);
+    }
+    if (error.message === "META_PAGE_ID_REQUIRED") {
+      return fail(error.message, "Meta creative creation requires a page id.", 400);
+    }
+    if (error.message === "META_IMAGE_SOURCE_REQUIRED") {
+      return fail(error.message, "Meta image creative creation requires an uploaded image hash or public image URL.", 422);
+    }
+    if (
+      error.message === "META_IMAGE_HASH_MISSING" ||
+      error.message === "META_VIDEO_ID_MISSING" ||
+      error.message === "META_CREATIVE_ID_MISSING" ||
+      error.message === "META_CAMPAIGN_ID_MISSING" ||
+      error.message === "META_ADSET_ID_MISSING" ||
+      error.message === "META_AD_ID_MISSING"
+    ) {
+      return fail(error.message, "Meta Graph API response did not include the expected object id.", 502);
+    }
     if (error.message === "META_OAUTH_LIVE_NOT_CONFIGURED") {
       return fail(error.message, "Live Meta OAuth is not configured.", 501);
     }

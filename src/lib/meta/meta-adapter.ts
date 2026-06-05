@@ -40,6 +40,8 @@ export interface InsightsRequest {
 export interface UploadAssetRequest {
   adAccountId: string;
   asset: CreativeAssetMetadata;
+  sourceUrl?: string;
+  storagePath?: string;
   approval: ApprovalRequest;
 }
 
@@ -50,7 +52,13 @@ export interface CreateCreativeRequest {
   instagramActorId?: string;
   linkUrl: string;
   imageHash?: string;
+  imageUrl?: string;
   videoId?: string;
+  thumbnailUrl?: string;
+  message?: string;
+  headline?: string;
+  description?: string;
+  callToActionType?: string;
   approval: ApprovalRequest;
 }
 
@@ -58,6 +66,8 @@ export interface CreateCampaignRequest {
   adAccountId: string;
   name: string;
   objective: string;
+  buyingType?: string;
+  specialAdCategories?: string[];
   approval: ApprovalRequest;
 }
 
@@ -67,6 +77,13 @@ export interface CreateAdSetRequest {
   name: string;
   optimizationGoal: string;
   targeting: Record<string, unknown>;
+  billingEvent?: string;
+  bidStrategy?: string;
+  promotedObject?: Record<string, unknown>;
+  attributionSpec?: unknown[];
+  destinationType?: string;
+  startTime?: string;
+  endTime?: string;
   approval: ApprovalRequest;
 }
 
@@ -75,6 +92,8 @@ export interface CreateAdRequest {
   adsetId: string;
   name: string;
   creativeId: string;
+  trackingSpecs?: unknown[];
+  urlTags?: string;
   approval: ApprovalRequest;
 }
 
