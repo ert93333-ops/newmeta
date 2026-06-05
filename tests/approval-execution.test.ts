@@ -422,6 +422,18 @@ describe("approval execution", () => {
       approver,
       "delete-tenant-2"
     );
+    const auditStore = globalThis as typeof globalThis & {
+      __hermesRepositoryStore?: { auditLogs?: unknown[] };
+    };
+    const auditLogs = auditStore.__hermesRepositoryStore?.auditLogs ?? [];
+    const latestAudit = auditLogs.at(-1) as {
+      action?: string;
+      result?: string;
+      objectType?: string;
+      objectId?: string;
+      approvalRequestId?: string;
+      afterJson?: { resultJson?: Record<string, unknown> };
+    };
 
     expect(response.status).toBe(501);
     expect(body.error.code).toBe("APPROVAL_ACTION_EXECUTOR_REQUIRED");
@@ -432,7 +444,20 @@ describe("approval execution", () => {
       secondApprovedBy: secondApprover.userId,
       readyForExecution: true,
       blockedReason: "APPROVAL_ACTION_EXECUTOR_REQUIRED",
-      requiredRoute: "/api/data-deletion-requests"
+      requiredRoute: "/api/data-deletion-requests",
+      lastExecutionAttemptBy: "00000000-0000-0000-0000-000000000010"
+    });
+    expect(latestAudit).toMatchObject({
+      action: "approval_execute_blocked:tenant_data_deletion",
+      result: "APPROVAL_ACTION_EXECUTOR_REQUIRED",
+      objectType: "data_deletion_request",
+      objectId: "delete-tenant-2",
+      approvalRequestId: approval.id
+    });
+    expect(latestAudit.afterJson?.resultJson).toMatchObject({
+      blockedReason: "APPROVAL_ACTION_EXECUTOR_REQUIRED",
+      requiredRoute: "/api/data-deletion-requests",
+      lastExecutionAttemptBy: "00000000-0000-0000-0000-000000000010"
     });
   });
 

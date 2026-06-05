@@ -103,7 +103,7 @@ async function syncBlockedDataDeletionExecutionAttempt(
     return;
   }
 
-  await repository.updateDataDeletionRequest(request, {
+  const updatedDeletionRequest = await repository.updateDataDeletionRequest(request, {
     ...deletionRequest,
     resultJson: {
       ...asRecord(deletionRequest.resultJson),
@@ -113,8 +113,21 @@ async function syncBlockedDataDeletionExecutionAttempt(
       readyForExecution: approval.requiresSecondApproval ? Boolean(approval.secondApprovedBy) : approval.status === "approved",
       blockedReason: error.code,
       requiredRoute: error.route,
+      lastExecutionAttemptBy: context.userId,
       lastExecutionAttemptAt: new Date().toISOString()
     }
+  });
+
+  await repository.saveAuditLog(request, {
+    tenantId: context.tenantId,
+    userId: context.userId,
+    action: "approval_execute_blocked:tenant_data_deletion",
+    objectType: "data_deletion_request",
+    objectId: updatedDeletionRequest.id,
+    approvalRequestId: approval.id,
+    beforeJson: deletionRequest,
+    afterJson: updatedDeletionRequest,
+    result: error.code
   });
 }
 
