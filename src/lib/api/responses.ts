@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { isPaidOperationDomainExecutorRequiredError } from "@/lib/approval/execution-policy";
+import {
+  isApprovalActionDomainExecutorRequiredError,
+  isPaidOperationDomainExecutorRequiredError
+} from "@/lib/approval/execution-policy";
 import { isTypedConfirmationRequiredError } from "@/lib/approval/approval-policy";
 import {
   assertNoBudgetMutation,
@@ -77,6 +80,17 @@ export function handleError(error: unknown): NextResponse {
       "Paid AI operations must be executed by their domain route or worker so cost logging and output validation run together.",
       501,
       { action: error.action }
+    );
+  }
+  if (isApprovalActionDomainExecutorRequiredError(error)) {
+    return fail(
+      error.code,
+      "This approval action must be executed by its domain route so preflight, persistence, and external side effects stay in one path.",
+      501,
+      {
+        action: error.action,
+        route: error.route
+      }
     );
   }
   if (isCredentialPayloadBlockedError(error)) {

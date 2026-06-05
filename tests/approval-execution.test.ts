@@ -71,6 +71,20 @@ function approvedRequest() {
   );
 }
 
+function approvedActivateAdRequest() {
+  return approveRequest(
+    createApprovalRequest({
+      context: requester,
+      action: "meta_activate_ad",
+      objectType: "ad",
+      objectId: "ad-live-1",
+      afterJson: { status: "ACTIVE" }
+    }),
+    approver,
+    { typedConfirmation: "APPROVE meta_activate_ad" }
+  );
+}
+
 function approvedPaidGenerationRequest() {
   return approveRequest(
     createApprovalRequest({
@@ -99,16 +113,24 @@ describe("approval execution", () => {
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
 
     expect(configuredApprovalExecutionMode()).toBe("mock");
-    expect(planApprovalExecution("meta_create_ad_paused")).toEqual({
+    expect(planApprovalExecution("meta_activate_ad")).toEqual({
       mode: "mock",
-      result: "mock_created_ad_paused"
+      result: "mock_activated_ad"
     });
-    expect(executeApprovedAction(approvedRequest())).toMatchObject({
+    expect(executeApprovedAction(approvedActivateAdRequest())).toMatchObject({
       mode: "mock",
-      operation: "meta_create_ad_paused",
-      result: "mock_created_ad_paused",
-      externalStatus: "PAUSED"
+      operation: "meta_activate_ad",
+      result: "mock_activated_ad",
+      externalStatus: "ACTIVE"
     });
+  });
+
+  it("requires the paused draft domain route for paused-draft approvals", () => {
+    clearEnv();
+    setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
+
+    expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("APPROVAL_ACTION_EXECUTOR_REQUIRED");
+    expect(() => executeApprovedAction(approvedRequest())).toThrow("APPROVAL_ACTION_EXECUTOR_REQUIRED");
   });
 
   it("blocks mock execution in production", () => {
@@ -116,14 +138,14 @@ describe("approval execution", () => {
     setEnv("VERCEL_ENV", "production");
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
 
-    expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("MOCK_EXECUTION_DISABLED_IN_PRODUCTION");
+    expect(() => planApprovalExecution("meta_activate_ad")).toThrow("MOCK_EXECUTION_DISABLED_IN_PRODUCTION");
   });
 
   it("blocks live execution until a live executor is configured", () => {
     clearEnv();
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "live");
 
-    expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
+    expect(() => planApprovalExecution("meta_activate_ad")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
   });
 
   it("keeps Meta connection disconnect execution approval-gated and mock-safe outside production", () => {
@@ -157,7 +179,7 @@ describe("approval execution", () => {
   it("rechecks stored approval payloads for budget mutations before dispatch", () => {
     clearEnv();
     const contaminatedApproval = {
-      ...approvedRequest(),
+      ...approvedActivateAdRequest(),
       afterJson: {
         daily_budget: 50000
       }
@@ -173,7 +195,7 @@ describe("approval execution", () => {
   it("rechecks stored approval expiry before dispatch", () => {
     clearEnv();
     const expiredApproval = {
-      ...approvedRequest(),
+      ...approvedActivateAdRequest(),
       expiresAt: new Date(Date.now() - 1000).toISOString()
     };
 
@@ -184,7 +206,7 @@ describe("approval execution", () => {
     clearEnv();
     setEnv("HERMES_AUTH_MODE", "mock");
     const repository = new MemoryHermesRepository();
-    const approval = approvedRequest();
+    const approval = approvedActivateAdRequest();
     await repository.saveApproval(new Request("http://localhost/api/test"), approval);
 
     const response = await executeApproval(
@@ -205,7 +227,7 @@ describe("approval execution", () => {
     setEnv("HERMES_AUTH_MODE", "mock");
     const repository = new MemoryHermesRepository();
     const approval = {
-      ...approvedRequest(),
+      ...approvedActivateAdRequest(),
       expiresAt: new Date(Date.now() - 1000).toISOString()
     };
     await repository.saveApproval(new Request("http://localhost/api/test"), approval);
@@ -221,6 +243,32 @@ describe("approval execution", () => {
 
     expect(response.status).toBe(403);
     expect(body.error.code).toBe("APPROVAL_EXPIRED");
+    expect(stored?.status).toBe("approved");
+    expect(stored?.executionResultJson).toBeUndefined();
+  });
+
+  it("keeps paused-draft approvals approved when generic execution is requested", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const approval = approvedRequest();
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(new Request("http://localhost/api/test"), approver, approval.id);
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("APPROVAL_ACTION_EXECUTOR_REQUIRED");
+    expect(body.error.details).toMatchObject({
+      action: "meta_create_ad_paused",
+      route: "/api/drafts/create-paused"
+    });
     expect(stored?.status).toBe("approved");
     expect(stored?.executionResultJson).toBeUndefined();
   });
@@ -254,7 +302,7 @@ describe("approval execution", () => {
     clearEnv();
     setEnv("HERMES_AUTH_MODE", "mock");
     const repository = new MemoryHermesRepository();
-    const approval = approvedRequest();
+    const approval = approvedActivateAdRequest();
     await repository.saveApproval(new Request("http://localhost/api/test"), approval);
 
     const response = await executeApproval(
@@ -275,9 +323,9 @@ describe("approval execution", () => {
       id: approval.id,
       status: "executed",
       executionResultJson: {
-        result: "mock_created_ad_paused",
-        operation: "meta_create_ad_paused",
-        externalStatus: "PAUSED"
+        result: "mock_activated_ad",
+        operation: "meta_activate_ad",
+        externalStatus: "ACTIVE"
       }
     });
     expect(stored?.executionResultJson).toEqual(body.executionDetails);

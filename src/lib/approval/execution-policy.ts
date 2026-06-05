@@ -4,7 +4,7 @@ import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
 import type { ApprovalAction, ApprovalRequest } from "@/lib/types";
 
 export type ApprovalExecutionMode = "mock" | "live";
-type GenericApprovalAction = Exclude<ApprovalAction, "ai_paid_generation">;
+type GenericApprovalAction = Exclude<ApprovalAction, "ai_paid_generation" | "meta_create_ad_paused">;
 
 export interface ApprovalExecutionPlan {
   mode: ApprovalExecutionMode;
@@ -29,6 +29,17 @@ export class PaidOperationDomainExecutorRequiredError extends Error {
 
   constructor(readonly action: ApprovalAction) {
     super("PAID_OPERATION_EXECUTOR_REQUIRED");
+  }
+}
+
+export class ApprovalActionDomainExecutorRequiredError extends Error {
+  readonly code = "APPROVAL_ACTION_EXECUTOR_REQUIRED";
+
+  constructor(
+    readonly action: ApprovalAction,
+    readonly route: string
+  ) {
+    super("APPROVAL_ACTION_EXECUTOR_REQUIRED");
   }
 }
 
@@ -57,11 +68,6 @@ const MOCK_EXECUTION_TEMPLATES: Record<GenericApprovalAction, MockExecutionTempl
     result: "mock_created_adset_paused",
     externalStatus: "PAUSED",
     objectPrefix: "adset"
-  },
-  meta_create_ad_paused: {
-    result: "mock_created_ad_paused",
-    externalStatus: "PAUSED",
-    objectPrefix: "ad"
   },
   meta_activate_campaign: {
     result: "mock_activated_campaign",
@@ -159,9 +165,18 @@ export function isPaidOperationDomainExecutorRequiredError(
   return error instanceof PaidOperationDomainExecutorRequiredError;
 }
 
+export function isApprovalActionDomainExecutorRequiredError(
+  error: unknown
+): error is ApprovalActionDomainExecutorRequiredError {
+  return error instanceof ApprovalActionDomainExecutorRequiredError;
+}
+
 function genericApprovalAction(action: ApprovalAction): GenericApprovalAction {
   if (action === "ai_paid_generation") {
     throw new PaidOperationDomainExecutorRequiredError(action);
+  }
+  if (action === "meta_create_ad_paused") {
+    throw new ApprovalActionDomainExecutorRequiredError(action, "/api/drafts/create-paused");
   }
   return action;
 }

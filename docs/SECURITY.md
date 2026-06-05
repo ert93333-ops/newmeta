@@ -39,6 +39,7 @@ Tenant-scoped settings writes go through `PATCH /api/settings/*`, require `marke
 - Budget mutation: hard block, no approval escape hatch.
 - Cost guard settings must be server-owned. `POST /api/cost/estimate` may accept a provider lookup key from the client, but pricing, credits, and caps must come from tenant-scoped `integration_settings`, not request-body overrides.
 - Approval execution must go through the action-specific executor registry and fail closed in production unless a real live executor is configured; mock execution is local-only.
+- `meta_create_ad_paused` is no longer executable through the generic `POST /api/approvals/:id/execute` route. Generic execution must return `APPROVAL_ACTION_EXECUTOR_REQUIRED` for that action so paused-draft approvals can only be consumed by `POST /api/drafts/create-paused`.
 - `POST /api/drafts/create-paused` must not bypass that rule. The route now validates execution readiness before it even creates a pending approval request, then executes real live Meta PAUSED draft creation only through the server-side Graph adapter chain. If the route is missing prerequisites such as persisted tenant asset lookup, Meta ad account id, asset `sourceUrl`, or video `thumbnailUrl`, it must fail closed instead of creating a non-executable approval or persisting a false-success draft.
 - Approval execution must persist the executor result, and Supabase approval updates must confirm that a row was actually updated so RLS or tenant mismatches cannot be reported as successful execution.
 
