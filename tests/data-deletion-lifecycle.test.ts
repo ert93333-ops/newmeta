@@ -39,6 +39,10 @@ function clearEnv(): void {
   }
 }
 
+function resetMemoryStore(): void {
+  delete (globalThis as typeof globalThis & { __hermesRepositoryStore?: unknown }).__hermesRepositoryStore;
+}
+
 async function json(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
@@ -46,6 +50,7 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 describe("data deletion approval lifecycle", () => {
   afterEach(() => {
     restoreEnv();
+    resetMemoryStore();
   });
 
   it("syncs the stored deletion request when the destructive approval is approved", async () => {

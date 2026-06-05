@@ -6,6 +6,19 @@ import { getRepository } from "@/lib/repositories/hermes-repository";
 
 const DEFAULT_DELETION_SCOPE = "tenant";
 const ALLOWED_DELETION_SCOPES = new Set(["tenant", "meta_integration", "creative_assets", "learning_patterns"]);
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+export async function GET(request: Request) {
+  try {
+    const context = await resolveUserContext(request);
+    const limit = readLimit(request);
+    const deletionRequests = await getRepository().listDataDeletionRequests(request, context, limit);
+    return ok({ deletionRequests });
+  } catch (error) {
+    return handleError(error);
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -80,4 +93,18 @@ function readReason(value: unknown): string | undefined {
 
   const normalized = value.trim();
   return normalized || undefined;
+}
+
+function readLimit(request: Request): number {
+  const raw = new URL(request.url).searchParams.get("limit");
+  if (!raw) {
+    return DEFAULT_LIMIT;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_LIMIT;
+  }
+
+  return Math.min(parsed, MAX_LIMIT);
 }

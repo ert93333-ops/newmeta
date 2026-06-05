@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   MemoryHermesRepository,
   costUsageFromEstimate,
@@ -23,7 +23,15 @@ const marketer: UserContext = {
   role: "marketer"
 };
 
+function resetMemoryStore(): void {
+  delete (globalThis as typeof globalThis & { __hermesRepositoryStore?: unknown }).__hermesRepositoryStore;
+}
+
 describe("Hermes repository", () => {
+  afterEach(() => {
+    resetMemoryStore();
+  });
+
   it("extracts audit IP and user agent from request headers", () => {
     const metadata = requestAuditMetadata(
       new Request("http://localhost/api/approvals", {
@@ -227,6 +235,45 @@ describe("Hermes repository", () => {
       }
     });
     expect(updated.updatedAt).toBeDefined();
+  });
+
+  it("lists only same-tenant data deletion requests in newest-first order", async () => {
+    const repository = new MemoryHermesRepository();
+    await repository.saveDataDeletionRequest(request, {
+      id: "tenant-a-older",
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      requestedBy: owner.userId,
+      scope: "tenant",
+      status: "approval_required",
+      resultJson: {},
+      createdAt: "2026-06-05T00:00:00.000Z"
+    });
+    await repository.saveDataDeletionRequest(request, {
+      id: "tenant-b-newest",
+      tenantId: "tenant-b",
+      createdBy: "other-user",
+      requestedBy: "other-user",
+      scope: "tenant",
+      status: "approval_required",
+      resultJson: {},
+      createdAt: "2026-06-06T00:00:00.000Z"
+    });
+    await repository.saveDataDeletionRequest(request, {
+      id: "tenant-a-newer",
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      requestedBy: owner.userId,
+      scope: "creative_assets",
+      status: "cancelled",
+      resultJson: {},
+      createdAt: "2026-06-05T12:00:00.000Z"
+    });
+
+    await expect(repository.listDataDeletionRequests(request, owner, 10)).resolves.toMatchObject([
+      { id: "tenant-a-newer", tenantId: owner.tenantId, scope: "creative_assets", status: "cancelled" },
+      { id: "tenant-a-older", tenantId: owner.tenantId, scope: "tenant", status: "approval_required" }
+    ]);
   });
 
   it("keeps performance fusion reports tenant-scoped in memory fallback", async () => {

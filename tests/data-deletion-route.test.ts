@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { GET as listDataDeletionRequests } from "@/app/api/data-deletion-requests/route";
 import { POST as requestDataDeletion } from "@/app/api/data-deletion-requests/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
 import type { UserContext } from "@/lib/types";
@@ -37,6 +38,10 @@ function clearEnv(): void {
   }
 }
 
+function resetMemoryStore(): void {
+  delete (globalThis as typeof globalThis & { __hermesRepositoryStore?: unknown }).__hermesRepositoryStore;
+}
+
 async function json(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
@@ -44,6 +49,22 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 describe("data deletion request route", () => {
   afterEach(() => {
     restoreEnv();
+    resetMemoryStore();
+  });
+
+  it("requires production authentication before listing deletion requests", async () => {
+    clearEnv();
+    mutableEnv.NODE_ENV = "production";
+
+    const response = await listDataDeletionRequests(
+      new Request("http://localhost/api/data-deletion-requests", {
+        method: "GET"
+      })
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(401);
+    expect((body.error as { code?: string }).code).toBe("SUPABASE_AUTH_REQUIRED");
   });
 
   it("requires production authentication before creating a deletion approval", async () => {
@@ -120,6 +141,57 @@ describe("data deletion request route", () => {
     });
     expect(JSON.stringify(body)).not.toContain("\"queued\"");
     expect(JSON.stringify(body)).not.toContain("encrypted_access_token");
+  });
+
+  it("lists tenant-scoped data deletion requests with lifecycle metadata", async () => {
+    clearEnv();
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+
+    await requestDataDeletion(
+      new Request("http://localhost/api/data-deletion-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          scope: "tenant",
+          reason: "Primary tenant deletion request."
+        })
+      })
+    );
+    const repository = new MemoryHermesRepository();
+    await repository.saveDataDeletionRequest(new Request("http://localhost/api/test"), {
+      id: "cross-tenant-request",
+      tenantId: "00000000-0000-0000-0000-000000000099",
+      createdBy: "other-user",
+      requestedBy: "other-user",
+      scope: "tenant",
+      status: "approval_required",
+      resultJson: {
+        approvalStatus: "pending"
+      }
+    });
+
+    const response = await listDataDeletionRequests(
+      new Request("http://localhost/api/data-deletion-requests?limit=10", {
+        method: "GET"
+      })
+    );
+    const body = await json(response);
+    const deletionRequests = body.deletionRequests as Array<{
+      tenantId: string;
+      scope: string;
+      status: string;
+      resultJson?: Record<string, unknown>;
+    }>;
+
+    expect(response.status).toBe(200);
+    expect(deletionRequests).toHaveLength(1);
+    expect(deletionRequests[0]).toMatchObject({
+      tenantId,
+      scope: "tenant",
+      status: "approval_required"
+    });
+    expect(deletionRequests[0].resultJson).toMatchObject({
+      approvalStatus: "pending"
+    });
   });
 
   it("hard-blocks budget mutation payloads on deletion requests", async () => {

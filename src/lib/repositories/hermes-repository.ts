@@ -271,6 +271,11 @@ export interface HermesRepository {
     context: UserContext,
     id: string
   ): Promise<DataDeletionRequestRecord | null>;
+  listDataDeletionRequests(
+    request: Request,
+    context: UserContext,
+    limit?: number
+  ): Promise<DataDeletionRequestRecord[]>;
   updateDataDeletionRequest(
     request: Request,
     deletionRequest: DataDeletionRequestRecord
@@ -621,6 +626,17 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return deletionRequest;
+  }
+
+  async listDataDeletionRequests(
+    _request: Request,
+    context: UserContext,
+    limit = 50
+  ): Promise<DataDeletionRequestRecord[]> {
+    return Array.from(getMemoryStore().dataDeletionRequests.values())
+      .filter((deletionRequest) => deletionRequest.tenantId === context.tenantId)
+      .sort((left, right) => Date.parse(right.createdAt ?? right.updatedAt ?? "") - Date.parse(left.createdAt ?? left.updatedAt ?? ""))
+      .slice(0, limit);
   }
 
   async updateDataDeletionRequest(
@@ -1249,6 +1265,24 @@ export class SupabaseHermesRepository implements HermesRepository {
       .maybeSingle();
     if (error) throw new Error(`SUPABASE_DATA_DELETION_SELECT_FAILED:${error.message}`);
     return data ? fromDataDeletionRequestRow(data as DataDeletionRequestRow) : null;
+  }
+
+  async listDataDeletionRequests(
+    request: Request,
+    context: UserContext,
+    limit = 50
+  ): Promise<DataDeletionRequestRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listDataDeletionRequests(request, context, limit);
+
+    const { data, error } = await supabase
+      .from("data_deletion_requests")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`SUPABASE_DATA_DELETION_LIST_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromDataDeletionRequestRow(row as DataDeletionRequestRow));
   }
 
   async updateDataDeletionRequest(

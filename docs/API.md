@@ -118,6 +118,7 @@ Successful execution persists the action-specific execution result on `approval_
 
 - `POST /api/cost/estimate`
 - `GET /api/cost/usage`
+- `GET /api/data-deletion-requests`
 - `POST /api/data-deletion-requests`
 
 `POST /api/cost/estimate` returns a cost guard decision and records an estimate. For paid operations such as `image_generation`, `video_generation`, and `variant_batch`, clients may include:
@@ -141,6 +142,8 @@ Successful execution persists the action-specific execution result on `approval_
 The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Cap checks use server-side `cost_usage_logs` summaries, not client-supplied usage totals. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked. When an approval is created, the estimate log is linked with `relatedJobId = approval.id` so a later terminal worker log can replace or close the reservation in cost summaries instead of double-counting it.
 
 `GET /api/cost/usage` is a tenant-scoped server-policy route. Callers must supply `providerName` as a query parameter, for example `/api/cost/usage?providerName=mock-ai`. The route resolves that provider's stored tenant `integration_settings` row server-side, returns the raw usage rows plus the daily/monthly summary, and includes a `policy` block containing the resolved provider plan/caps and the computed `effectiveDailyCapKrw`. Missing `providerName` returns `COST_PROVIDER_REQUIRED`; missing or malformed stored settings return `COST_SETTINGS_NOT_CONFIGURED` or `COST_SETTINGS_INVALID`.
+
+`GET /api/data-deletion-requests` returns the authenticated tenant's persisted deletion-request rows in newest-first order. The response is tenant-scoped and includes the stored `resultJson` lifecycle metadata, so operators can inspect approval progress, rejections, and blocked execution attempts without querying approvals and request rows separately.
 
 `POST /api/data-deletion-requests` does not immediately delete or queue tenant data deletion work. It first persists a tenant-scoped `data_deletion_requests` row with status `approval_required`, then creates the destructive `tenant_data_deletion` approval request, writes an audit record, and returns typed-confirmation guard metadata. Subsequent approve/reject actions now sync that stored row's lifecycle metadata: approval progress stays in `resultJson`, rejection moves the request to `cancelled`, and a blocked generic execute attempt records `blockedReason=APPROVAL_ACTION_EXECUTOR_REQUIRED`, the required domain route, the last execution attempt actor/time, and a matching audit breadcrumb. Actual deletion execution must happen only after the two-step destructive approval flow, and the generic `POST /api/approvals/:id/execute` route now fails closed with `APPROVAL_ACTION_EXECUTOR_REQUIRED` until a dedicated deletion executor exists.
 
