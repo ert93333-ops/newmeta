@@ -105,7 +105,7 @@ describe("Meta ad accounts route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -144,5 +144,43 @@ describe("Meta ad accounts route", () => {
     expect(url.searchParams.has("access_token")).toBe(false);
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer server-token");
     expect(JSON.stringify(body)).not.toContain("server-token");
+  });
+
+  it("fails closed when the stored live connection is missing required scopes", async () => {
+    delete mutableEnv.NODE_ENV;
+    delete mutableEnv.VERCEL_ENV;
+    delete mutableEnv.NEXT_PUBLIC_SUPABASE_URL;
+    delete mutableEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+    mockResolveUserContext.mockResolvedValue(context);
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await new MemoryHermesRepository().saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "meta-live-connection-missing-scopes",
+      tenantId: context.tenantId,
+      createdBy: context.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await getMetaAdAccounts(new Request("http://localhost/api/meta/ad-accounts"));
+    const body = await json(response);
+
+    expect(response.status).toBe(403);
+    expect((body.error as { code?: string; details?: { missingScopes?: string[] } }).code).toBe(
+      "META_REQUIRED_SCOPES_MISSING"
+    );
+    expect((body.error as { details?: { missingScopes?: string[] } }).details?.missingScopes).toEqual([
+      "ads_management",
+      "business_management"
+    ]);
   });
 });

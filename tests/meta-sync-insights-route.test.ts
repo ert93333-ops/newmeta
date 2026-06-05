@@ -99,7 +99,7 @@ describe("Meta insights sync route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -136,7 +136,7 @@ describe("Meta insights sync route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -220,5 +220,50 @@ describe("Meta insights sync route", () => {
     expect(url.toString()).toContain("act_live_123/insights");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer server-token");
     expect(JSON.stringify(body)).not.toContain("server-token");
+  });
+
+  it("fails closed when the stored live connection is missing required scopes", async () => {
+    delete mutableEnv.NODE_ENV;
+    delete mutableEnv.VERCEL_ENV;
+    delete mutableEnv.NEXT_PUBLIC_SUPABASE_URL;
+    delete mutableEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 8).toString("base64");
+    mockResolveUserContext.mockResolvedValue(context);
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await new MemoryHermesRepository().saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "meta-live-connection-sync-missing-scopes",
+      tenantId: context.tenantId,
+      createdBy: context.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await syncInsights(
+      new Request("http://localhost/api/meta/sync/insights", {
+        method: "POST",
+        body: JSON.stringify({
+          adAccountId: "act_live_123"
+        })
+      })
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(403);
+    expect((body.error as { code?: string; details?: { missingScopes?: string[] } }).code).toBe(
+      "META_REQUIRED_SCOPES_MISSING"
+    );
+    expect((body.error as { details?: { missingScopes?: string[] } }).details?.missingScopes).toEqual([
+      "ads_management",
+      "business_management"
+    ]);
   });
 });

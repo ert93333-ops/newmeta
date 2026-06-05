@@ -403,7 +403,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -458,7 +458,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -597,7 +597,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -647,7 +647,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -680,6 +680,57 @@ describe("create paused draft route", () => {
     expect(approvals.find((item) => item.objectId === "draft-live-missing-promoted-object")).toBeUndefined();
   });
 
+  it("fails closed before creating approval when the stored live connection is missing required scopes", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-live-missing-required-scopes",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      sourceUrl: "https://cdn.example.com/assets/live-missing-required-scopes.png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 17).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-missing-required-scopes",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-missing-required-scopes",
+        adAccountId: "act_live_123",
+        assetId: "asset-live-missing-required-scopes",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string; details?: { missingScopes?: string[] } } };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(403);
+    expect(body.error?.code).toBe("META_REQUIRED_SCOPES_MISSING");
+    expect(body.error?.details?.missingScopes).toEqual(["ads_management", "business_management"]);
+    expect(approvals.find((item) => item.objectId === "draft-live-missing-required-scopes")).toBeUndefined();
+  });
+
   it("fails closed before creating approval when live Meta validate_only rejects the campaign payload", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();
@@ -706,7 +757,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
@@ -804,7 +855,7 @@ describe("create paused draft route", () => {
       tokenIv: encrypted.tokenIv,
       tokenAuthTag: encrypted.tokenAuthTag,
       tokenKid: encrypted.tokenKid,
-      scopes: ["ads_read", "ads_management"],
+      scopes: ["ads_read", "ads_management", "business_management"],
       status: "connected",
       metadataJson: {
         mode: "live"
