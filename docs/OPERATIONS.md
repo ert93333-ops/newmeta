@@ -60,7 +60,7 @@ For a real Supabase Auth smoke test, run:
 npm run auth:smoke
 ```
 
-Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_AUTH_SMOKE_EMAIL`, `SUPABASE_AUTH_SMOKE_PASSWORD`, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. Optional: `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID` to verify cross-tenant denial. The script does not print tokens or passwords; if env is missing, it exits blocked instead of reporting a false pass.
+Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_AUTH_SMOKE_EMAIL`, `SUPABASE_AUTH_SMOKE_PASSWORD`, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. Optional: `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID` to verify cross-tenant denial. The script verifies bearer-only `/api/me` tenant membership bootstrap, explicit allowed-tenant `/api/me`, unauthenticated rejection, budget mutation hard-block reporting, and signed Meta connect URL generation. It does not call the Meta callback or exchange/store Meta tokens. The script does not print tokens or passwords; if env is missing, it exits blocked instead of reporting a false pass.
 
 ## GitHub
 
