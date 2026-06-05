@@ -19,15 +19,24 @@ describe("Approval center panel", () => {
     expect(panelSource).toContain("guard.requiredText");
     expect(panelSource).toContain("guard.requiresSecondApproval");
     expect(panelSource).toContain("guard.expiresAt");
+    expect(panelSource).toContain("secondApprovedBy");
     expect(panelSource).not.toContain("approvalPreviews");
     expect(panelSource).not.toContain("publish-ad");
     expect(panelSource).not.toContain("delete-ad");
     expect(panelSource).not.toContain("paused-draft");
   });
 
-  it("does not add client-side approval execution or credential exposure", () => {
-    expect(panelSource).not.toContain("/api/approvals/");
-    expect(panelSource).not.toContain('method: "POST"');
+  it("submits only approve or reject decisions through server approval routes", () => {
+    expect(panelSource).toContain('method: "POST"');
+    expect(panelSource).toContain("typedConfirmation");
+    expect(panelSource).toContain("rejectionReason");
+    expect(panelSource).toContain("Content-Type");
+    expect(panelSource).toContain("/api/approvals/${selected.approval.id}/${decision}");
+    expect(panelSource).not.toContain("/execute");
+  });
+
+  it("does not add client-side execution, budget mutation, or credential exposure", () => {
+    expect(panelSource).not.toMatch(/daily_budget|lifetime_budget|budgetMutation|BUDGET_MUTATION/);
     expect(panelSource).not.toContain("encryptedAccessToken");
     expect(panelSource).not.toContain("console.");
     expect(panelSource).not.toMatch(/<input[^>]+(?:name|id|placeholder|aria-label)=["'][^"']*(token|secret)/iu);
