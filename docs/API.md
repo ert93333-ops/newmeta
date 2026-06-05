@@ -80,6 +80,24 @@ Successful execution persists the action-specific execution result on `approval_
 - `GET /api/cost/usage`
 - `POST /api/data-deletion-requests`
 
+`POST /api/cost/estimate` returns a cost guard decision and records an estimate. For paid operations such as `image_generation`, `video_generation`, and `variant_batch`, clients may include:
+
+```json
+{
+  "operationType": "variant_batch",
+  "settings": {
+    "providerName": "mock-ai"
+  },
+  "approvalRequest": {
+    "create": true,
+    "objectId": "creative-control-1",
+    "reason": "Generate approved A/B variants."
+  }
+}
+```
+
+The API creates a pending `ai_paid_generation` approval only when the estimate is inside the effective cost cap and the operation requires approval. Blocked estimates do not create approvals. Approval payloads store cost metadata only; executable budget mutation fields remain hard-blocked.
+
 ## Budget Policy
 
 No route may execute budget changes. Budget-related recommendations are allowed only as text hypotheses or human-facing suggestions.
