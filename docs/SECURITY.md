@@ -22,6 +22,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 - Tokens are encrypted with AES-256-GCM before storage.
 - Logs must not include access tokens, refresh tokens, app secrets, authorization codes, or service keys.
 - Write API payloads reject token-shaped fields and encrypted token material before persistence or audit logging. API responses and audit JSON payloads defensively redact those fields.
+- Meta OAuth callback exchanges codes server-side and stores only encrypted token material. `HERMES_META_OAUTH_MODE=mock` is local-only; release requires `HERMES_META_OAUTH_MODE=live`.
 - Token test responses expose only account, permission, and expiry status.
 
 ## Approval
@@ -43,7 +44,7 @@ Risk actions write `audit_logs` with actor, tenant, object, before/after diff, a
 
 `npm run supabase:validate` must pass before release. It applies committed migrations to a local Supabase database, runs schema lint, and runs security/performance advisors without touching linked or remote projects.
 
-`npm run env:release-gates` must pass against the deployment environment before release. It fails closed if mock auth is enabled, required Supabase/Meta/worker env is missing, placeholder values remain, token encryption is invalid, callback URLs point to localhost, or secret-looking values are placed behind `NEXT_PUBLIC_*`.
+`npm run env:release-gates` must pass against the deployment environment before release. It fails closed if mock auth or mock Meta OAuth is enabled, required Supabase/Meta/worker env is missing, placeholder values remain, token encryption is invalid, callback URLs point to localhost, or secret-looking values are placed behind `NEXT_PUBLIC_*`.
 
 `npm run auth:smoke` should pass against the deployed production-mode app before customer access. It verifies that `/api/me` rejects unauthenticated requests, accepts a valid tenant membership, and optionally rejects a denied tenant id.
 

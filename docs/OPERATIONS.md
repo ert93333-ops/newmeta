@@ -52,7 +52,7 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker env, placeholder values, `HERMES_AUTH_MODE=mock`, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate blocks missing required Supabase/Meta/worker env, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
 For a real Supabase Auth smoke test, run:
 

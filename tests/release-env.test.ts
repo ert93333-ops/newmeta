@@ -12,6 +12,7 @@ function validReleaseEnv(): Record<string, string> {
     META_APP_ID: "123456789",
     META_APP_SECRET: "meta-secret-value",
     META_REDIRECT_URI: "https://app.newmeta.test/api/integrations/meta/callback",
+    HERMES_META_OAUTH_MODE: "live",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters"
   };
 }
@@ -25,6 +26,12 @@ describe("release env gate", () => {
     const result = checkReleaseEnv({ ...validReleaseEnv(), HERMES_AUTH_MODE: "mock" });
 
     expect(result.issues.map((issue) => issue.code)).toContain("MOCK_AUTH_ENABLED");
+  });
+
+  it("blocks mock Meta OAuth for release", () => {
+    const result = checkReleaseEnv({ ...validReleaseEnv(), HERMES_META_OAUTH_MODE: "mock" });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("META_OAUTH_NOT_LIVE");
   });
 
   it("blocks placeholder and missing env values", () => {

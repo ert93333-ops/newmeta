@@ -24,6 +24,8 @@ Optional expansion scopes:
 
 External customer connections must use OAuth / Business Login. Customers must not paste access tokens.
 
+`POST /api/integrations/meta/callback` exchanges the authorization code server-side, encrypts the resulting Meta token with AES-GCM, and stores only encrypted token material in `meta_connections`. Local development may use `HERMES_META_OAUTH_MODE=mock`; release must use `HERMES_META_OAUTH_MODE=live`.
+
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
 The OAuth callback request accepts authorization `code` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.

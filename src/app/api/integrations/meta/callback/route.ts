@@ -1,24 +1,39 @@
-import { randomUUID } from "node:crypto";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
+import { connectMetaOAuth } from "@/lib/meta/oauth";
+import { getRepository } from "@/lib/repositories/hermes-repository";
 
 export async function POST(request: Request) {
   try {
-    const body = (await parseWriteJson(request)) as { code?: string; scopes?: string[] };
+    const body = (await parseWriteJson(request)) as { code?: unknown; scopes?: unknown };
     const context = await resolveUserContext(request);
-    return ok(
-      {
-        connection: {
-          id: randomUUID(),
-          tenantId: context.tenantId,
-          status: body.code ? "connected_mock" : "pending_code",
-          scopes: body.scopes ?? ["ads_read"],
-          encryptedTokenStored: Boolean(body.code)
-        }
-      },
-      201
-    );
+    const code = readCode(body.code);
+    const repository = getRepository();
+    const connection = await connectMetaOAuth({
+      request,
+      context,
+      repository,
+      code,
+      scopes: readScopes(body.scopes)
+    });
+
+    return ok({ connection }, 201);
   } catch (error) {
     return handleError(error);
   }
+}
+
+function readCode(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("META_OAUTH_CODE_REQUIRED");
+  }
+  return value.trim();
+}
+
+function readScopes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return ["ads_read"];
+  }
+  const scopes = value.filter((scope): scope is string => typeof scope === "string" && scope.trim().length > 0);
+  return scopes.length > 0 ? Array.from(new Set(scopes.map((scope) => scope.trim()))) : ["ads_read"];
 }

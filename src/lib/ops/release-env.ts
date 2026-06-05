@@ -19,6 +19,7 @@ const REQUIRED_RELEASE_ENV = [
   "META_APP_ID",
   "META_APP_SECRET",
   "META_REDIRECT_URI",
+  "HERMES_META_OAUTH_MODE",
   "HERMES_WORKER_SECRET"
 ] as const;
 
@@ -108,6 +109,9 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
 
   if (value(env, "HERMES_AUTH_MODE") === "mock") {
     addIssue(issues, "MOCK_AUTH_ENABLED", "HERMES_AUTH_MODE=mock must not be set for release.");
+  }
+  if (value(env, "HERMES_META_OAUTH_MODE") !== "live") {
+    addIssue(issues, "META_OAUTH_NOT_LIVE", "HERMES_META_OAUTH_MODE=live is required for release.");
   }
 
   for (const key of Object.keys(env)) {

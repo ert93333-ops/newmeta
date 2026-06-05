@@ -37,6 +37,22 @@ export interface CostUsageSummary {
   monthActualCostKrw: number;
 }
 
+export interface MetaConnectionInput {
+  id: string;
+  tenantId: string;
+  createdBy: string;
+  provider: string;
+  connectionMode: string;
+  encryptedAccessToken: string;
+  tokenIv: string;
+  tokenAuthTag: string;
+  tokenKid: string;
+  scopes: string[];
+  expiresAt?: string;
+  status: string;
+  metadataJson?: unknown;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -48,12 +64,14 @@ export interface HermesRepository {
   saveJob(request: Request, job: Record<string, unknown>): Promise<Record<string, unknown>>;
   getJob(request: Request, context: UserContext, id: string): Promise<Record<string, unknown> | null>;
   saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>>;
+  saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
 }
 
 interface HermesMemoryStore {
   approvals: Map<string, ApprovalRequest>;
   jobs: Map<string, Record<string, unknown>>;
   assets: Map<string, Record<string, unknown>>;
+  metaConnections: Map<string, MetaConnectionInput>;
   costUsage: unknown[];
   auditLogs: AuditLogInput[];
 }
@@ -66,6 +84,7 @@ function getMemoryStore(): HermesMemoryStore {
       approvals: new Map(),
       jobs: new Map(),
       assets: new Map(),
+      metaConnections: new Map(),
       costUsage: [],
       auditLogs: []
     };
@@ -136,6 +155,11 @@ export class MemoryHermesRepository implements HermesRepository {
   async saveAsset(_request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>> {
     getMemoryStore().assets.set(String(asset.id), asset);
     return asset;
+  }
+
+  async saveMetaConnection(_request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
+    getMemoryStore().metaConnections.set(connection.id, connection);
+    return connection;
   }
 }
 
@@ -286,6 +310,15 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_ASSET_INSERT_FAILED:${error.message}`);
     return asset;
   }
+
+  async saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveMetaConnection(request, connection);
+
+    const { error } = await supabase.from("meta_connections").insert(toMetaConnectionRow(connection));
+    if (error) throw new Error(`SUPABASE_META_CONNECTION_INSERT_FAILED:${error.message}`);
+    return connection;
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -421,6 +454,24 @@ function toAssetRow(asset: Record<string, unknown>): Record<string, unknown> {
     duration_seconds: asset.durationSeconds ?? inputAsset?.durationSeconds,
     mime_type: asset.mimeType ?? inputAsset?.mimeType,
     metadata_json: asset
+  };
+}
+
+function toMetaConnectionRow(connection: MetaConnectionInput): Record<string, unknown> {
+  return {
+    id: connection.id,
+    tenant_id: connection.tenantId,
+    created_by: connection.createdBy,
+    provider: connection.provider,
+    connection_mode: connection.connectionMode,
+    encrypted_access_token: connection.encryptedAccessToken,
+    token_iv: connection.tokenIv,
+    token_auth_tag: connection.tokenAuthTag,
+    token_kid: connection.tokenKid,
+    scopes: connection.scopes,
+    expires_at: connection.expiresAt,
+    status: connection.status,
+    metadata_json: connection.metadataJson ?? {}
   };
 }
 

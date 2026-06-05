@@ -79,8 +79,25 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "MOCK_EXECUTION_DISABLED_IN_PRODUCTION") {
       return fail(error.message, "Mock approval execution is disabled in production.", 501);
     }
+    if (error.message === "MOCK_META_OAUTH_DISABLED_IN_PRODUCTION") {
+      return fail(error.message, "Mock Meta OAuth is disabled in production.", 501);
+    }
     if (error.message === "LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED") {
       return fail(error.message, "Live approval execution is not configured.", 501);
+    }
+    if (error.message === "META_OAUTH_LIVE_NOT_CONFIGURED") {
+      return fail(error.message, "Live Meta OAuth is not configured.", 501);
+    }
+    if (error.message === "TOKEN_ENCRYPTION_KEY_REQUIRED") {
+      return fail(error.message, "Token encryption key is required before storing Meta tokens.", 501);
+    }
+    if (error.message === "META_OAUTH_TOKEN_MISSING") {
+      return fail(error.message, "Meta OAuth token exchange response did not include a usable token.", 502);
+    }
+    if (error.message.startsWith("META_OAUTH_CODE_EXCHANGE_FAILED:")) {
+      return fail("META_OAUTH_CODE_EXCHANGE_FAILED", "Meta OAuth code exchange failed.", 502, {
+        status: error.message.split(":").at(-1)
+      });
     }
     if (error.message === "TENANT_REQUIRED") {
       return fail(error.message, "Tenant context is required.", 400);

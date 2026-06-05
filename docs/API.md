@@ -20,6 +20,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `GET /api/meta/ad-accounts`
 - `POST /api/meta/sync/insights`
 
+`POST /api/integrations/meta/callback` accepts an OAuth authorization code, exchanges it server-side, encrypts the resulting Meta token, stores it in `meta_connections`, writes an audit record, and returns only connection metadata such as `encryptedTokenStored`. Local mock exchange is disabled for release by `npm run env:release-gates`.
+
 ## Creative and Diagnosis
 
 - `POST /api/creative-assets`
