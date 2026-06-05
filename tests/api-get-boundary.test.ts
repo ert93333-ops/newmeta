@@ -9,7 +9,10 @@ const ENV_KEYS = [
   "NODE_ENV",
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
+  "HERMES_META_OAUTH_MODE",
   "HERMES_OAUTH_STATE_SECRET",
+  "META_APP_ID",
+  "META_REDIRECT_URI",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -123,6 +126,20 @@ describe("API GET auth boundary", () => {
     expect(state).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u);
     expect(serializedStatePayload).not.toContain("00000000-0000-0000-0000-000000000001");
     expect(serializedStatePayload).not.toContain("00000000-0000-0000-0000-000000000010");
+  });
+
+  it("fails closed when live Meta OAuth connect env is missing", async () => {
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+    mutableEnv.HERMES_META_OAUTH_MODE = "live";
+    mutableEnv.HERMES_OAUTH_STATE_SECRET = "state-secret-with-at-least-32-characters";
+    delete mutableEnv.META_APP_ID;
+    delete mutableEnv.META_REDIRECT_URI;
+
+    const response = await getMetaConnectUrl(new Request("http://localhost/api/integrations/meta/connect-url"));
+    const body = await json(response);
+
+    expect(response.status).toBe(501);
+    expect((body.error as { code?: string }).code).toBe("META_OAUTH_LIVE_NOT_CONFIGURED");
   });
 
   it("keeps authenticated GET routes wrapped in handleError", () => {
