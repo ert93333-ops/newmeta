@@ -12,6 +12,8 @@ npm test
 
 Use the migration in `supabase/migrations`. The CLI was initialized with `npx supabase init`; apply migrations with your linked Supabase project or local Supabase stack.
 
+`supabase/functions/hermes-api` is intentionally fail-closed. It requires a bearer token and then returns `EDGE_FUNCTION_NOT_CONFIGURED` until a dedicated worker/webhook handler is implemented for that path. Do not treat a deployed placeholder Edge Function as a live API surface.
+
 For release validation, run:
 
 ```bash

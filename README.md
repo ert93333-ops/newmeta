@@ -52,6 +52,7 @@ The gate fails closed on missing production Supabase/Meta/worker/OAuth-state env
 - `src/lib/placement/placement-validator.ts`: placement and #1487569 preflight guard
 - `src/lib/drafts/preflight.ts`: draft creation preflight
 - `supabase/migrations/*_hermes_foundation_schema.sql`: tenant/RLS schema
+- `supabase/functions/hermes-api/index.ts`: fail-closed Edge Function placeholder reserved for dedicated worker/webhook endpoints
 - `worker/hermes-worker.ts`: DB-backed worker claim loop skeleton
 - `docs/`: API, DB, security, cost, Meta, and operation notes
 
