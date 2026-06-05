@@ -111,6 +111,44 @@ export interface PlacementValidationReportRecord {
   updatedAt?: string;
 }
 
+export interface BottleneckAnalysisJobRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  insightSnapshotId?: string;
+  status: string;
+  dataSufficiency: string;
+  resultJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BottleneckStageScoreRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  bottleneckJobId: string;
+  stage: string;
+  scoreValue: number;
+  confidence: string;
+  evidenceJson: unknown;
+  recommendation?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BottleneckHypothesisRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  bottleneckJobId: string;
+  hypothesis: string;
+  confidence: string;
+  evidenceJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -151,6 +189,33 @@ export interface HermesRepository {
     context: UserContext,
     id: string
   ): Promise<PlacementValidationReportRecord | null>;
+  saveBottleneckAnalysisJob(
+    request: Request,
+    job: BottleneckAnalysisJobRecord
+  ): Promise<BottleneckAnalysisJobRecord>;
+  getBottleneckAnalysisJob(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<BottleneckAnalysisJobRecord | null>;
+  saveBottleneckStageScores(
+    request: Request,
+    scores: BottleneckStageScoreRecord[]
+  ): Promise<BottleneckStageScoreRecord[]>;
+  listBottleneckStageScores(
+    request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckStageScoreRecord[]>;
+  saveBottleneckHypotheses(
+    request: Request,
+    hypotheses: BottleneckHypothesisRecord[]
+  ): Promise<BottleneckHypothesisRecord[]>;
+  listBottleneckHypotheses(
+    request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckHypothesisRecord[]>;
 }
 
 interface HermesMemoryStore {
@@ -160,6 +225,9 @@ interface HermesMemoryStore {
   adDrafts: Map<string, AdDraftRecord>;
   performanceFusionReports: Map<string, PerformanceFusionReportRecord>;
   placementValidationReports: Map<string, PlacementValidationReportRecord>;
+  bottleneckAnalysisJobs: Map<string, BottleneckAnalysisJobRecord>;
+  bottleneckStageScores: Map<string, BottleneckStageScoreRecord>;
+  bottleneckHypotheses: Map<string, BottleneckHypothesisRecord>;
   metaConnections: Map<string, MetaConnectionInput>;
   integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
@@ -177,6 +245,9 @@ function getMemoryStore(): HermesMemoryStore {
       adDrafts: new Map(),
       performanceFusionReports: new Map(),
       placementValidationReports: new Map(),
+      bottleneckAnalysisJobs: new Map(),
+      bottleneckStageScores: new Map(),
+      bottleneckHypotheses: new Map(),
       metaConnections: new Map(),
       integrationSettings: new Map(),
       costUsage: [],
@@ -368,6 +439,87 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return report;
+  }
+
+  async saveBottleneckAnalysisJob(
+    _request: Request,
+    job: BottleneckAnalysisJobRecord
+  ): Promise<BottleneckAnalysisJobRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...job,
+      id: job.id ?? crypto.randomUUID(),
+      createdAt: job.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().bottleneckAnalysisJobs.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getBottleneckAnalysisJob(
+    _request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<BottleneckAnalysisJobRecord | null> {
+    const job = getMemoryStore().bottleneckAnalysisJobs.get(id);
+    if (!job || job.tenantId !== context.tenantId) {
+      return null;
+    }
+    return job;
+  }
+
+  async saveBottleneckStageScores(
+    _request: Request,
+    scores: BottleneckStageScoreRecord[]
+  ): Promise<BottleneckStageScoreRecord[]> {
+    const now = new Date().toISOString();
+    return scores.map((score) => {
+      const persisted = {
+        ...score,
+        id: score.id ?? crypto.randomUUID(),
+        createdAt: score.createdAt ?? now,
+        updatedAt: now
+      };
+      getMemoryStore().bottleneckStageScores.set(persisted.id, persisted);
+      return persisted;
+    });
+  }
+
+  async listBottleneckStageScores(
+    _request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckStageScoreRecord[]> {
+    return Array.from(getMemoryStore().bottleneckStageScores.values()).filter((score) => {
+      return score.tenantId === context.tenantId && score.bottleneckJobId === bottleneckJobId;
+    });
+  }
+
+  async saveBottleneckHypotheses(
+    _request: Request,
+    hypotheses: BottleneckHypothesisRecord[]
+  ): Promise<BottleneckHypothesisRecord[]> {
+    const now = new Date().toISOString();
+    return hypotheses.map((hypothesis) => {
+      const persisted = {
+        ...hypothesis,
+        id: hypothesis.id ?? crypto.randomUUID(),
+        createdAt: hypothesis.createdAt ?? now,
+        updatedAt: now
+      };
+      getMemoryStore().bottleneckHypotheses.set(persisted.id, persisted);
+      return persisted;
+    });
+  }
+
+  async listBottleneckHypotheses(
+    _request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckHypothesisRecord[]> {
+    return Array.from(getMemoryStore().bottleneckHypotheses.values()).filter((hypothesis) => {
+      return hypothesis.tenantId === context.tenantId && hypothesis.bottleneckJobId === bottleneckJobId;
+    });
   }
 }
 
@@ -697,6 +849,108 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_PLACEMENT_VALIDATION_SELECT_FAILED:${error.message}`);
     return data ? fromPlacementValidationReportRow(data as PlacementValidationReportRow) : null;
   }
+
+  async saveBottleneckAnalysisJob(
+    request: Request,
+    job: BottleneckAnalysisJobRecord
+  ): Promise<BottleneckAnalysisJobRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveBottleneckAnalysisJob(request, job);
+
+    const { data, error } = await supabase.from("bottleneck_analysis_jobs").insert(toBottleneckAnalysisJobInsertRow(job)).select("*").single();
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_JOB_INSERT_FAILED:${error.message}`);
+    return fromBottleneckAnalysisJobRow(data as BottleneckAnalysisJobRow);
+  }
+
+  async getBottleneckAnalysisJob(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<BottleneckAnalysisJobRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getBottleneckAnalysisJob(request, context, id);
+
+    const { data, error } = await supabase
+      .from("bottleneck_analysis_jobs")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_JOB_SELECT_FAILED:${error.message}`);
+    return data ? fromBottleneckAnalysisJobRow(data as BottleneckAnalysisJobRow) : null;
+  }
+
+  async saveBottleneckStageScores(
+    request: Request,
+    scores: BottleneckStageScoreRecord[]
+  ): Promise<BottleneckStageScoreRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveBottleneckStageScores(request, scores);
+    if (scores.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("bottleneck_stage_scores")
+      .insert(scores.map((score) => toBottleneckStageScoreInsertRow(score)))
+      .select("*");
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_STAGE_INSERT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromBottleneckStageScoreRow(row as BottleneckStageScoreRow));
+  }
+
+  async listBottleneckStageScores(
+    request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckStageScoreRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listBottleneckStageScores(request, context, bottleneckJobId);
+
+    const { data, error } = await supabase
+      .from("bottleneck_stage_scores")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("bottleneck_job_id", bottleneckJobId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_STAGE_SELECT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromBottleneckStageScoreRow(row as BottleneckStageScoreRow));
+  }
+
+  async saveBottleneckHypotheses(
+    request: Request,
+    hypotheses: BottleneckHypothesisRecord[]
+  ): Promise<BottleneckHypothesisRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveBottleneckHypotheses(request, hypotheses);
+    if (hypotheses.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("bottleneck_hypotheses")
+      .insert(hypotheses.map((hypothesis) => toBottleneckHypothesisInsertRow(hypothesis)))
+      .select("*");
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_HYPOTHESIS_INSERT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromBottleneckHypothesisRow(row as BottleneckHypothesisRow));
+  }
+
+  async listBottleneckHypotheses(
+    request: Request,
+    context: UserContext,
+    bottleneckJobId: string
+  ): Promise<BottleneckHypothesisRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listBottleneckHypotheses(request, context, bottleneckJobId);
+
+    const { data, error } = await supabase
+      .from("bottleneck_hypotheses")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("bottleneck_job_id", bottleneckJobId)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(`SUPABASE_BOTTLENECK_HYPOTHESIS_SELECT_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromBottleneckHypothesisRow(row as BottleneckHypothesisRow));
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -815,6 +1069,44 @@ interface PlacementValidationReportRow {
   status: string;
   error_1487569_risk: boolean;
   report_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BottleneckAnalysisJobRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  insight_snapshot_id?: string | null;
+  status: string;
+  data_sufficiency: string;
+  result_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BottleneckStageScoreRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  bottleneck_job_id: string;
+  stage: string;
+  score_value: number;
+  confidence: string;
+  evidence_json: unknown;
+  recommendation?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BottleneckHypothesisRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  bottleneck_job_id: string;
+  hypothesis: string;
+  confidence: string;
+  evidence_json: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -1057,6 +1349,88 @@ function fromPlacementValidationReportRow(row: PlacementValidationReportRow): Pl
     status: row.status,
     error1487569Risk: row.error_1487569_risk,
     reportJson: row.report_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toBottleneckAnalysisJobInsertRow(job: BottleneckAnalysisJobRecord): Record<string, unknown> {
+  return {
+    id: job.id,
+    tenant_id: job.tenantId,
+    created_by: job.createdBy,
+    insight_snapshot_id: job.insightSnapshotId,
+    status: job.status,
+    data_sufficiency: job.dataSufficiency,
+    result_json: job.resultJson ?? {}
+  };
+}
+
+function fromBottleneckAnalysisJobRow(row: BottleneckAnalysisJobRow): BottleneckAnalysisJobRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    insightSnapshotId: row.insight_snapshot_id ?? undefined,
+    status: row.status,
+    dataSufficiency: row.data_sufficiency,
+    resultJson: row.result_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toBottleneckStageScoreInsertRow(score: BottleneckStageScoreRecord): Record<string, unknown> {
+  return {
+    id: score.id,
+    tenant_id: score.tenantId,
+    created_by: score.createdBy,
+    bottleneck_job_id: score.bottleneckJobId,
+    stage: score.stage,
+    score_value: score.scoreValue,
+    confidence: score.confidence,
+    evidence_json: score.evidenceJson ?? [],
+    recommendation: score.recommendation
+  };
+}
+
+function fromBottleneckStageScoreRow(row: BottleneckStageScoreRow): BottleneckStageScoreRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    bottleneckJobId: row.bottleneck_job_id,
+    stage: row.stage,
+    scoreValue: row.score_value,
+    confidence: row.confidence,
+    evidenceJson: row.evidence_json,
+    recommendation: row.recommendation ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toBottleneckHypothesisInsertRow(hypothesis: BottleneckHypothesisRecord): Record<string, unknown> {
+  return {
+    id: hypothesis.id,
+    tenant_id: hypothesis.tenantId,
+    created_by: hypothesis.createdBy,
+    bottleneck_job_id: hypothesis.bottleneckJobId,
+    hypothesis: hypothesis.hypothesis,
+    confidence: hypothesis.confidence,
+    evidence_json: hypothesis.evidenceJson ?? []
+  };
+}
+
+function fromBottleneckHypothesisRow(row: BottleneckHypothesisRow): BottleneckHypothesisRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    bottleneckJobId: row.bottleneck_job_id,
+    hypothesis: row.hypothesis,
+    confidence: row.confidence,
+    evidenceJson: row.evidence_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

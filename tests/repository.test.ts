@@ -196,6 +196,65 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps bottleneck analysis persistence tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const job = await repository.saveBottleneckAnalysisJob(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      status: "succeeded",
+      dataSufficiency: "actionable_signal",
+      resultJson: {
+        stages: [{ stage: "Hook/Attention", score: 35 }],
+        hypotheses: [{ hypothesis: "Hook/Attention is likely constraining performance." }]
+      }
+    });
+    await repository.saveBottleneckStageScores(request, [
+      {
+        tenantId: owner.tenantId,
+        createdBy: owner.userId,
+        bottleneckJobId: job.id!,
+        stage: "Hook/Attention",
+        scoreValue: 35,
+        confidence: "actionable_signal",
+        evidenceJson: ["Link CTR 0.60%"],
+        recommendation: "Test opening hooks."
+      }
+    ]);
+    await repository.saveBottleneckHypotheses(request, [
+      {
+        tenantId: owner.tenantId,
+        createdBy: owner.userId,
+        bottleneckJobId: job.id!,
+        hypothesis: "Hook/Attention is likely constraining performance.",
+        confidence: "actionable_signal",
+        evidenceJson: ["Link CTR 0.60%"]
+      }
+    ]);
+
+    await expect(repository.getBottleneckAnalysisJob(request, owner, job.id!)).resolves.toMatchObject({
+      id: job.id,
+      tenantId: owner.tenantId,
+      status: "succeeded",
+      dataSufficiency: "actionable_signal"
+    });
+    await expect(repository.listBottleneckStageScores(request, owner, job.id!)).resolves.toMatchObject([
+      {
+        bottleneckJobId: job.id,
+        stage: "Hook/Attention",
+        scoreValue: 35
+      }
+    ]);
+    await expect(repository.listBottleneckHypotheses(request, owner, job.id!)).resolves.toMatchObject([
+      {
+        bottleneckJobId: job.id,
+        hypothesis: "Hook/Attention is likely constraining performance."
+      }
+    ]);
+    await expect(
+      repository.getBottleneckAnalysisJob(request, { ...owner, tenantId: "tenant-b" }, job.id!)
+    ).resolves.toBeNull();
+  });
+
   it("returns the latest connected Meta connection for the tenant and provider", async () => {
     const repository = new MemoryHermesRepository();
     await repository.saveMetaConnection(request, {

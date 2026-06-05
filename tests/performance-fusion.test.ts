@@ -7,6 +7,7 @@ describe("performance fusion", () => {
       creativeScores: [{ name: "Hook Score", value: 40, evidence: ["weak hook"] }],
       diagnosis: {
         dataSufficiency: "actionable_signal",
+        hypotheses: [],
         stages: [
           {
             stage: "Hook/Attention",

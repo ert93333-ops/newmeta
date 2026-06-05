@@ -21,9 +21,16 @@ export interface BottleneckStageScore {
   recommendation: string;
 }
 
+export interface BottleneckHypothesis {
+  hypothesis: string;
+  confidence: DataSufficiency;
+  evidence: string[];
+}
+
 export interface BottleneckDiagnosis {
   dataSufficiency: DataSufficiency;
   stages: BottleneckStageScore[];
+  hypotheses: BottleneckHypothesis[];
 }
 
 export function classifyDataSufficiency(insight: MetaInsight): DataSufficiency {
@@ -57,23 +64,103 @@ export function diagnoseBottlenecks(insight: MetaInsight): BottleneckDiagnosis {
   const lpvRate = safeRate(insight.landingPageViews, insight.linkClicks) * 100;
   const purchaseRate = safeRate(insight.purchases, insight.landingPageViews) * 100;
   const roas = insight.purchaseRoas ?? 0;
+  const stages = [
+    stage(
+      "Tracking/Data Quality",
+      insight.landingPageViews > insight.linkClicks ? 40 : 80,
+      confidence,
+      [`LPV ${insight.landingPageViews}, link clicks ${insight.linkClicks}`],
+      "Pixel/CAPI/GA4 event quality should be rechecked."
+    ),
+    stage(
+      "Delivery",
+      insight.impressions < 500 ? 45 : 75,
+      confidence,
+      [`impressions ${insight.impressions}, CPM ${insight.cpm}`],
+      "Stay in observation mode if delivery volume is still thin."
+    ),
+    stage(
+      "Hook/Attention",
+      linkCtr < 1 ? 35 : 75,
+      confidence,
+      [`Link CTR ${linkCtr.toFixed(2)}%`],
+      "Test the opening hook and first product reveal."
+    ),
+    stage(
+      "Product Clarity",
+      insight.clicks > 0 && linkCtr < 1.2 ? 45 : 70,
+      confidence,
+      [`clicks ${insight.clicks}, link clicks ${insight.linkClicks}`],
+      "Separate product scale, usage scene, and price visibility."
+    ),
+    stage(
+      "Click Intent",
+      insight.outboundClicks < insight.linkClicks * 0.7 ? 45 : 72,
+      confidence,
+      [`outbound clicks ${insight.outboundClicks}`],
+      "Check CTA wording against landing-page promise alignment."
+    ),
+    stage(
+      "Landing Arrival",
+      lpvRate < 60 ? 35 : 78,
+      confidence,
+      [`LPV/link click ${lpvRate.toFixed(2)}%`],
+      "Recheck landing speed, redirect behavior, and pixel arrival events."
+    ),
+    stage(
+      "Product Page/Offer",
+      purchaseRate < 2 ? 45 : 72,
+      confidence,
+      [`Purchase/LPV ${purchaseRate.toFixed(2)}%`],
+      "Recheck offer clarity, pricing, shipping, and review proof."
+    ),
+    stage(
+      "Checkout",
+      insight.addToCart > 0 && insight.purchases / insight.addToCart < 0.25 ? 42 : 70,
+      confidence,
+      [`ATC ${insight.addToCart}, purchases ${insight.purchases}`],
+      "Inspect checkout drop-off and late shipping-cost exposure."
+    ),
+    stage(
+      "Revenue/ROAS",
+      roas < 1.5 ? 40 : 76,
+      confidence,
+      [`ROAS ${roas}`],
+      "Keep budget changes as recommendation only and improve creative or offer first."
+    ),
+    stage(
+      "Fatigue",
+      insight.frequency > 3 && linkCtr < 1.2 ? 35 : 72,
+      confidence,
+      [`frequency ${insight.frequency}`],
+      "If frequency is high and CTR is falling, test fresh variants."
+    ),
+    stage(
+      "Placement Fit",
+      insight.breakdowns?.platform_position ? 70 : 55,
+      confidence,
+      [`placement ${insight.breakdowns?.platform_position ?? "unknown"}`],
+      "Apply placement-specific asset variants and #1487569 preflight."
+    )
+  ];
 
   return {
     dataSufficiency: confidence,
-    stages: [
-      stage("Tracking/Data Quality", insight.landingPageViews > insight.linkClicks ? 40 : 80, confidence, [`LPV ${insight.landingPageViews}, link clicks ${insight.linkClicks}`], "Pixel/CAPI/GA4 이벤트 중복과 누락을 확인하세요."),
-      stage("Delivery", insight.impressions < 500 ? 45 : 75, confidence, [`impressions ${insight.impressions}, CPM ${insight.cpm}`], "표본 부족이면 확정 진단 대신 관찰 상태로 유지하세요."),
-      stage("Hook/Attention", linkCtr < 1 ? 35 : 75, confidence, [`Link CTR ${linkCtr.toFixed(2)}%`], "첫 문구와 제품 첫 인지 구간을 테스트하세요."),
-      stage("Product Clarity", insight.clicks > 0 && linkCtr < 1.2 ? 45 : 70, confidence, [`clicks ${insight.clicks}, link clicks ${insight.linkClicks}`], "제품 크기, 사용 장면, 가격 위치를 분리 테스트하세요."),
-      stage("Click Intent", insight.outboundClicks < insight.linkClicks * 0.7 ? 45 : 72, confidence, [`outbound clicks ${insight.outboundClicks}`], "CTA 문구와 랜딩 기대값 일치를 확인하세요."),
-      stage("Landing Arrival", lpvRate < 60 ? 35 : 78, confidence, [`LPV/link click ${lpvRate.toFixed(2)}%`], "랜딩 속도와 URL 리다이렉트, Pixel 이벤트를 점검하세요."),
-      stage("Product Page/Offer", purchaseRate < 2 ? 45 : 72, confidence, [`Purchase/LPV ${purchaseRate.toFixed(2)}%`], "오퍼, 가격, 배송/리뷰 근거를 확인하세요."),
-      stage("Checkout", insight.addToCart > 0 && insight.purchases / insight.addToCart < 0.25 ? 42 : 70, confidence, [`ATC ${insight.addToCart}, purchases ${insight.purchases}`], "결제 단계 이탈과 배송비 노출 시점을 점검하세요."),
-      stage("Revenue/ROAS", roas < 1.5 ? 40 : 76, confidence, [`ROAS ${roas}`], "예산 변경은 실행하지 말고 소재/오퍼 실험으로 개선안을 제안하세요."),
-      stage("Fatigue", insight.frequency > 3 && linkCtr < 1.2 ? 35 : 72, confidence, [`frequency ${insight.frequency}`], "frequency 상승과 CTR 하락이 함께 보이면 fresh variant를 테스트하세요."),
-      stage("Placement Fit", insight.breakdowns?.platform_position ? 70 : 55, confidence, [`placement ${insight.breakdowns?.platform_position ?? "unknown"}`], "placement별 asset customization과 #1487569 preflight를 적용하세요.")
-    ]
+    stages,
+    hypotheses: deriveHypotheses(stages)
   };
+}
+
+function deriveHypotheses(stages: BottleneckStageScore[]): BottleneckHypothesis[] {
+  return [...stages]
+    .sort((left, right) => left.score - right.score)
+    .filter((stage) => stage.score <= 50)
+    .slice(0, 3)
+    .map((stage) => ({
+      hypothesis: `${stage.stage} is likely constraining performance.`,
+      confidence: stage.confidence,
+      evidence: stage.evidence
+    }));
 }
 
 function stage(

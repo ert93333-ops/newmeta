@@ -27,4 +27,20 @@ describe("bottleneck diagnosis", () => {
   it("covers all required funnel stages", () => {
     expect(diagnoseBottlenecks(insight).stages).toHaveLength(11);
   });
+
+  it("derives a bounded hypothesis list from the weakest stages", () => {
+    const diagnosis = diagnoseBottlenecks({
+      ...insight,
+      impressions: 400,
+      linkClicks: 10,
+      landingPageViews: 3,
+      purchases: 0,
+      addToCart: 1,
+      purchaseRoas: 0.8
+    });
+
+    expect(diagnosis.hypotheses.length).toBeGreaterThan(0);
+    expect(diagnosis.hypotheses.length).toBeLessThanOrEqual(3);
+    expect(diagnosis.hypotheses[0]?.hypothesis).toContain("is likely constraining performance");
+  });
 });
