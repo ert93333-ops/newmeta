@@ -1,4 +1,5 @@
 import { ApprovalCenterPanel } from "@/app/approval-center-panel";
+import { MetaConnectionPanel } from "@/app/meta-connection-panel";
 
 const navItems = [
   "Dashboard",
@@ -14,22 +15,46 @@ const navItems = [
 ];
 
 const cards = [
-  { title: "오늘의 주요 병목", value: "Hook", note: "CTR과 첫 3초 주목도 점검" },
-  { title: "placement 오류 위험", value: "#1487569", note: "9:16 variant 승인 대기" },
-  { title: "생성 비용 현황", value: "0원", note: "일 한도 5,000원 기준" },
-  { title: "승인 대기 Draft", value: "0", note: "PAUSED 생성만 허용" },
-  { title: "토큰 상태", value: "Mock", note: "OAuth 연결 전 테스트 모드" },
-  { title: "예산 변경", value: "차단", note: "추천만 가능, 실행 API 없음" }
+  {
+    title: "Primary Bottleneck",
+    value: "Hook",
+    note: "CTR and first-3-second attention need review."
+  },
+  {
+    title: "Placement Risk",
+    value: "#1487569",
+    note: "9:16 variants require validation before draft creation."
+  },
+  {
+    title: "AI Cost Today",
+    value: "0 KRW",
+    note: "Daily cap is enforced server-side."
+  },
+  {
+    title: "Pending Drafts",
+    value: "0",
+    note: "Only PAUSED draft creation is allowed."
+  },
+  {
+    title: "Meta Token Mode",
+    value: "OAuth",
+    note: "Customers never paste Meta access tokens."
+  },
+  {
+    title: "Budget Mutation",
+    value: "Blocked",
+    note: "Recommendations only; no execution path exists."
+  }
 ];
 
 const checks = [
-  ["Tenant isolation", "적용"],
-  ["Token client exposure", "차단"],
-  ["Budget mutation endpoint", "없음"],
-  ["Risk action approval", "필수"],
-  ["Final image guide text", "차단"],
-  ["Cross-tenant raw learning", "금지"]
-];
+  { label: "Tenant isolation", status: "RLS scoped", tone: "good" },
+  { label: "Token client exposure", status: "Blocked", tone: "good" },
+  { label: "Budget mutation endpoint", status: "Absent", tone: "good" },
+  { label: "Risk action approval", status: "Required", tone: "good" },
+  { label: "Final image guide text", status: "Blocked", tone: "good" },
+  { label: "Cross-tenant raw learning", status: "Forbidden", tone: "good" }
+] as const;
 
 export default function Home() {
   return (
@@ -37,7 +62,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand">
           <strong>newmeta Hermes</strong>
-          <span>AI 퍼포먼스 마케터 플랫폼</span>
+          <span>Meta Ads creative operations</span>
         </div>
         <nav className="nav" aria-label="Main">
           {navItems.map((item) => (
@@ -47,15 +72,16 @@ export default function Home() {
           ))}
         </nav>
       </aside>
-      <section className="main">
+      <section className="main" id="dashboard">
         <header className="header">
           <div>
-            <h1>운영 시간 절감과 승인 기반 실행</h1>
+            <h1>Approval-first Meta operations</h1>
             <p className="muted">
-              Meta 광고 분석, 소재 해부, 병목 진단, placement 검수, PAUSED draft 생성을 하나의 흐름으로 묶습니다.
+              Creative analysis, bottleneck diagnosis, placement validation, and PAUSED draft creation are
+              routed through tenant-scoped guardrails.
             </p>
           </div>
-          <span className="status-pill">예산 자동 변경 하드 블록</span>
+          <span className="status-pill">Budget mutation hard-blocked</span>
         </header>
 
         <section className="grid" aria-label="Dashboard metrics">
@@ -70,13 +96,15 @@ export default function Home() {
           ))}
         </section>
 
-        <section className="panel">
-          <h2>보안 및 승인 체크</h2>
+        <MetaConnectionPanel />
+
+        <section className="panel" id="settings">
+          <h2>Security and Approval Checks</h2>
           <div className="checks">
-            {checks.map(([label, status]) => (
-              <div className="check-row" key={label}>
-                <span>{label}</span>
-                <span className={status === "차단" || status === "금지" ? "tag bad" : "tag good"}>{status}</span>
+            {checks.map((check) => (
+              <div className="check-row" key={check.label}>
+                <span>{check.label}</span>
+                <span className={`tag ${check.tone}`}>{check.status}</span>
               </div>
             ))}
           </div>

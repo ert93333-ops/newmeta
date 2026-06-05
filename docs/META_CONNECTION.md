@@ -26,6 +26,8 @@ External customer connections must use OAuth / Business Login. Customers must no
 
 `GET /api/integrations/meta/connect-url` returns a Meta OAuth URL containing a signed, 10-minute `state` value. The state is bound to the current authenticated user and tenant through HMAC-derived hashes, not raw user or tenant ids.
 
+The dashboard Meta Connection panel is the browser entry point for this route. It persists the selected tenant id to both `sessionStorage` and `localStorage` under `hermes:tenant-id`, sends that tenant as the `x-tenant-id` header, and forwards the current Supabase browser session bearer when one exists. The panel does not render any Meta token, app secret, or direct credential input.
+
 `GET /api/integrations/meta/callback` is the browser redirect target. It does not exchange or store Meta tokens. Instead it forwards `code` and `state` to `/meta/oauth/callback` in the URL fragment so the code is not sent back to the server as a query string on the client handoff page.
 
 `/meta/oauth/callback` reads the fragment client-side, clears it from browser history, retrieves the current Supabase browser session when available, and calls `POST /api/integrations/meta/callback`. Production callers must still provide the same tenant context used to create the connect URL, for example through the `hermes:tenant-id` browser storage key.
