@@ -75,6 +75,7 @@ export type ApprovalAction =
   | "meta_activate_ad"
   | "meta_pause_ad"
   | "meta_delete_ad"
+  | "meta_disconnect_connection"
   | "meta_change_targeting"
   | "meta_replace_creative"
   | "catalog_mutation"

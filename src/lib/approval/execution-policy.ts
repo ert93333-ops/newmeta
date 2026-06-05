@@ -88,6 +88,11 @@ const MOCK_EXECUTION_TEMPLATES: Record<GenericApprovalAction, MockExecutionTempl
     externalStatus: "DELETED",
     objectPrefix: "ad"
   },
+  meta_disconnect_connection: {
+    result: "mock_disconnected_meta_connection",
+    externalStatus: "DELETED",
+    objectPrefix: "meta_connection"
+  },
   meta_change_targeting: {
     result: "mock_changed_targeting",
     objectPrefix: "targeting"

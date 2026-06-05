@@ -127,6 +127,19 @@ describe("approval policy", () => {
     ).toBe("owner-2");
   });
 
+  it("treats Meta connection disconnects as destructive two-approval actions", () => {
+    const approval = createApprovalRequest({
+      context: { ...requester, role: "admin" },
+      action: "meta_disconnect_connection",
+      objectType: "meta_connection",
+      objectId: "connection-1"
+    });
+
+    expect(approval.riskLevel).toBe("destructive");
+    expect(approval.requiresSecondApproval).toBe(true);
+    expect(requiredTypedConfirmation(approval)).toBe("APPROVE meta_disconnect_connection");
+  });
+
   it("returns approval guard metadata for the UI", () => {
     const approval = createApprovalRequest({
       context: requester,

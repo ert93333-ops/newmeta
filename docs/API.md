@@ -29,6 +29,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `GET /api/integrations/meta/callback` only performs browser handoff. It redirects Meta's GET callback to `/meta/oauth/callback#code=...&state=...` and never exchanges or persists tokens itself. The client handoff page clears the fragment and calls the guarded POST route with the current Supabase session and tenant context.
 
+`DELETE /api/integrations/meta/:id` does not immediately remove tokens or integration data. It creates a tenant-scoped destructive `meta_disconnect_connection` approval request, writes an audit record, and returns typed-confirmation guard metadata. Actual cleanup must happen only after the two-step destructive approval flow.
+
 ## Creative and Diagnosis
 
 - `POST /api/creative-assets`

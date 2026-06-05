@@ -1,10 +1,19 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("Supabase migration guardrails", () => {
+  const migrationsDir = join(process.cwd(), "supabase/migrations");
+  const allMigrations = readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => readFileSync(join(migrationsDir, name), "utf8"))
+    .join("\n");
   const migration = readFileSync(
     join(process.cwd(), "supabase/migrations/20260531162030_hermes_foundation_schema.sql"),
+    "utf8"
+  );
+  const metaDisconnectMigration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260605055006_add_meta_disconnect_approval_action.sql"),
     "utf8"
   );
   const workerLifecycleMigration = readFileSync(
@@ -19,9 +28,15 @@ describe("Supabase migration guardrails", () => {
   });
 
   it("does not define budget mutation approval actions", () => {
-    expect(migration).not.toContain("change_budget");
-    expect(migration).not.toContain("daily_budget'");
+    expect(allMigrations).not.toContain("change_budget");
+    expect(allMigrations).not.toContain("daily_budget'");
     expect(migration).toContain("approval_action_no_budget");
+  });
+
+  it("adds Meta disconnect as a destructive approval action without token mutation columns", () => {
+    expect(metaDisconnectMigration).toContain("meta_disconnect_connection");
+    expect(metaDisconnectMigration).not.toContain("encrypted_access_token");
+    expect(metaDisconnectMigration).not.toContain("delete from");
   });
 
   it("keeps worker job claiming in private schema", () => {

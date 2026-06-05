@@ -126,6 +126,16 @@ describe("approval execution", () => {
     expect(() => planApprovalExecution("meta_create_ad_paused")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
   });
 
+  it("keeps Meta connection disconnect execution approval-gated and mock-safe outside production", () => {
+    clearEnv();
+    setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
+
+    expect(planApprovalExecution("meta_disconnect_connection")).toEqual({
+      mode: "mock",
+      result: "mock_disconnected_meta_connection"
+    });
+  });
+
   it("does not let the generic executor dispatch paid AI generation", () => {
     clearEnv();
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");

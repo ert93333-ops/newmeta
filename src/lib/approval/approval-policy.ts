@@ -109,6 +109,13 @@ const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
     executorRole: "admin",
     requiresSecondApproval: true
   },
+  meta_disconnect_connection: {
+    action: "meta_disconnect_connection",
+    riskLevel: "destructive",
+    minimumRequesterRole: "admin",
+    executorRole: "admin",
+    requiresSecondApproval: true
+  },
   meta_change_targeting: {
     action: "meta_change_targeting",
     riskLevel: "destructive",
