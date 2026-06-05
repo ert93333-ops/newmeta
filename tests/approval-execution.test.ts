@@ -136,6 +136,16 @@ describe("approval execution", () => {
     });
   });
 
+  it("keeps tenant data deletion execution approval-gated and mock-safe outside production", () => {
+    clearEnv();
+    setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
+
+    expect(planApprovalExecution("tenant_data_deletion")).toEqual({
+      mode: "mock",
+      result: "mock_tenant_data_deletion_recorded"
+    });
+  });
+
   it("does not let the generic executor dispatch paid AI generation", () => {
     clearEnv();
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");

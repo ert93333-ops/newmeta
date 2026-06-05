@@ -115,6 +115,8 @@ The API creates a pending `ai_paid_generation` approval only when the estimate i
 
 `GET /api/cost/usage` returns both the raw tenant-scoped usage rows and the server-calculated daily/monthly summary used by the cost guard.
 
+`POST /api/data-deletion-requests` does not immediately delete or queue tenant data deletion work. It creates a destructive `tenant_data_deletion` approval request, writes an audit record, and returns typed-confirmation guard metadata. Actual deletion execution must happen only after the two-step destructive approval flow.
+
 ## Budget Policy
 
 No route may execute budget changes. Budget-related recommendations are allowed only as text hypotheses or human-facing suggestions.

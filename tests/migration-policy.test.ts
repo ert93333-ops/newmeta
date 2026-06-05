@@ -16,6 +16,10 @@ describe("Supabase migration guardrails", () => {
     join(process.cwd(), "supabase/migrations/20260605055006_add_meta_disconnect_approval_action.sql"),
     "utf8"
   );
+  const dataDeletionApprovalMigration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260605060711_add_tenant_data_deletion_approval_action.sql"),
+    "utf8"
+  );
   const workerLifecycleMigration = readFileSync(
     join(process.cwd(), "supabase/migrations/20260605015446_worker_job_lifecycle.sql"),
     "utf8"
@@ -37,6 +41,12 @@ describe("Supabase migration guardrails", () => {
     expect(metaDisconnectMigration).toContain("meta_disconnect_connection");
     expect(metaDisconnectMigration).not.toContain("encrypted_access_token");
     expect(metaDisconnectMigration).not.toContain("delete from");
+  });
+
+  it("adds tenant data deletion as an approval action without deletion SQL", () => {
+    expect(dataDeletionApprovalMigration).toContain("tenant_data_deletion");
+    expect(dataDeletionApprovalMigration).not.toContain("delete from");
+    expect(dataDeletionApprovalMigration).not.toContain("drop table");
   });
 
   it("keeps worker job claiming in private schema", () => {

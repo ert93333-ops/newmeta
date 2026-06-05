@@ -140,6 +140,19 @@ describe("approval policy", () => {
     expect(requiredTypedConfirmation(approval)).toBe("APPROVE meta_disconnect_connection");
   });
 
+  it("treats tenant data deletion as a destructive two-approval action", () => {
+    const approval = createApprovalRequest({
+      context: { ...requester, role: "admin" },
+      action: "tenant_data_deletion",
+      objectType: "data_deletion_request",
+      objectId: "deletion-1"
+    });
+
+    expect(approval.riskLevel).toBe("destructive");
+    expect(approval.requiresSecondApproval).toBe(true);
+    expect(requiredTypedConfirmation(approval)).toBe("APPROVE tenant_data_deletion");
+  });
+
   it("returns approval guard metadata for the UI", () => {
     const approval = createApprovalRequest({
       context: requester,

@@ -104,6 +104,10 @@ const MOCK_EXECUTION_TEMPLATES: Record<GenericApprovalAction, MockExecutionTempl
   catalog_mutation: {
     result: "mock_catalog_mutation",
     objectPrefix: "catalog"
+  },
+  tenant_data_deletion: {
+    result: "mock_tenant_data_deletion_recorded",
+    objectPrefix: "data_deletion_request"
   }
 };
 

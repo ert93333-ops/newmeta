@@ -30,7 +30,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 
 - Read/report/analysis/validation: no approval.
 - Meta upload, creative creation, PAUSED campaign/adset/ad creation, paid AI generation: approval required.
-- ACTIVE transition, pause/delete, Meta connection disconnect, targeting change, creative replacement, catalog/feed mutation: admin/owner approval plus typed confirmation.
+- ACTIVE transition, pause/delete, Meta connection disconnect, tenant data deletion, targeting change, creative replacement, catalog/feed mutation: admin/owner approval plus typed confirmation.
 - Destructive actions require a second approval, and each approval must provide the typed confirmation.
 - Approval requests have finite TTLs: draft 24 hours, publish 4 hours, destructive 1 hour. Expired approvals cannot be approved or executed.
 - Budget mutation: hard block, no approval escape hatch.

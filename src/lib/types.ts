@@ -79,6 +79,7 @@ export type ApprovalAction =
   | "meta_change_targeting"
   | "meta_replace_creative"
   | "catalog_mutation"
+  | "tenant_data_deletion"
   | "ai_paid_generation";
 
 export interface MetaAdAccount {

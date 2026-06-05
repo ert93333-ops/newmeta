@@ -137,6 +137,13 @@ const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
     executorRole: "admin",
     requiresSecondApproval: true
   },
+  tenant_data_deletion: {
+    action: "tenant_data_deletion",
+    riskLevel: "destructive",
+    minimumRequesterRole: "admin",
+    executorRole: "admin",
+    requiresSecondApproval: true
+  },
   ai_paid_generation: {
     action: "ai_paid_generation",
     riskLevel: "draft",
