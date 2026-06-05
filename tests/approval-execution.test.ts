@@ -188,14 +188,27 @@ describe("approval execution", () => {
     });
   });
 
-  it("keeps tenant data deletion execution approval-gated and mock-safe outside production", () => {
+  it("requires a dedicated domain executor for tenant data deletion approvals", () => {
     clearEnv();
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "mock");
 
-    expect(planApprovalExecution("tenant_data_deletion")).toEqual({
-      mode: "mock",
-      result: "mock_tenant_data_deletion_recorded"
+    const approval = approveRequest(
+      createApprovalRequest({
+        context: disconnectRequester,
+        action: "tenant_data_deletion",
+        objectType: "data_deletion_request",
+        objectId: "delete-tenant-1",
+        afterJson: { status: "delete_requested" }
+      }),
+      approver,
+      { typedConfirmation: "APPROVE tenant_data_deletion" }
+    );
+    const fullyApproved = approveRequest(approval, secondApprover, {
+      typedConfirmation: "APPROVE tenant_data_deletion"
     });
+
+    expect(() => planApprovalExecution("tenant_data_deletion")).toThrow("APPROVAL_ACTION_EXECUTOR_REQUIRED");
+    expect(() => executeApprovedAction(fullyApproved)).toThrow("APPROVAL_ACTION_EXECUTOR_REQUIRED");
   });
 
   it("does not let the generic executor dispatch paid AI generation", () => {
@@ -326,6 +339,44 @@ describe("approval execution", () => {
     expect(stored?.status).toBe("approved");
     expect(stored?.executionResultJson).toBeUndefined();
     expect(usage).toHaveLength(0);
+  });
+
+  it("keeps tenant data deletion approvals approved when generic execution is requested", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const pending = createApprovalRequest({
+      context: disconnectRequester,
+      action: "tenant_data_deletion",
+      objectType: "data_deletion_request",
+      objectId: "delete-tenant-1",
+      afterJson: { status: "delete_requested" }
+    });
+    const firstApproved = approveRequest(pending, approver, {
+      typedConfirmation: "APPROVE tenant_data_deletion"
+    });
+    const approval = approveRequest(firstApproved, secondApprover, {
+      typedConfirmation: "APPROVE tenant_data_deletion"
+    });
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(new Request("http://localhost/api/test"), approver, approval.id);
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("APPROVAL_ACTION_EXECUTOR_REQUIRED");
+    expect(body.error.details).toMatchObject({
+      action: "tenant_data_deletion",
+      route: "/api/data-deletion-requests"
+    });
+    expect(stored?.status).toBe("approved");
+    expect(stored?.executionResultJson).toBeUndefined();
   });
 
   it("persists action-specific execution details before returning success", async () => {

@@ -4,7 +4,7 @@ import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
 import type { ApprovalAction, ApprovalRequest } from "@/lib/types";
 
 export type ApprovalExecutionMode = "mock" | "live";
-type GenericApprovalAction = Exclude<ApprovalAction, "ai_paid_generation" | "meta_create_ad_paused">;
+type GenericApprovalAction = Exclude<ApprovalAction, "ai_paid_generation" | "meta_create_ad_paused" | "tenant_data_deletion">;
 
 export interface ApprovalExecutionPlan {
   mode: ApprovalExecutionMode;
@@ -111,10 +111,6 @@ const MOCK_EXECUTION_TEMPLATES: Record<GenericApprovalAction, MockExecutionTempl
     result: "mock_catalog_mutation",
     objectPrefix: "catalog"
   },
-  tenant_data_deletion: {
-    result: "mock_tenant_data_deletion_recorded",
-    objectPrefix: "data_deletion_request"
-  }
 };
 
 export function configuredApprovalExecutionMode(): ApprovalExecutionMode {
@@ -177,6 +173,9 @@ function genericApprovalAction(action: ApprovalAction): GenericApprovalAction {
   }
   if (action === "meta_create_ad_paused") {
     throw new ApprovalActionDomainExecutorRequiredError(action, "/api/drafts/create-paused");
+  }
+  if (action === "tenant_data_deletion") {
+    throw new ApprovalActionDomainExecutorRequiredError(action, "/api/data-deletion-requests");
   }
   return action;
 }
