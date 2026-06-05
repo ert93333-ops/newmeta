@@ -58,6 +58,13 @@ export interface MetaConnectionRecord extends MetaConnectionInput {
   createdAt?: string;
 }
 
+export interface MetaConnectionDisconnectResult {
+  mode: "mock" | "live";
+  connection: MetaConnectionRecord;
+  previousStatus: string;
+  tokenMaterialCleared: boolean;
+}
+
 export interface IntegrationSettingsRecord {
   id?: string;
   tenantId: string;
@@ -228,6 +235,12 @@ export interface HermesRepository {
   getAsset(request: Request, context: UserContext, id: string): Promise<CreativeAssetRecord | null>;
   saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
   getMetaConnection(request: Request, context: UserContext, id: string): Promise<MetaConnectionRecord | null>;
+  disconnectMetaConnection(
+    request: Request,
+    context: UserContext,
+    id: string,
+    disconnectedBy: string
+  ): Promise<MetaConnectionDisconnectResult | null>;
   getLatestMetaConnection(request: Request, context: UserContext, provider: string): Promise<MetaConnectionRecord | null>;
   getIntegrationSettings(
     request: Request,
@@ -465,6 +478,42 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return connection;
+  }
+
+  async disconnectMetaConnection(
+    _request: Request,
+    context: UserContext,
+    id: string,
+    disconnectedBy: string
+  ): Promise<MetaConnectionDisconnectResult | null> {
+    const connection = await this.getMetaConnection(_request, context, id);
+    if (!connection) {
+      return null;
+    }
+    const now = new Date().toISOString();
+    const persisted: MetaConnectionRecord = {
+      ...connection,
+      encryptedAccessToken: "",
+      tokenIv: "",
+      tokenAuthTag: "",
+      tokenKid: "revoked",
+      scopes: [],
+      expiresAt: undefined,
+      status: "revoked",
+      metadataJson: mergeMetaConnectionMetadata(connection.metadataJson, {
+        disconnectedAt: now,
+        disconnectedBy,
+        previousStatus: connection.status,
+        disconnectReason: "approval_executed"
+      })
+    };
+    getMemoryStore().metaConnections.set(id, persisted);
+    return {
+      mode: "mock",
+      connection: persisted,
+      previousStatus: connection.status,
+      tokenMaterialCleared: true
+    };
   }
 
   async getLatestMetaConnection(
@@ -961,6 +1010,54 @@ export class SupabaseHermesRepository implements HermesRepository {
       .maybeSingle();
     if (error) throw new Error(`SUPABASE_META_CONNECTION_SELECT_FAILED:${error.message}`);
     return data ? fromMetaConnectionRow(data as MetaConnectionRow) : null;
+  }
+
+  async disconnectMetaConnection(
+    request: Request,
+    context: UserContext,
+    id: string,
+    disconnectedBy: string
+  ): Promise<MetaConnectionDisconnectResult | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.disconnectMetaConnection(request, context, id, disconnectedBy);
+
+    const existing = await this.getMetaConnection(request, context, id);
+    if (!existing) {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("meta_connections")
+      .update({
+        encrypted_access_token: "",
+        token_iv: "",
+        token_auth_tag: "",
+        token_kid: "revoked",
+        scopes: [],
+        expires_at: null,
+        status: "revoked",
+        metadata_json: mergeMetaConnectionMetadata(existing.metadataJson, {
+          disconnectedAt: new Date().toISOString(),
+          disconnectedBy,
+          previousStatus: existing.status,
+          disconnectReason: "approval_executed"
+        })
+      })
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_META_CONNECTION_UPDATE_FAILED:${error.message}`);
+    if (!data) {
+      return null;
+    }
+
+    return {
+      mode: "live",
+      connection: fromMetaConnectionRow(data as MetaConnectionRow),
+      previousStatus: existing.status,
+      tokenMaterialCleared: true
+    };
   }
 
   async getLatestMetaConnection(
@@ -2190,4 +2287,18 @@ function monthStartUtc(now: Date): Date {
 
 function settingKey(tenantId: string, provider: string): string {
   return `${tenantId}:${provider}`;
+}
+
+function mergeMetaConnectionMetadata(
+  existing: unknown,
+  updates: Record<string, unknown>
+): Record<string, unknown> {
+  const base =
+    typeof existing === "object" && existing !== null && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  return {
+    ...base,
+    ...updates
+  };
 }

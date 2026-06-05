@@ -34,6 +34,18 @@ const approver: UserContext = {
   role: "owner"
 };
 
+const secondApprover: UserContext = {
+  userId: "approver-2",
+  tenantId,
+  role: "admin"
+};
+
+const disconnectRequester: UserContext = {
+  userId: "requester-admin",
+  tenantId,
+  role: "admin"
+};
+
 function setEnv(key: (typeof ENV_KEYS)[number], value: string): void {
   mutableEnv[key] = value;
 }
@@ -101,6 +113,24 @@ function approvedPaidGenerationRequest() {
     }),
     approver
   );
+}
+
+function approvedDisconnectRequest() {
+  const pending = createApprovalRequest({
+    context: disconnectRequester,
+    action: "meta_disconnect_connection",
+    objectType: "meta_connection",
+    objectId: "connection-live-1",
+    afterJson: {
+      status: "disconnect_requested"
+    }
+  });
+  const firstApproved = approveRequest(pending, approver, {
+    typedConfirmation: "APPROVE meta_disconnect_connection"
+  });
+  return approveRequest(firstApproved, secondApprover, {
+    typedConfirmation: "APPROVE meta_disconnect_connection"
+  });
 }
 
 describe("approval execution", () => {
@@ -329,5 +359,73 @@ describe("approval execution", () => {
       }
     });
     expect(stored?.executionResultJson).toEqual(body.executionDetails);
+  });
+
+  it("executes a Meta disconnect approval by revoking stored token material", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    await repository.saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "connection-live-1",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-token",
+      tokenIv: "token-iv",
+      tokenAuthTag: "token-tag",
+      tokenKid: "primary",
+      scopes: ["ads_read", "ads_management", "business_management"],
+      expiresAt: "2026-06-07T00:00:00.000Z",
+      status: "connected",
+      metadataJson: {
+        label: "primary-meta"
+      }
+    });
+    const approval = approvedDisconnectRequest();
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const storedApproval = await repository.getApproval(new Request("http://localhost/api/test"), approver, approval.id);
+    const storedConnection = await repository.getMetaConnection(
+      new Request("http://localhost/api/test"),
+      approver,
+      "connection-live-1"
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.execution).toBe("mock_disconnected_meta_connection");
+    expect(body.executionDetails).toMatchObject({
+      operation: "meta_disconnect_connection",
+      externalObjectId: "connection-live-1",
+      externalStatus: "DELETED",
+      details: {
+        previousStatus: "connected",
+        disconnectedStatus: "revoked",
+        tokenMaterialCleared: true
+      }
+    });
+    expect(storedApproval?.status).toBe("executed");
+    expect(storedApproval?.executionResultJson).toEqual(body.executionDetails);
+    expect(storedConnection).toMatchObject({
+      id: "connection-live-1",
+      status: "revoked",
+      encryptedAccessToken: "",
+      tokenIv: "",
+      tokenAuthTag: "",
+      tokenKid: "revoked",
+      scopes: []
+    });
+    expect(storedConnection?.metadataJson).toMatchObject({
+      label: "primary-meta",
+      previousStatus: "connected",
+      disconnectReason: "approval_executed"
+    });
   });
 });
