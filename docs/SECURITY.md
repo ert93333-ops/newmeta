@@ -16,6 +16,8 @@ Authorization must not depend on user-editable metadata. Server-only code handle
 
 API routes must resolve user context from Supabase Auth and `user_roles` before reading or writing tenant data. The local mock context is only a non-production fallback when Supabase env vars are absent or `HERMES_AUTH_MODE=mock`; production runtime fails closed instead of creating an owner mock context.
 
+Tenant-scoped settings writes go through `PATCH /api/settings/*`, require `marketer` or above, persist into `integration_settings`, and write an audit log. Budget-namespaced settings paths are hard-blocked instead of being treated as normal persistence.
+
 ## Token Handling
 
 - Tokens are never returned to clients.
@@ -48,6 +50,6 @@ Risk actions write `audit_logs` with actor, tenant, object, before/after diff, a
 
 `npm run env:release-gates` must pass against the deployment environment before release. It fails closed if mock auth or mock Meta OAuth is enabled, required Supabase/Meta/worker/OAuth-state env is missing, placeholder values remain, token encryption is invalid, callback URLs point to localhost, weak state/worker secrets are configured, or secret-looking values are placed behind `NEXT_PUBLIC_*`.
 
-`npm run auth:smoke` should pass against the deployed production-mode app before customer access. It verifies that `/api/me` rejects unauthenticated requests, accepts a valid tenant membership, and optionally rejects a denied tenant id.
+`npm run auth:smoke` should pass against the deployed production-mode app before customer access. It verifies that `/api/me` rejects unauthenticated requests, accepts a valid tenant membership, rejects `PATCH /api/settings/budget` with `BUDGET_MUTATION_HARD_BLOCKED`, and optionally rejects a denied tenant id.
 
 `npm run github:release-gates` should pass after the latest `main` CI run succeeds. It verifies that the release branch is synced to GitHub, CI passed for `HEAD`, and branch protection requires CI while disallowing force pushes and branch deletion. A GitHub plan limitation that blocks private-repo branch protection is a release blocker.

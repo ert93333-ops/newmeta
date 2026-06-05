@@ -52,7 +52,7 @@ async function readJson(response) {
   }
 }
 
-async function callJson(baseUrl, path, { accessToken, tenantId } = {}) {
+async function callJson(baseUrl, path, { accessToken, tenantId, method = "GET", body } = {}) {
   const headers = {};
   if (accessToken) {
     headers.authorization = `Bearer ${accessToken}`;
@@ -60,8 +60,15 @@ async function callJson(baseUrl, path, { accessToken, tenantId } = {}) {
   if (tenantId) {
     headers["x-tenant-id"] = tenantId;
   }
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
+  }
 
-  const response = await globalThis.fetch(`${baseUrl}${path}`, { headers });
+  const response = await globalThis.fetch(`${baseUrl}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
   return {
     status: response.status,
     body: await readJson(response)
@@ -74,6 +81,17 @@ async function callMe(baseUrl, accessToken, tenantId) {
 
 async function callMetaConnectUrl(baseUrl, accessToken, tenantId) {
   return callJson(baseUrl, "/api/integrations/meta/connect-url", { accessToken, tenantId });
+}
+
+async function callBudgetBoundary(baseUrl, accessToken, tenantId) {
+  return callJson(baseUrl, "/api/settings/budget", {
+    accessToken,
+    tenantId,
+    method: "PATCH",
+    body: {
+      note: "Smoke test should still hit the hard block on the budget namespace."
+    }
+  });
 }
 
 function assertStatus(result, expectedStatus, label) {
@@ -152,6 +170,12 @@ async function main() {
     throw new Error("allowed tenant /api/me did not report budget mutation as hard_blocked");
   }
   assertNoCredentialEcho(allowed.body, "allowed tenant /api/me");
+
+  const budgetBoundary = await callBudgetBoundary(baseUrl, data.session.access_token, tenantId);
+  assertStatus(budgetBoundary, 403, "allowed tenant budget settings boundary");
+  if (budgetBoundary.body?.error?.code !== "BUDGET_MUTATION_HARD_BLOCKED") {
+    throw new Error("allowed tenant budget settings boundary did not return BUDGET_MUTATION_HARD_BLOCKED");
+  }
 
   const connectUrl = await callMetaConnectUrl(baseUrl, data.session.access_token, tenantId);
   assertStatus(connectUrl, 200, "allowed tenant Meta connect URL");

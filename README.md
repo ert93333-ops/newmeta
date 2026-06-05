@@ -34,7 +34,7 @@ npm run dev
 
 Copy `.env.example` to `.env.local` for local Supabase/Meta credentials. Use `MockMetaAdapter` for safe development without ad spend.
 
-For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth. `/api/me` can bootstrap the authenticated user's tenant memberships from a Supabase bearer token; tenant-scoped routes require the bearer token plus `x-tenant-id`.
+For local development without a Supabase project, keep `HERMES_AUTH_MODE=mock`. Production refuses mock auth. `/api/me` can bootstrap the authenticated user's tenant memberships from a Supabase bearer token; tenant-scoped routes require the bearer token plus `x-tenant-id`. `PATCH /api/settings/*` now persists tenant-scoped settings through `integration_settings` and requires `marketer` or above.
 
 For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=mock`, and run:
 
@@ -61,7 +61,7 @@ The migration follows current Supabase RLS guidance: RLS is enabled on exposed t
 
 Run `npm run supabase:validate` with Docker running to apply migrations to the local Supabase database, run schema lint, and run local security/performance advisors. The script only uses local Supabase and redacts local generated keys from command output.
 
-Run `npm run auth:smoke` against a deployed or production-mode app after setting `HERMES_APP_URL`, Supabase publishable env, smoke user credentials, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. It verifies `/api/me` rejects unauthenticated traffic, bootstraps tenant memberships from the signed-in user, accepts the allowed tenant, keeps budget mutation hard-blocked, prepares a signed Meta connect URL without exchanging Meta tokens, and optionally rejects `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID`.
+Run `npm run auth:smoke` against a deployed or production-mode app after setting `HERMES_APP_URL`, Supabase publishable env, smoke user credentials, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. It verifies `/api/me` rejects unauthenticated traffic, bootstraps tenant memberships from the signed-in user, accepts the allowed tenant, rejects `PATCH /api/settings/budget` with `BUDGET_MUTATION_HARD_BLOCKED`, prepares a signed Meta connect URL without exchanging Meta tokens, and optionally rejects `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID`.
 
 Relevant official docs checked during implementation:
 

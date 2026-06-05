@@ -117,6 +117,32 @@ describe("Hermes repository", () => {
     expect(JSON.stringify(usageList)).not.toContain("daily_budget");
   });
 
+  it("keeps integration settings tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const persisted = await repository.saveIntegrationSettings(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      provider: "cost-guard",
+      settingsJson: {
+        providerName: "mock-ai",
+        dailyCostCapKrw: 5000
+      }
+    });
+
+    await expect(repository.getIntegrationSettings(request, owner, "cost-guard")).resolves.toMatchObject({
+      id: persisted.id,
+      tenantId: owner.tenantId,
+      provider: "cost-guard",
+      settingsJson: {
+        providerName: "mock-ai",
+        dailyCostCapKrw: 5000
+      }
+    });
+    await expect(
+      repository.getIntegrationSettings(request, { ...owner, tenantId: "tenant-b" }, "cost-guard")
+    ).resolves.toBeNull();
+  });
+
   it("summarizes tenant cost usage by server-side created time", async () => {
     const repository = new MemoryHermesRepository();
     const summaryOwner = {

@@ -53,6 +53,16 @@ export interface MetaConnectionInput {
   metadataJson?: unknown;
 }
 
+export interface IntegrationSettingsRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  provider: string;
+  settingsJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -66,6 +76,12 @@ export interface HermesRepository {
   getJob(request: Request, context: UserContext, id: string): Promise<Record<string, unknown> | null>;
   saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>>;
   saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
+  getIntegrationSettings(
+    request: Request,
+    context: UserContext,
+    provider: string
+  ): Promise<IntegrationSettingsRecord | null>;
+  saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord>;
 }
 
 interface HermesMemoryStore {
@@ -73,6 +89,7 @@ interface HermesMemoryStore {
   jobs: Map<string, Record<string, unknown>>;
   assets: Map<string, Record<string, unknown>>;
   metaConnections: Map<string, MetaConnectionInput>;
+  integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
   auditLogs: AuditLogInput[];
 }
@@ -86,6 +103,7 @@ function getMemoryStore(): HermesMemoryStore {
       jobs: new Map(),
       assets: new Map(),
       metaConnections: new Map(),
+      integrationSettings: new Map(),
       costUsage: [],
       auditLogs: []
     };
@@ -168,6 +186,27 @@ export class MemoryHermesRepository implements HermesRepository {
   async saveMetaConnection(_request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
     getMemoryStore().metaConnections.set(connection.id, connection);
     return connection;
+  }
+
+  async getIntegrationSettings(
+    _request: Request,
+    context: UserContext,
+    provider: string
+  ): Promise<IntegrationSettingsRecord | null> {
+    const setting = getMemoryStore().integrationSettings.get(settingKey(context.tenantId, provider));
+    return setting ?? null;
+  }
+
+  async saveIntegrationSettings(_request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...settings,
+      id: settings.id ?? crypto.randomUUID(),
+      createdAt: settings.createdAt || now,
+      updatedAt: now
+    };
+    getMemoryStore().integrationSettings.set(settingKey(settings.tenantId, settings.provider), persisted);
+    return persisted;
   }
 }
 
@@ -341,6 +380,50 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_META_CONNECTION_INSERT_FAILED:${error.message}`);
     return connection;
   }
+
+  async getIntegrationSettings(
+    request: Request,
+    context: UserContext,
+    provider: string
+  ): Promise<IntegrationSettingsRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getIntegrationSettings(request, context, provider);
+
+    const { data, error } = await supabase
+      .from("integration_settings")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("provider", provider)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_SETTINGS_SELECT_FAILED:${error.message}`);
+    return data ? fromIntegrationSettingsRow(data as IntegrationSettingsRow) : null;
+  }
+
+  async saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveIntegrationSettings(request, settings);
+
+    if (!settings.id) {
+      const { data, error } = await supabase
+        .from("integration_settings")
+        .insert(toIntegrationSettingsInsertRow(settings))
+        .select("*")
+        .single();
+      if (error) throw new Error(`SUPABASE_SETTINGS_INSERT_FAILED:${error.message}`);
+      return fromIntegrationSettingsRow(data as IntegrationSettingsRow);
+    }
+
+    const { data, error } = await supabase
+      .from("integration_settings")
+      .update(toIntegrationSettingsUpdateRow(settings))
+      .eq("id", settings.id)
+      .eq("tenant_id", settings.tenantId)
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_SETTINGS_UPDATE_FAILED:${error.message}`);
+    if (!data) throw new Error("SUPABASE_SETTINGS_UPDATE_MISSED");
+    return fromIntegrationSettingsRow(data as IntegrationSettingsRow);
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -391,6 +474,16 @@ interface ApprovalRow {
   reason?: string | null;
   execution_result_json?: unknown;
   expires_at?: string | null;
+}
+
+interface IntegrationSettingsRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  provider: string;
+  settings_json: unknown;
+  created_at: string;
+  updated_at: string;
 }
 
 function toApprovalRow(approval: ApprovalRequest): Record<string, unknown> {
@@ -494,6 +587,34 @@ function toMetaConnectionRow(connection: MetaConnectionInput): Record<string, un
     expires_at: connection.expiresAt,
     status: connection.status,
     metadata_json: connection.metadataJson ?? {}
+  };
+}
+
+function toIntegrationSettingsInsertRow(settings: IntegrationSettingsRecord): Record<string, unknown> {
+  return {
+    tenant_id: settings.tenantId,
+    created_by: settings.createdBy,
+    provider: settings.provider,
+    settings_json: settings.settingsJson ?? {}
+  };
+}
+
+function toIntegrationSettingsUpdateRow(settings: IntegrationSettingsRecord): Record<string, unknown> {
+  return {
+    provider: settings.provider,
+    settings_json: settings.settingsJson ?? {}
+  };
+}
+
+function fromIntegrationSettingsRow(row: IntegrationSettingsRow): IntegrationSettingsRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    provider: row.provider,
+    settingsJson: row.settings_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -649,4 +770,8 @@ function dayStartUtc(now: Date): Date {
 
 function monthStartUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function settingKey(tenantId: string, provider: string): string {
+  return `${tenantId}:${provider}`;
 }
