@@ -134,10 +134,22 @@ describe("create paused draft route", () => {
   it("creates a real approval request when preflight passes but no approval is supplied", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-approval-1",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {}
+    });
 
     const response = await createPausedDraft(
       request({
         draftId: "draft-approval-1",
+        adAccountId: "act_approval_1",
+        assetId: "asset-approval-1",
         manifest,
         pageId: "page_1",
         payload: {
@@ -167,6 +179,56 @@ describe("create paused draft route", () => {
       typedConfirmationRequired: false
     });
     expect(stored?.objectId).toBe("draft-approval-1");
+  });
+
+  it("fails closed before creating approval when no persisted asset id is supplied", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-missing-asset-before-approval",
+        adAccountId: "act_missing_asset",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(400);
+    expect(body.error?.code).toBe("CREATIVE_ASSET_ID_REQUIRED");
+    expect(approvals.find((item) => item.objectId === "draft-missing-asset-before-approval")).toBeUndefined();
+  });
+
+  it("fails closed before creating approval when the Meta ad account id is missing", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-missing-adaccount-before-approval",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {}
+    });
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-missing-adaccount-before-approval",
+        assetId: "asset-missing-adaccount-before-approval",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(400);
+    expect(body.error?.code).toBe("META_AD_ACCOUNT_REQUIRED");
+    expect(approvals.find((item) => item.objectId === "draft-missing-adaccount-before-approval")).toBeUndefined();
   });
 
   it("blocks draft creation when server-side preflight fails", async () => {
@@ -280,6 +342,8 @@ describe("create paused draft route", () => {
       request({
         draftId: "draft-approved-reuse",
         approvalRequestId: approval.id,
+        adAccountId: "act_123",
+        assetId: "asset-reuse-1",
         manifest,
         pageId: "page_1"
       })
@@ -364,6 +428,55 @@ describe("create paused draft route", () => {
     expect(body.error?.code).toBe("META_ASSET_SOURCE_URL_REQUIRED");
     expect(storedApproval?.status).toBe("approved");
     expect(storedDraft).toBeNull();
+  });
+
+  it("fails closed before creating approval when a live asset lacks a public source URL", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-live-missing-source-before-approval",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-before-approval",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-missing-source-before-approval",
+        adAccountId: "act_live_123",
+        assetId: "asset-live-missing-source-before-approval",
+        manifest,
+        pageId: "page_1"
+      })
+    );
+    const body = (await response.json()) as { error?: { code?: string } };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(422);
+    expect(body.error?.code).toBe("META_ASSET_SOURCE_URL_REQUIRED");
+    expect(approvals.find((item) => item.objectId === "draft-live-missing-source-before-approval")).toBeUndefined();
   });
 
   it("executes the full live Meta paused-draft chain server-side when a stored connection and source URL exist", async () => {

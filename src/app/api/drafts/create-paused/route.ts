@@ -52,6 +52,16 @@ export async function POST(request: Request) {
       return fail("DRAFT_PREFLIGHT_BLOCKED", "Draft preflight blocked this request.", 422, preflight);
     }
 
+    const readiness = await resolvePausedDraftReadiness({
+      request,
+      context,
+      repository,
+      body,
+      payload
+    });
+    if (readiness instanceof Response) {
+      return readiness;
+    }
     const approvalRequestId = readOptionalString(body.approvalRequestId);
     if (!approvalRequestId) {
       const approval = createApprovalRequest({
@@ -65,10 +75,13 @@ export async function POST(request: Request) {
         afterJson: {
           draftId,
           draftType,
-          adAccountId: readOptionalString(body.adAccountId),
-          assetId: readOptionalString(body.assetId),
+          adAccountId: readiness.adAccountId,
+          assetId: readiness.asset.id,
           metaStatus: "PAUSED",
           preflight,
+          adapterMode: readiness.resolvedAdapter.mode,
+          connectionSource: readiness.resolvedAdapter.source,
+          connectionId: readiness.resolvedAdapter.connectionId,
           payload
         },
         reason: readOptionalString(body.reason) ?? "Create PAUSED Meta draft after preflight."
@@ -106,69 +119,28 @@ export async function POST(request: Request) {
     }
     assertExecutableApproval(approval, context);
 
-    const assetId = readOptionalString(body.assetId) ?? readOptionalString(body.manifest?.asset?.id);
-    if (!assetId) {
-      return fail("CREATIVE_ASSET_ID_REQUIRED", "Draft execution requires a persisted asset id.", 400);
-    }
-    const asset = await repository.getAsset(request, context, assetId);
-    if (!asset) {
-      return fail("CREATIVE_ASSET_NOT_FOUND", "Draft execution requires a same-tenant persisted asset.", 404, {
-        assetId
-      });
-    }
-
-    const adAccountId = readOptionalString(body.adAccountId);
-    if (!adAccountId) {
-      return fail("META_AD_ACCOUNT_REQUIRED", "Draft execution requires a Meta ad account id.", 400);
-    }
-
-    const resolvedAdapter = await resolveMetaAdapter({
-      request,
-      context,
-      repository
-    });
-    if (resolvedAdapter.mode === "live" && !asset.sourceUrl) {
-      return fail(
-        "META_ASSET_SOURCE_URL_REQUIRED",
-        "Live Meta draft execution requires a persisted public source URL for the creative asset.",
-        422,
-        {
-          assetId: asset.id
-        }
-      );
-    }
-    if (resolvedAdapter.mode === "live" && asset.assetType === "video" && !readPayloadString(payload, "thumbnailUrl")) {
-      return fail(
-        "META_VIDEO_THUMBNAIL_REQUIRED",
-        "Live Meta video draft execution requires a thumbnailUrl for the creative preview.",
-        422,
-        {
-          assetId: asset.id
-        }
-      );
-    }
     const executionInput = buildPausedDraftExecutionInput({
       draftId,
-      adAccountId,
+      adAccountId: readiness.adAccountId,
       manifest: readManifest(body.manifest),
       pageId: readOptionalString(body.pageId)!,
       instagramActorId: readOptionalString(body.instagramActorId),
       linkUrl: readOptionalString(body.linkUrl) ?? readManifest(body.manifest).linkUrl!,
-      asset,
+      asset: readiness.asset,
       approval,
       payload,
       existingCampaignId: readOptionalString(body.metaCampaignId),
       existingAdsetId: readOptionalString(body.metaAdsetId),
       existingAdId: readOptionalString(body.metaAdId)
     });
-    const execution = await executePausedDraftThroughAdapter(resolvedAdapter.adapter, executionInput);
+    const execution = await executePausedDraftThroughAdapter(readiness.resolvedAdapter.adapter, executionInput);
 
     const draft = await repository.saveAdDraft(request, {
       id: draftId,
       tenantId: context.tenantId,
       createdBy: context.userId,
-      adAccountId,
-      assetId,
+      adAccountId: readiness.adAccountId,
+      assetId: readiness.asset.id,
       approvalRequestId: approval.id,
       metaCampaignId: execution.campaignId,
       metaAdsetId: execution.adsetId,
@@ -183,9 +155,9 @@ export async function POST(request: Request) {
       result: "paused_draft_created",
       draftId: draft.id,
       metaStatus: draft.metaStatus,
-      adapterMode: resolvedAdapter.mode,
-      connectionSource: resolvedAdapter.source,
-      connectionId: resolvedAdapter.connectionId,
+      adapterMode: readiness.resolvedAdapter.mode,
+      connectionSource: readiness.resolvedAdapter.source,
+      connectionId: readiness.resolvedAdapter.connectionId,
       imageHash: execution.imageHash,
       videoId: execution.videoId,
       creativeId: execution.creativeId,
@@ -254,6 +226,12 @@ interface PausedDraftExecutionResult {
   campaignId: string;
   adsetId: string;
   adId: string;
+}
+
+interface PausedDraftReadiness {
+  adAccountId: string;
+  asset: CreativeAssetRecord;
+  resolvedAdapter: Awaited<ReturnType<typeof resolveMetaAdapter>>;
 }
 
 async function executePausedDraftThroughAdapter(
@@ -366,6 +344,65 @@ function buildPausedDraftExecutionInput(input: {
   existingAdId?: string;
 }): PausedDraftExecutionInput {
   return input;
+}
+
+async function resolvePausedDraftReadiness(input: {
+  request: Request;
+  context: Awaited<ReturnType<typeof resolveUserContext>>;
+  repository: ReturnType<typeof getRepository>;
+  body: CreatePausedDraftRequest;
+  payload: unknown;
+}): Promise<PausedDraftReadiness | Response> {
+  const assetId = readOptionalString(input.body.assetId) ?? readOptionalString(input.body.manifest?.asset?.id);
+  if (!assetId) {
+    return fail("CREATIVE_ASSET_ID_REQUIRED", "Draft creation requires a persisted asset id.", 400);
+  }
+
+  const asset = await input.repository.getAsset(input.request, input.context, assetId);
+  if (!asset) {
+    return fail("CREATIVE_ASSET_NOT_FOUND", "Draft creation requires a same-tenant persisted asset.", 404, {
+      assetId
+    });
+  }
+
+  const adAccountId = readOptionalString(input.body.adAccountId);
+  if (!adAccountId) {
+    return fail("META_AD_ACCOUNT_REQUIRED", "Draft creation requires a Meta ad account id.", 400);
+  }
+
+  const resolvedAdapter = await resolveMetaAdapter({
+    request: input.request,
+    context: input.context,
+    repository: input.repository
+  });
+
+  if (resolvedAdapter.mode === "live" && !asset.sourceUrl) {
+    return fail(
+      "META_ASSET_SOURCE_URL_REQUIRED",
+      "Live Meta draft execution requires a persisted public source URL for the creative asset.",
+      422,
+      {
+        assetId: asset.id
+      }
+    );
+  }
+
+  if (resolvedAdapter.mode === "live" && asset.assetType === "video" && !readPayloadString(input.payload, "thumbnailUrl")) {
+    return fail(
+      "META_VIDEO_THUMBNAIL_REQUIRED",
+      "Live Meta video draft execution requires a thumbnailUrl for the creative preview.",
+      422,
+      {
+        assetId: asset.id
+      }
+    );
+  }
+
+  return {
+    adAccountId,
+    asset,
+    resolvedAdapter
+  };
 }
 
 function toCreativeAssetMetadata(asset: CreativeAssetRecord): CreativeAssetMetadata {
