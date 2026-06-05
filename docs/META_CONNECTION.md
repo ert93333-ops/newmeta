@@ -6,6 +6,8 @@ Meta integration uses an adapter contract:
 - `MetaMcpAdapter`: AI agent integration surface
 - `MockMetaAdapter`: tests and local development without ad spend
 
+`MetaGraphApiAdapter` must send customer/server tokens through server-side `Authorization: Bearer` headers only. It must not append tokens to Graph API URLs or accept token-shaped fields in request params/body.
+
 Required candidate scopes:
 
 - `ads_read`
