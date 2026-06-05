@@ -430,6 +430,148 @@ describe("create paused draft route", () => {
     expect(storedDraft).toBeNull();
   });
 
+  it("cancels the approval and records partial Meta ids when live execution fails after side effects", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    const approval = approvedDraftApproval("draft-live-partial-failure");
+    await repository.saveApproval(request({}), approval);
+    await repository.saveAsset(request({}), {
+      id: "asset-live-partial-failure",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      sourceUrl: "https://cdn.example.com/assets/live-partial-failure.png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 16).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-partial-failure",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const fetchMock = vi
+      .fn(async () => Response.json({ images: { "live-partial-failure.png": { hash: "hash_live_partial" } } }))
+      .mockImplementationOnce(async () =>
+        Response.json({
+          images: {
+            "live-partial-failure.png": {
+              hash: "hash_live_partial"
+            }
+          }
+        })
+      )
+      .mockImplementationOnce(async () => Response.json({ id: "creative_live_partial" }))
+      .mockImplementationOnce(async () => Response.json({ success: true }))
+      .mockImplementationOnce(async () => Response.json({ id: "cmp_live_partial" }))
+      .mockImplementationOnce(async () => Response.json({ success: true }))
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                message: "Ad set rejected by provider",
+                type: "OAuthException",
+                code: 100,
+                error_subcode: 1815758
+              }
+            }),
+            { status: 400 }
+          )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-partial-failure",
+        approvalRequestId: approval.id,
+        adAccountId: "act_live_123",
+        assetId: "asset-live-partial-failure",
+        manifest,
+        pageId: "page_1",
+        payload: {
+          campaignName: "Live campaign",
+          adsetName: "Live adset",
+          adName: "Live ad",
+          creativeName: "Live creative",
+          objective: "OUTCOME_SALES",
+          optimizationGoal: "OFFSITE_CONVERSIONS",
+          targeting: {
+            geo_locations: {
+              countries: ["KR"]
+            }
+          },
+          promotedObject: {
+            pixel_id: "pixel_123",
+            custom_event_type: "PURCHASE"
+          },
+          billingEvent: "IMPRESSIONS",
+          bidStrategy: "LOWEST_COST_WITHOUT_CAP",
+          headline: "Hook",
+          description: "Description",
+          message: "Primary text",
+          callToActionType: "SHOP_NOW"
+        }
+      })
+    );
+    const body = (await response.json()) as {
+      error?: {
+        code?: string;
+        details?: {
+          partialExecution?: {
+            imageHash?: string;
+            creativeId?: string;
+            campaignId?: string;
+          };
+          approval?: {
+            id?: string;
+            status?: string;
+          };
+        };
+      };
+    };
+    const storedApproval = await repository.getApproval(request({}), requester, approval.id);
+    const storedDraft = await repository.getAdDraft(request({}), requester, "draft-live-partial-failure");
+
+    expect(response.status).toBe(400);
+    expect(body.error?.code).toBe("META_GRAPH_REQUEST_FAILED");
+    expect(body.error?.details?.partialExecution).toMatchObject({
+      imageHash: "hash_live_partial",
+      creativeId: "creative_live_partial",
+      campaignId: "cmp_live_partial"
+    });
+    expect(body.error?.details?.approval).toMatchObject({
+      id: approval.id,
+      status: "cancelled"
+    });
+    expect(storedApproval).toMatchObject({
+      status: "cancelled",
+      executionResultJson: {
+        result: "paused_draft_create_failed_partial",
+        imageHash: "hash_live_partial",
+        creativeId: "creative_live_partial",
+        campaignId: "cmp_live_partial",
+        errorCode: "META_GRAPH_REQUEST_FAILED"
+      }
+    });
+    expect(storedDraft).toBeNull();
+  });
+
   it("fails closed before creating approval when a live asset lacks a public source URL", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();

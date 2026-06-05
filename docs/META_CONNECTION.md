@@ -48,6 +48,8 @@ Live draft execution requires a persisted creative asset `sourceUrl`. Video crea
 
 For campaign and ad set payloads, the live executor now uses Meta's documented `execution_options=["validate_only"]` support before the real create call. This surfaces provider validation errors earlier and returns sanitized provider details without exposing the bearer token.
 
+If a later live create step fails after earlier Meta objects were already created, Hermes records those partial ids in the approval execution result and audit log, then cancels the approval. This prevents the same approval from being retried blindly and creating duplicate upstream objects.
+
 The OAuth callback response must not include token-shaped fields such as `token`, `access_token`, `refresh_token`, or `client_secret`. It may return connection status and whether encrypted token storage succeeded.
 
 The OAuth callback request accepts authorization `code` and signed `state` values only. Direct token payload fields such as `access_token`, `refresh_token`, and `client_secret` are rejected by the guarded API JSON boundary.

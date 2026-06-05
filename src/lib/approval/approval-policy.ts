@@ -322,3 +322,16 @@ export function markExecuted(request: ApprovalRequest, executionResultJson?: unk
     executionResultJson: executionResultJson ?? request.executionResultJson
   };
 }
+
+export function markCancelled(
+  request: ApprovalRequest,
+  executionResultJson?: unknown,
+  reason?: string
+): ApprovalRequest {
+  return {
+    ...request,
+    status: "cancelled",
+    reason: reason ?? request.reason,
+    executionResultJson: executionResultJson ?? request.executionResultJson
+  };
+}

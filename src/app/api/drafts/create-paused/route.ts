@@ -3,11 +3,13 @@ import {
   approvalGuardDetails,
   assertExecutableApproval,
   createApprovalRequest,
+  markCancelled,
   markExecuted
 } from "@/lib/approval/approval-policy";
 import { handleError, ok, parseWriteJson, fail } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { runDraftPreflight, type DraftPreflightInput } from "@/lib/drafts/preflight";
+import { MetaGraphRequestError } from "@/lib/meta/graph-meta-adapter";
 import { assertLiveMetaAdSetInput } from "@/lib/meta/live-draft-validation";
 import { resolveMetaAdapter } from "@/lib/meta/resolve-meta-adapter";
 import { getRepository } from "@/lib/repositories/hermes-repository";
@@ -134,7 +136,43 @@ export async function POST(request: Request) {
       existingAdsetId: readOptionalString(body.metaAdsetId),
       existingAdId: readOptionalString(body.metaAdId)
     });
-    const execution = await executePausedDraftThroughAdapter(readiness.resolvedAdapter.adapter, executionInput);
+    let execution: PausedDraftExecutionResult;
+    try {
+      execution = await executePausedDraftThroughAdapter(readiness.resolvedAdapter.adapter, executionInput);
+    } catch (error) {
+      if (error instanceof PartialPausedDraftExecutionError) {
+        const cancelled = markCancelled(
+          approval,
+          {
+            result: "paused_draft_create_failed_partial",
+            adapterMode: readiness.resolvedAdapter.mode,
+            connectionSource: readiness.resolvedAdapter.source,
+            connectionId: readiness.resolvedAdapter.connectionId,
+            ...error.partial,
+            errorCode: error.causeError instanceof MetaGraphRequestError ? error.causeError.code : "REQUEST_FAILED"
+          },
+          "Paused draft execution failed after partial Meta side effects."
+        );
+        const persistedApproval = await repository.updateApproval(request, cancelled);
+        await repository.saveAuditLog(request, {
+          tenantId: context.tenantId,
+          userId: context.userId,
+          action: "draft_create_failed:meta_create_ad_paused",
+          objectType: "ad_draft",
+          objectId: draftId,
+          approvalRequestId: persistedApproval.id,
+          beforeJson: approval,
+          afterJson: {
+            approval: persistedApproval,
+            partialExecution: error.partial,
+            error: serializePausedDraftFailure(error.causeError)
+          },
+          result: "paused_draft_create_failed_partial"
+        });
+        return failFromPausedDraftFailure(error.causeError, persistedApproval, error.partial);
+      }
+      throw error;
+    }
 
     const draft = await repository.saveAdDraft(request, {
       id: draftId,
@@ -229,16 +267,36 @@ interface PausedDraftExecutionResult {
   adId: string;
 }
 
+interface PartialPausedDraftExecution {
+  imageHash?: string;
+  videoId?: string;
+  creativeId?: string;
+  campaignId?: string;
+  adsetId?: string;
+  adId?: string;
+}
+
 interface PausedDraftReadiness {
   adAccountId: string;
   asset: CreativeAssetRecord;
   resolvedAdapter: Awaited<ReturnType<typeof resolveMetaAdapter>>;
 }
 
+class PartialPausedDraftExecutionError extends Error {
+  constructor(
+    readonly partial: PartialPausedDraftExecution,
+    readonly causeError: unknown
+  ) {
+    super("PAUSED_DRAFT_EXECUTION_PARTIAL_FAILURE");
+  }
+}
+
 async function executePausedDraftThroughAdapter(
   adapter: Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"],
   input: PausedDraftExecutionInput
 ): Promise<PausedDraftExecutionResult> {
+  const partial: PartialPausedDraftExecution = {};
+  try {
     const uploadResult =
       input.asset.assetType === "video"
       ? await adapter.uploadVideo({
@@ -255,6 +313,8 @@ async function executePausedDraftThroughAdapter(
           storagePath: input.asset.storagePath,
           approval: input.approval
         });
+    partial.imageHash = "imageHash" in uploadResult ? uploadResult.imageHash : undefined;
+    partial.videoId = "videoId" in uploadResult ? uploadResult.videoId : undefined;
 
   const creative = await adapter.createCreative({
     adAccountId: input.adAccountId,
@@ -272,6 +332,7 @@ async function executePausedDraftThroughAdapter(
     callToActionType: readPayloadString(input.payload, "callToActionType"),
     approval: input.approval
   });
+    partial.creativeId = creative.creativeId;
 
   const campaignId =
     input.existingCampaignId ??
@@ -285,6 +346,7 @@ async function executePausedDraftThroughAdapter(
         approval: input.approval
       })
     ).campaignId;
+    partial.campaignId = campaignId;
 
   const adsetId =
     input.existingAdsetId ??
@@ -306,6 +368,7 @@ async function executePausedDraftThroughAdapter(
         approval: input.approval
       })
     ).adsetId;
+    partial.adsetId = adsetId;
 
   const adId =
     input.existingAdId ??
@@ -320,6 +383,7 @@ async function executePausedDraftThroughAdapter(
         approval: input.approval
       })
     ).adId;
+    partial.adId = adId;
 
   return {
     imageHash: "imageHash" in uploadResult ? uploadResult.imageHash : undefined,
@@ -329,6 +393,12 @@ async function executePausedDraftThroughAdapter(
     adsetId,
     adId
   };
+  } catch (error) {
+    if (hasPartialPausedDraftExecution(partial)) {
+      throw new PartialPausedDraftExecutionError(partial, error);
+    }
+    throw error;
+  }
 }
 
 function buildPausedDraftExecutionInput(input: {
@@ -483,6 +553,81 @@ async function createAdSetWithValidation(
     endTime: input.endTime
   });
   return adapter.createAdSetPaused(input);
+}
+
+function hasPartialPausedDraftExecution(partial: PartialPausedDraftExecution): boolean {
+  return Boolean(
+    partial.imageHash ||
+      partial.videoId ||
+      partial.creativeId ||
+      partial.campaignId ||
+      partial.adsetId ||
+      partial.adId
+  );
+}
+
+function serializePausedDraftFailure(error: unknown): Record<string, unknown> {
+  if (error instanceof MetaGraphRequestError) {
+    return {
+      code: error.code,
+      status: error.status,
+      metaErrorType: error.metaErrorType,
+      metaErrorCode: error.metaErrorCode,
+      metaErrorSubcode: error.metaErrorSubcode,
+      providerMessage: error.providerMessage
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      code: "REQUEST_FAILED",
+      message: error.message
+    };
+  }
+  return {
+    code: "UNKNOWN_ERROR"
+  };
+}
+
+function failFromPausedDraftFailure(
+  error: unknown,
+  approval: { id: string; status: string },
+  partial: PartialPausedDraftExecution
+): Response {
+  if (error instanceof MetaGraphRequestError) {
+    return fail(
+      error.code,
+      "Meta Graph API request failed after partial paused-draft side effects.",
+      error.status >= 400 && error.status < 600 ? error.status : 502,
+      {
+        status: error.status,
+        metaErrorType: error.metaErrorType,
+        metaErrorCode: error.metaErrorCode,
+        metaErrorSubcode: error.metaErrorSubcode,
+        providerMessage: error.providerMessage,
+        partialExecution: partial,
+        approval: {
+          id: approval.id,
+          status: approval.status
+        }
+      }
+    );
+  }
+  if (error instanceof Error) {
+    return fail("REQUEST_FAILED", error.message, 502, {
+      partialExecution: partial,
+      approval: {
+        id: approval.id,
+        status: approval.status
+      }
+    });
+  }
+  return fail("UNKNOWN_ERROR", "Paused draft execution failed after partial side effects.", 502, {
+    partialExecution: partial,
+    approval: {
+      id: approval.id,
+      status: approval.status
+    }
+  });
 }
 
 function toCreativeAssetMetadata(asset: CreativeAssetRecord): CreativeAssetMetadata {
