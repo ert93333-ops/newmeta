@@ -3,6 +3,21 @@ import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
 
+export async function GET(request: Request) {
+  try {
+    const context = await resolveUserContext(request);
+    const approvals = await getRepository().listApprovals(request, context);
+    return ok({
+      approvals: approvals.map((approval) => ({
+        approval,
+        guard: approvalGuardDetails(approval)
+      }))
+    });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const context = await resolveUserContext(request);

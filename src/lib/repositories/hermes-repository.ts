@@ -56,6 +56,7 @@ export interface MetaConnectionInput {
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
+  listApprovals(request: Request, context: UserContext, limit?: number): Promise<ApprovalRequest[]>;
   updateApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   saveAuditLog(request: Request, audit: AuditLogInput): Promise<void>;
   saveCostUsage(request: Request, usage: CostUsageInput): Promise<void>;
@@ -111,6 +112,13 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return approval;
+  }
+
+  async listApprovals(_request: Request, context: UserContext, limit = 50): Promise<ApprovalRequest[]> {
+    return Array.from(getMemoryStore().approvals.values())
+      .filter((approval) => approval.tenantId === context.tenantId)
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .slice(0, limit);
   }
 
   async updateApproval(_request: Request, approval: ApprovalRequest): Promise<ApprovalRequest> {
@@ -187,6 +195,20 @@ export class SupabaseHermesRepository implements HermesRepository {
       .maybeSingle();
     if (error) throw new Error(`SUPABASE_APPROVAL_SELECT_FAILED:${error.message}`);
     return data ? fromApprovalRow(data as ApprovalRow) : null;
+  }
+
+  async listApprovals(request: Request, context: UserContext, limit = 50): Promise<ApprovalRequest[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listApprovals(request, context, limit);
+
+    const { data, error } = await supabase
+      .from("approval_requests")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`SUPABASE_APPROVAL_LIST_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromApprovalRow(row as ApprovalRow));
   }
 
   async updateApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest> {

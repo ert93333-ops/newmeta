@@ -33,6 +33,7 @@ API routes must resolve user context from Supabase Auth and `user_roles` before 
 - ACTIVE transition, pause/delete, Meta connection disconnect, tenant data deletion, targeting change, creative replacement, catalog/feed mutation: admin/owner approval plus typed confirmation.
 - Destructive actions require a second approval, and each approval must provide the typed confirmation.
 - Approval requests have finite TTLs: draft 24 hours, publish 4 hours, destructive 1 hour. Expired approvals cannot be approved or executed.
+- Approval request listing is tenant-scoped and returns guard metadata so clients do not infer approval policy from user-editable fields.
 - Budget mutation: hard block, no approval escape hatch.
 - Approval execution must go through the action-specific executor registry and fail closed in production unless a real live executor is configured; mock execution is local-only.
 - Approval execution must persist the executor result, and Supabase approval updates must confirm that a row was actually updated so RLS or tenant mismatches cannot be reported as successful execution.

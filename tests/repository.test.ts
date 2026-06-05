@@ -58,6 +58,43 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("lists tenant approvals newest first in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const listOwner = { ...owner, tenantId: "tenant-approval-list" };
+    const otherTenantOwner = { ...owner, tenantId: "tenant-approval-list-other" };
+    const olderApproval = {
+      ...createApprovalRequest({
+        context: { ...listOwner, role: "marketer" },
+        action: "meta_create_ad_paused",
+        objectType: "ad",
+        objectId: "older-ad"
+      }),
+      createdAt: "2026-06-05T01:00:00.000Z"
+    };
+    const newerApproval = {
+      ...createApprovalRequest({
+        context: { ...listOwner, role: "admin" },
+        action: "tenant_data_deletion",
+        objectType: "data_deletion_request",
+        objectId: "newer-deletion"
+      }),
+      createdAt: "2026-06-05T02:00:00.000Z"
+    };
+    const otherTenantApproval = createApprovalRequest({
+      context: { ...otherTenantOwner, role: "marketer" },
+      action: "meta_create_ad_paused",
+      objectType: "ad",
+      objectId: "other-tenant-ad"
+    });
+
+    await repository.saveApproval(request, olderApproval);
+    await repository.saveApproval(request, newerApproval);
+    await repository.saveApproval(request, otherTenantApproval);
+
+    await expect(repository.listApprovals(request, listOwner)).resolves.toEqual([newerApproval, olderApproval]);
+    await expect(repository.listApprovals(request, listOwner, 1)).resolves.toEqual([newerApproval]);
+  });
+
   it("records cost usage estimates without executable budget fields", async () => {
     const repository = new MemoryHermesRepository();
     const usage = costUsageFromEstimate(
