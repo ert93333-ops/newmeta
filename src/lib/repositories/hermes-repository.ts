@@ -54,6 +54,10 @@ export interface MetaConnectionInput {
   metadataJson?: unknown;
 }
 
+export interface MetaConnectionRecord extends MetaConnectionInput {
+  createdAt?: string;
+}
+
 export interface IntegrationSettingsRecord {
   id?: string;
   tenantId: string;
@@ -77,6 +81,7 @@ export interface HermesRepository {
   getJob(request: Request, context: UserContext, id: string): Promise<Record<string, unknown> | null>;
   saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>>;
   saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
+  getLatestMetaConnection(request: Request, context: UserContext, provider: string): Promise<MetaConnectionRecord | null>;
   getIntegrationSettings(
     request: Request,
     context: UserContext,
@@ -187,6 +192,18 @@ export class MemoryHermesRepository implements HermesRepository {
   async saveMetaConnection(_request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
     getMemoryStore().metaConnections.set(connection.id, connection);
     return connection;
+  }
+
+  async getLatestMetaConnection(
+    _request: Request,
+    context: UserContext,
+    provider: string
+  ): Promise<MetaConnectionRecord | null> {
+    const matches = Array.from(getMemoryStore().metaConnections.values()).filter((connection) => {
+      return connection.tenantId === context.tenantId && connection.provider === provider && connection.status === "connected";
+    });
+
+    return matches.at(-1) ?? null;
   }
 
   async getIntegrationSettings(
@@ -382,6 +399,27 @@ export class SupabaseHermesRepository implements HermesRepository {
     return connection;
   }
 
+  async getLatestMetaConnection(
+    request: Request,
+    context: UserContext,
+    provider: string
+  ): Promise<MetaConnectionRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getLatestMetaConnection(request, context, provider);
+
+    const { data, error } = await supabase
+      .from("meta_connections")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .eq("provider", provider)
+      .eq("status", "connected")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_META_CONNECTION_SELECT_FAILED:${error.message}`);
+    return data ? fromMetaConnectionRow(data as MetaConnectionRow) : null;
+  }
+
   async getIntegrationSettings(
     request: Request,
     context: UserContext,
@@ -487,6 +525,23 @@ interface IntegrationSettingsRow {
   updated_at: string;
 }
 
+interface MetaConnectionRow {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  provider: string;
+  connection_mode: string;
+  encrypted_access_token: string;
+  token_iv: string;
+  token_auth_tag: string;
+  token_kid: string;
+  scopes: string[];
+  expires_at?: string | null;
+  status: string;
+  metadata_json?: unknown;
+  created_at: string;
+}
+
 function toApprovalRow(approval: ApprovalRequest): Record<string, unknown> {
   return {
     id: approval.id,
@@ -588,6 +643,25 @@ function toMetaConnectionRow(connection: MetaConnectionInput): Record<string, un
     expires_at: connection.expiresAt,
     status: connection.status,
     metadata_json: connection.metadataJson ?? {}
+  };
+}
+
+function fromMetaConnectionRow(row: MetaConnectionRow): MetaConnectionRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by,
+    provider: row.provider,
+    connectionMode: row.connection_mode,
+    encryptedAccessToken: row.encrypted_access_token,
+    tokenIv: row.token_iv,
+    tokenAuthTag: row.token_auth_tag,
+    tokenKid: row.token_kid,
+    scopes: row.scopes,
+    expiresAt: row.expires_at ?? undefined,
+    status: row.status,
+    metadataJson: row.metadata_json,
+    createdAt: row.created_at
   };
 }
 

@@ -100,8 +100,17 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "MOCK_META_OAUTH_DISABLED_IN_PRODUCTION") {
       return fail(error.message, "Mock Meta OAuth is disabled in production.", 501);
     }
+    if (error.message === "MOCK_META_CONNECTION_DISABLED_IN_PRODUCTION") {
+      return fail(error.message, "Mock Meta connections are disabled in production.", 501);
+    }
     if (error.message === "LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED") {
       return fail(error.message, "Live approval execution is not configured.", 501);
+    }
+    if (error.message === "META_CONNECTION_REQUIRED") {
+      return fail(error.message, "A live Meta connection is required for this operation.", 409);
+    }
+    if (error.message === "META_CONNECTION_EXPIRED") {
+      return fail(error.message, "The stored Meta connection has expired and must be reconnected.", 409);
     }
     if (error.message === "META_OAUTH_LIVE_NOT_CONFIGURED") {
       return fail(error.message, "Live Meta OAuth is not configured.", 501);

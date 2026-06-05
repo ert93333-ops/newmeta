@@ -33,6 +33,10 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `DELETE /api/integrations/meta/:id` does not immediately remove tokens or integration data. It creates a tenant-scoped destructive `meta_disconnect_connection` approval request, writes an audit record, and returns typed-confirmation guard metadata. Actual cleanup must happen only after the two-step destructive approval flow.
 
+`GET /api/meta/ad-accounts` resolves the Meta adapter on the server. If the tenant has a connected live `meta_connections` record, the route decrypts that token server-side and uses `MetaGraphApiAdapter`; otherwise, only non-production runtime may fall back to `MockMetaAdapter`. Production without a live connection returns `META_CONNECTION_REQUIRED`.
+
+`POST /api/meta/sync/insights` uses the same adapter resolution. In mock mode it can default to `act_mock_001`; live mode requires an explicit `adAccountId` and returns `META_AD_ACCOUNT_REQUIRED` otherwise. The route records the adapter mode inside the saved job input and writes an audit log for the sync request.
+
 ## Creative and Diagnosis
 
 - `POST /api/creative-assets`

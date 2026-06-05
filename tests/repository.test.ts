@@ -143,6 +143,57 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("returns the latest connected Meta connection for the tenant and provider", async () => {
+    const repository = new MemoryHermesRepository();
+    await repository.saveMetaConnection(request, {
+      id: "meta-conn-other-tenant",
+      tenantId: "tenant-b",
+      createdBy: owner.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-other",
+      tokenIv: "iv-other",
+      tokenAuthTag: "tag-other",
+      tokenKid: "primary",
+      scopes: ["ads_read"],
+      status: "connected"
+    });
+    await repository.saveMetaConnection(request, {
+      id: "meta-conn-disconnected",
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-disconnected",
+      tokenIv: "iv-disconnected",
+      tokenAuthTag: "tag-disconnected",
+      tokenKid: "primary",
+      scopes: ["ads_read"],
+      status: "revoked"
+    });
+    await repository.saveMetaConnection(request, {
+      id: "meta-conn-live",
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted-live",
+      tokenIv: "iv-live",
+      tokenAuthTag: "tag-live",
+      tokenKid: "primary",
+      scopes: ["ads_read", "ads_management"],
+      status: "connected"
+    });
+
+    await expect(repository.getLatestMetaConnection(request, owner, "meta")).resolves.toMatchObject({
+      id: "meta-conn-live",
+      tenantId: owner.tenantId,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected"
+    });
+    await expect(repository.getLatestMetaConnection(request, { ...owner, tenantId: "tenant-c" }, "meta")).resolves.toBeNull();
+  });
+
   it("summarizes tenant cost usage by server-side created time", async () => {
     const repository = new MemoryHermesRepository();
     const summaryOwner = {
