@@ -50,6 +50,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/performance-fusion/reports`
 - `POST /api/variants/design`
 
+`POST /api/placement/validate` is an authenticated tenant-scoped analysis route. It does not require approval, but it still requires tenant auth before evaluating placement compatibility or `#1487569` risk so anonymous callers cannot use internal validation APIs.
+
 `POST /api/render/jobs` keeps deterministic final/QA render checks approval-free when no paid operation is requested. When `operationType` is `image_generation` or `video_generation`, it becomes a paid AI generation queue endpoint: callers must provide an approved same-tenant `ai_paid_generation` approval for the matching operation type. On success, the API marks that approval `executed`, records a `running` cost usage reservation linked by `relatedJobId = approval.id`, queues a `creative_jobs` worker job with server-derived cost metadata, and writes an audit log. The worker later writes the final succeeded/failed usage row for the same `relatedJobId` so cost summaries do not leave stale reservations. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; reused approvals return `APPROVAL_REQUIRED`.
 
 `POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed`, writes an audit log, and records a succeeded cost usage entry linked by `relatedJobId = approval.id`. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
@@ -63,6 +65,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `POST /api/approvals/:id/approve`
 - `POST /api/approvals/:id/reject`
 - `POST /api/approvals/:id/execute`
+
+`POST /api/drafts/preflight` is also authenticated and tenant-scoped even though it does not persist rows. The server reruns the same preflight checks used by draft creation and returns only analysis output; it never bypasses tenant auth just because the operation is read-like.
 
 `POST /api/drafts/create-paused` reruns draft preflight on the server. If preflight is blocked, the route fails closed with `DRAFT_PREFLIGHT_BLOCKED` and includes the blocker details. If preflight passes and no `approvalRequestId` is supplied, the route creates a pending same-tenant `meta_create_ad_paused` approval and returns `202 approval_required` with guard metadata. If an approved matching `approvalRequestId` is supplied, the route persists an `ad_drafts` row with `meta_status = PAUSED`, marks that approval `executed`, and writes an audit log. Executed approvals cannot be reused.
 

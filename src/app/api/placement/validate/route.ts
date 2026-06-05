@@ -1,9 +1,11 @@
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
+import { resolveUserContext } from "@/lib/api/context";
 import { validatePlacement } from "@/lib/placement/placement-validator";
 import type { PlacementValidationInput } from "@/lib/placement/placement-validator";
 
 export async function POST(request: Request) {
   try {
+    await resolveUserContext(request);
     const input = (await parseWriteJson(request)) as PlacementValidationInput;
     return ok(validatePlacement(input));
   } catch (error) {
