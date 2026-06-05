@@ -78,7 +78,8 @@ async function queuePaidGenerationJob(
     jobId
   });
   const persisted = await repository.updateApproval(request, executed);
-  await repository.saveCostUsage(request, runningCostUsageFromApproval(persisted, context));
+  const runningCostUsage = runningCostUsageFromApproval(persisted, context);
+  await repository.saveCostUsage(request, runningCostUsage);
 
   const job = {
     id: jobId,
@@ -92,7 +93,15 @@ async function queuePaidGenerationJob(
       approvalRequestId: persisted.id,
       prompt: readOptionalString(body.prompt),
       requestedInput: body.input ?? {},
-      costUsageRelatedJobId: persisted.id
+      costUsageRelatedJobId: persisted.id,
+      cost: {
+        provider: runningCostUsage.provider,
+        model: runningCostUsage.model,
+        operationType: runningCostUsage.operationType,
+        estimatedCredits: runningCostUsage.estimatedCredits,
+        estimatedCostKrw: runningCostUsage.estimatedCostKrw,
+        relatedJobId: runningCostUsage.relatedJobId
+      }
     }
   };
   await repository.saveJob(request, job);

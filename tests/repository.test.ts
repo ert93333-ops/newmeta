@@ -180,6 +180,32 @@ describe("Hermes repository", () => {
     });
   });
 
+  it("removes a running paid generation reservation when the final job status is failed", () => {
+    expect(
+      summarizeCostUsageRows(
+        [
+          {
+            related_job_id: "approval-failed-1",
+            created_at: "2026-06-05T01:00:00.000Z",
+            estimated_cost_krw: "3000",
+            status: "running"
+          },
+          {
+            related_job_id: "approval-failed-1",
+            created_at: "2026-06-05T02:00:00.000Z",
+            estimated_cost_krw: "3000",
+            actual_cost_krw: "0",
+            status: "failed"
+          }
+        ],
+        new Date("2026-06-05T09:00:00.000Z")
+      )
+    ).toEqual({
+      todayActualCostKrw: 0,
+      monthActualCostKrw: 0
+    });
+  });
+
   it("creates succeeded cost usage from an executed paid approval", () => {
     const approval = createApprovalRequest({
       context: marketer,

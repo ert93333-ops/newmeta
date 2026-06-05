@@ -214,7 +214,15 @@ describe("render jobs route", () => {
         requestedInput: {
           aspectRatio: "4:5"
         },
-        costUsageRelatedJobId: approval.id
+        costUsageRelatedJobId: approval.id,
+        cost: {
+          provider: "mock-ai",
+          model: "mock-generation",
+          operationType: "image_generation",
+          estimatedCredits: 5,
+          estimatedCostKrw: 500,
+          relatedJobId: approval.id
+        }
       }
     });
     expect(body.approval).toMatchObject({

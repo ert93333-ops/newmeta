@@ -3,6 +3,7 @@ import { Client } from "pg";
 export interface ClaimedCreativeJob {
   id: string;
   tenant_id: string;
+  created_by?: string | null;
   job_type: string;
   input_json?: unknown;
   attempts?: number;
@@ -19,6 +20,17 @@ export interface WorkerRunResult {
   status?: "succeeded" | "queued" | "failed";
 }
 
+interface PaidGenerationCostInput {
+  provider: string;
+  model?: string;
+  operationType: string;
+  estimatedCredits: number;
+  estimatedCostKrw: number;
+  relatedJobId: string;
+  actualCredits?: number;
+  actualCostKrw?: number;
+}
+
 const workerName = process.env.HERMES_WORKER_NAME ?? "hermes-worker";
 
 export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = workerName): Promise<WorkerRunResult> {
@@ -33,37 +45,54 @@ export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = 
 
   try {
     const result = processClaimedCreativeJob(job, currentWorkerName);
-    const completed = await client.query("select * from private.complete_creative_job($1, $2, $3::jsonb)", [
-      job.id,
-      currentWorkerName,
-      JSON.stringify(result)
-    ]);
-    const completedJob = completed.rows[0] as { status?: WorkerRunResult["status"] } | undefined;
-    if (!completedJob?.status) {
-      throw new Error("WORKER_COMPLETE_MISSED");
+    await client.query("begin");
+    try {
+      const completed = await client.query("select * from private.complete_creative_job($1, $2, $3::jsonb)", [
+        job.id,
+        currentWorkerName,
+        JSON.stringify(result)
+      ]);
+      const completedJob = completed.rows[0] as { status?: WorkerRunResult["status"] } | undefined;
+      if (!completedJob?.status) {
+        throw new Error("WORKER_COMPLETE_MISSED");
+      }
+      await recordPaidGenerationCostUsage(client, job, result, completedJob.status);
+      await client.query("commit");
+      return {
+        claimed: true,
+        jobId: job.id,
+        status: completedJob.status
+      };
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
     }
-    return {
-      claimed: true,
-      jobId: job.id,
-      status: completedJob.status
-    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const failed = await client.query("select * from private.fail_creative_job($1, $2, $3, $4::jsonb)", [
-      job.id,
-      currentWorkerName,
-      message,
-      JSON.stringify({ error: message })
-    ]);
-    const failedJob = failed.rows[0] as { status?: WorkerRunResult["status"] } | undefined;
-    if (!failedJob?.status) {
-      throw new Error("WORKER_FAIL_MISSED");
+    const failureResult = { error: message };
+    await client.query("begin");
+    try {
+      const failed = await client.query("select * from private.fail_creative_job($1, $2, $3, $4::jsonb)", [
+        job.id,
+        currentWorkerName,
+        message,
+        JSON.stringify(failureResult)
+      ]);
+      const failedJob = failed.rows[0] as { status?: WorkerRunResult["status"] } | undefined;
+      if (!failedJob?.status) {
+        throw new Error("WORKER_FAIL_MISSED");
+      }
+      await recordPaidGenerationCostUsage(client, job, failureResult, failedJob.status);
+      await client.query("commit");
+      return {
+        claimed: true,
+        jobId: job.id,
+        status: failedJob.status
+      };
+    } catch (failError) {
+      await rollbackQuietly(client);
+      throw failError;
     }
-    return {
-      claimed: true,
-      jobId: job.id,
-      status: failedJob.status
-    };
   }
 }
 
@@ -81,6 +110,105 @@ export function processClaimedCreativeJob(
     input: job.input_json ?? {},
     mockSafe: true
   };
+}
+
+async function recordPaidGenerationCostUsage(
+  client: WorkerDbClient,
+  job: ClaimedCreativeJob,
+  result: Record<string, unknown>,
+  status: WorkerRunResult["status"]
+): Promise<void> {
+  const cost = readPaidGenerationCostInput(job);
+  if (!cost || (status !== "succeeded" && status !== "failed")) {
+    return;
+  }
+
+  const actualCredits =
+    status === "succeeded" ? readNumberField(result, "actualCredits") ?? cost.actualCredits ?? cost.estimatedCredits : 0;
+  const actualCostKrw =
+    status === "succeeded" ? readNumberField(result, "actualCostKrw") ?? cost.actualCostKrw ?? cost.estimatedCostKrw : 0;
+
+  await client.query(
+    `insert into public.cost_usage_logs (
+      tenant_id,
+      created_by,
+      provider,
+      model,
+      operation_type,
+      estimated_credits,
+      actual_credits,
+      estimated_cost_krw,
+      actual_cost_krw,
+      related_job_id,
+      status
+    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [
+      job.tenant_id,
+      job.created_by ?? null,
+      cost.provider,
+      cost.model ?? null,
+      cost.operationType,
+      cost.estimatedCredits,
+      actualCredits,
+      cost.estimatedCostKrw,
+      actualCostKrw,
+      cost.relatedJobId,
+      status
+    ]
+  );
+}
+
+function readPaidGenerationCostInput(job: ClaimedCreativeJob): PaidGenerationCostInput | undefined {
+  const input = readRecord(job.input_json);
+  if (!input || readStringField(input, "operation") !== "ai_paid_generation") {
+    return undefined;
+  }
+
+  const cost = readRecord(input.cost) ?? {};
+  const relatedJobId = readStringField(cost, "relatedJobId") ?? readStringField(input, "costUsageRelatedJobId");
+  if (!relatedJobId) {
+    return undefined;
+  }
+
+  return {
+    provider: readStringField(cost, "provider") ?? "unknown",
+    model: readStringField(cost, "model"),
+    operationType: readStringField(cost, "operationType") ?? readStringField(input, "operationType") ?? job.job_type,
+    estimatedCredits: readNumberField(cost, "estimatedCredits") ?? 0,
+    estimatedCostKrw: readNumberField(cost, "estimatedCostKrw") ?? 0,
+    relatedJobId,
+    actualCredits: readNumberField(cost, "actualCredits"),
+    actualCostKrw: readNumberField(cost, "actualCostKrw")
+  };
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+function readStringField(row: Record<string, unknown>, key: string): string | undefined {
+  const value = row[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNumberField(row: Record<string, unknown>, key: string): number | undefined {
+  const value = row[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+async function rollbackQuietly(client: WorkerDbClient): Promise<void> {
+  try {
+    await client.query("rollback");
+  } catch {
+    // The original worker error is more useful than a rollback failure here.
+  }
 }
 
 async function main() {

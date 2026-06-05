@@ -248,7 +248,7 @@ export class SupabaseHermesRepository implements HermesRepository {
 
     const { data, error } = await supabase
       .from("cost_usage_logs")
-      .select("created_at, estimated_cost_krw, actual_cost_krw, status")
+      .select("created_at, estimated_cost_krw, actual_cost_krw, related_job_id, status")
       .eq("tenant_id", context.tenantId)
       .gte("created_at", monthStartUtc(now).toISOString());
     if (error) throw new Error(`SUPABASE_COST_SUMMARY_FAILED:${error.message}`);
@@ -470,6 +470,9 @@ export function summarizeCostUsageRows(rows: unknown[], now = new Date()): CostU
   return Array.from(groupedRows.values()).reduce<CostUsageSummary>(
     (summary, group) => {
       const row = chooseCostUsageRow(group, now);
+      if (!shouldCountCostUsage(row)) {
+        return summary;
+      }
       const createdAtMs = readCostUsageCreatedAt(row, now);
       const costKrw = readCostUsageCostKrw(row);
       if (createdAtMs >= monthStart) {
@@ -489,10 +492,6 @@ export function summarizeCostUsageRows(rows: unknown[], now = new Date()): CostU
 
 function groupCostUsageRows(rows: unknown[]): Map<string, unknown[]> {
   return rows.reduce<Map<string, unknown[]>>((groups, row, index) => {
-    if (!shouldCountCostUsage(row)) {
-      return groups;
-    }
-
     const relatedJobId = readStringField(row, "relatedJobId") ?? readStringField(row, "related_job_id");
     const key = relatedJobId ? `job:${relatedJobId}` : `row:${index}`;
     const group = groups.get(key) ?? [];
@@ -518,7 +517,7 @@ function chooseCostUsageRow(rows: unknown[], now: Date): unknown {
 
 function costUsagePriority(row: unknown): number {
   const status = readStringField(row, "status")?.toLowerCase();
-  if (status === "succeeded" || status === "executed") {
+  if (status === "succeeded" || status === "executed" || status === "failed" || status === "cancelled") {
     return 3;
   }
   if (status === "running") {

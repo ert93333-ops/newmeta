@@ -29,6 +29,8 @@ Approval required:
 
 Image and video generation queueing must be bound to an approved `ai_paid_generation` approval request with a matching `objectType` of `image_generation` or `video_generation`. The render job API consumes the approval, queues a worker job, and records a `running` cost usage reservation linked by `relatedJobId = approval.id`.
 
+The worker closes that reservation only when the queued paid generation reaches a terminal state. A succeeded job writes a final `succeeded` usage row with actual cost; an exhausted failed job writes a final `failed` row with zero actual cost. Requeued retry attempts do not close the reservation.
+
 Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches.
 
 The generic approval execution route does not execute `ai_paid_generation`. Paid generation approvals must be consumed by their domain route or worker so generation output, validation, audit logging, and cost usage logging cannot drift apart.
@@ -37,6 +39,6 @@ The generic approval execution route does not execute `ai_paid_generation`. Paid
 
 Daily and monthly cost cap checks use tenant-scoped server-side `cost_usage_logs` summaries. Client-supplied `todayActualCostKrw` and `monthActualCostKrw` values are ignored at the API boundary so callers cannot lower their effective usage by editing the request body.
 
-Paid approval estimates and execution results share `relatedJobId = approval.id`. Summary calculations count the final succeeded/actual-cost row once when it exists; otherwise the estimate remains counted as a reservation.
+Paid approval estimates and execution results share `relatedJobId = approval.id`. Summary calculations count the final succeeded/actual-cost row once when it exists, remove the reservation when a final failed/cancelled row exists, and otherwise keep the estimate or running row counted as a reservation.
 
 Automatic retry is limited to one failed generation retry.
