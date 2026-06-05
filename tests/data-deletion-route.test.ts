@@ -76,11 +76,17 @@ describe("data deletion request route", () => {
     );
     const body = await json(response);
     const approval = body.approval as { id: string; action: string; status: string; riskLevel: string };
-    const deletionRequest = body.deletionRequest as { id: string; status: string; scope: string };
-    const stored = await new MemoryHermesRepository().getApproval(
+    const deletionRequest = body.deletionRequest as { id: string; status: string; scope: string; resultJson?: Record<string, unknown> };
+    const repository = new MemoryHermesRepository();
+    const storedApproval = await repository.getApproval(
       new Request("http://localhost/api/test"),
       mockContext,
       approval.id
+    );
+    const storedDeletionRequest = await repository.getDataDeletionRequest(
+      new Request("http://localhost/api/test"),
+      mockContext,
+      deletionRequest.id
     );
 
     expect(response.status).toBe(202);
@@ -101,7 +107,17 @@ describe("data deletion request route", () => {
       status: "pending",
       riskLevel: "destructive"
     });
-    expect(stored?.objectId).toBe(deletionRequest.id);
+    expect(storedApproval?.objectId).toBe(deletionRequest.id);
+    expect(storedDeletionRequest).toMatchObject({
+      id: deletionRequest.id,
+      scope: "meta_integration",
+      status: "approval_required",
+      requestedBy: mockContext.userId
+    });
+    expect(storedDeletionRequest?.resultJson).toMatchObject({
+      approvalStatus: "pending",
+      approvalRequestId: approval.id
+    });
     expect(JSON.stringify(body)).not.toContain("\"queued\"");
     expect(JSON.stringify(body)).not.toContain("encrypted_access_token");
   });

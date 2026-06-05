@@ -24,6 +24,10 @@ describe("Supabase migration guardrails", () => {
     join(process.cwd(), "supabase/migrations/20260605015446_worker_job_lifecycle.sql"),
     "utf8"
   );
+  const dataDeletionStatusMigration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260606150500_align_data_deletion_request_status.sql"),
+    "utf8"
+  );
 
   it("enables RLS and keeps security definer functions out of public schema", () => {
     expect(migration).toContain("enable row level security");
@@ -47,6 +51,14 @@ describe("Supabase migration guardrails", () => {
     expect(dataDeletionApprovalMigration).toContain("tenant_data_deletion");
     expect(dataDeletionApprovalMigration).not.toContain("delete from");
     expect(dataDeletionApprovalMigration).not.toContain("drop table");
+  });
+
+  it("aligns data deletion request status with approval-required flow without deletion SQL", () => {
+    expect(dataDeletionStatusMigration).toContain("data_deletion_request_status_enum");
+    expect(dataDeletionStatusMigration).toContain("'approval_required'");
+    expect(dataDeletionStatusMigration).toContain("alter table public.data_deletion_requests");
+    expect(dataDeletionStatusMigration).not.toContain("delete from");
+    expect(dataDeletionStatusMigration).not.toContain("drop table");
   });
 
   it("keeps worker job claiming in private schema", () => {

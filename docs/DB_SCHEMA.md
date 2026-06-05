@@ -17,6 +17,8 @@ All tenant-scoped tables have `tenant_id`, timestamps, and RLS. `approval_action
 
 `approval_requests.execution_result_json` stores the server-side executor result after an approved action is executed.
 
+`data_deletion_requests.status` uses a dedicated `data_deletion_request_status_enum`, so a new deletion request can be stored as `approval_required` before any queueable executor exists.
+
 `approval_requests.expires_at` is enforced by application policy: draft 24 hours, publish 4 hours, destructive 1 hour.
 
 `creative_jobs` worker execution is advanced through private DB functions only: claim, complete, and fail/retry. Failed jobs are requeued while `attempts < max_attempts`; the default gives one retry.

@@ -171,6 +171,31 @@ describe("Hermes repository", () => {
     await expect(repository.getAsset(request, { ...owner, tenantId: "tenant-b" }, persisted.id!)).resolves.toBeNull();
   });
 
+  it("keeps data deletion requests tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const persisted = await repository.saveDataDeletionRequest(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      requestedBy: owner.userId,
+      scope: "tenant",
+      status: "approval_required",
+      resultJson: {
+        approvalStatus: "pending",
+        approvalRequestId: "approval-1"
+      }
+    });
+
+    await expect(repository.getDataDeletionRequest(request, owner, persisted.id!)).resolves.toMatchObject({
+      id: persisted.id,
+      tenantId: owner.tenantId,
+      scope: "tenant",
+      status: "approval_required"
+    });
+    await expect(
+      repository.getDataDeletionRequest(request, { ...owner, tenantId: "tenant-b" }, persisted.id!)
+    ).resolves.toBeNull();
+  });
+
   it("keeps performance fusion reports tenant-scoped in memory fallback", async () => {
     const repository = new MemoryHermesRepository();
     const persisted = await repository.savePerformanceFusionReport(request, {

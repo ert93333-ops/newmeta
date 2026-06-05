@@ -12,28 +12,38 @@ export async function POST(request: Request) {
     const context = await resolveUserContext(request);
     const body = (await parseWriteJson(request)) as { scope?: unknown; reason?: unknown };
     const scope = readDeletionScope(body.scope);
+    const reason = readReason(body.reason) ?? `Tenant data deletion requested for scope: ${scope}.`;
     const repository = getRepository();
-    const deletionRequest = {
-      id: randomUUID(),
-      tenantId: context.tenantId,
-      createdBy: context.userId,
-      status: "approval_required",
-      scope,
-      deletes: ["tokens", "assets", "reports", "learning patterns", "integration data"]
-    };
+    const deletionRequestId = randomUUID();
     const approval = createApprovalRequest({
       context,
       action: "tenant_data_deletion",
       objectType: "data_deletion_request",
-      objectId: deletionRequest.id,
+      objectId: deletionRequestId,
       beforeJson: {
         tenantId: context.tenantId,
         status: "retained"
       },
-      afterJson: deletionRequest,
-      reason: readReason(body.reason) ?? `Tenant data deletion requested for scope: ${scope}.`
+      afterJson: {
+        id: deletionRequestId,
+        tenantId: context.tenantId,
+        scope,
+        status: "approval_required"
+      },
+      reason
     });
-
+    const deletionRequest = await repository.saveDataDeletionRequest(request, {
+      id: deletionRequestId,
+      tenantId: context.tenantId,
+      createdBy: context.userId,
+      requestedBy: context.userId,
+      scope,
+      status: "approval_required",
+      resultJson: {
+        approvalStatus: approval.status,
+        approvalRequestId: approval.id
+      }
+    });
     await repository.saveApproval(request, approval);
     await repository.saveAuditLog(request, {
       tenantId: context.tenantId,
@@ -42,7 +52,10 @@ export async function POST(request: Request) {
       objectType: "data_deletion_request",
       objectId: deletionRequest.id,
       approvalRequestId: approval.id,
-      afterJson: approval,
+      afterJson: {
+        ...deletionRequest,
+        deletes: ["tokens", "assets", "reports", "learning patterns", "integration data"]
+      },
       result: "approval_required"
     });
     return ok({ deletionRequest, approval, guard: approvalGuardDetails(approval) }, 202);

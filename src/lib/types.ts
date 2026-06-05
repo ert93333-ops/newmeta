@@ -17,6 +17,9 @@ export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 export const JOB_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
+export const DATA_DELETION_REQUEST_STATUSES = ["approval_required", ...JOB_STATUSES] as const;
+export type DataDeletionRequestStatus = (typeof DATA_DELETION_REQUEST_STATUSES)[number];
+
 export type Placement =
   | "facebook_feed"
   | "instagram_feed"

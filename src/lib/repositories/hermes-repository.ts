@@ -1,4 +1,4 @@
-import type { ApprovalRequest, CostEstimateInput, UserContext } from "@/lib/types";
+import type { ApprovalRequest, CostEstimateInput, DataDeletionRequestStatus, UserContext } from "@/lib/types";
 import { estimateOperationCredits } from "@/lib/guards/cost-guard";
 import { redactCredentialPayload } from "@/lib/guards/credential-guard";
 import { createSupabaseClient, getBearerAuthorization, hasSupabaseConfig } from "@/lib/supabase/server";
@@ -89,6 +89,18 @@ export interface AdDraftRecord {
   metaStatus: "PAUSED" | "ACTIVE" | "ARCHIVED" | "DELETED";
   preflightJson: unknown;
   payloadJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DataDeletionRequestRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  requestedBy?: string;
+  scope: string;
+  status: DataDeletionRequestStatus;
+  resultJson: unknown;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -250,6 +262,15 @@ export interface HermesRepository {
   saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord>;
   saveAdDraft(request: Request, draft: AdDraftRecord): Promise<AdDraftRecord>;
   getAdDraft(request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null>;
+  saveDataDeletionRequest(
+    request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord>;
+  getDataDeletionRequest(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<DataDeletionRequestRecord | null>;
   savePerformanceFusionReport(
     request: Request,
     report: PerformanceFusionReportRecord
@@ -338,6 +359,7 @@ interface HermesMemoryStore {
   jobs: Map<string, Record<string, unknown>>;
   assets: Map<string, CreativeAssetRecord>;
   adDrafts: Map<string, AdDraftRecord>;
+  dataDeletionRequests: Map<string, DataDeletionRequestRecord>;
   performanceFusionReports: Map<string, PerformanceFusionReportRecord>;
   placementValidationReports: Map<string, PlacementValidationReportRecord>;
   bottleneckAnalysisJobs: Map<string, BottleneckAnalysisJobRecord>;
@@ -362,6 +384,7 @@ function getMemoryStore(): HermesMemoryStore {
       jobs: new Map(),
       assets: new Map(),
       adDrafts: new Map(),
+      dataDeletionRequests: new Map(),
       performanceFusionReports: new Map(),
       placementValidationReports: new Map(),
       bottleneckAnalysisJobs: new Map(),
@@ -567,6 +590,33 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return draft;
+  }
+
+  async saveDataDeletionRequest(
+    _request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...deletionRequest,
+      id: deletionRequest.id ?? crypto.randomUUID(),
+      createdAt: deletionRequest.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().dataDeletionRequests.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getDataDeletionRequest(
+    _request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<DataDeletionRequestRecord | null> {
+    const deletionRequest = getMemoryStore().dataDeletionRequests.get(id);
+    if (!deletionRequest || deletionRequest.tenantId !== context.tenantId) {
+      return null;
+    }
+    return deletionRequest;
   }
 
   async savePerformanceFusionReport(
@@ -1148,6 +1198,40 @@ export class SupabaseHermesRepository implements HermesRepository {
     return data ? fromAdDraftRow(data as AdDraftRow) : null;
   }
 
+  async saveDataDeletionRequest(
+    request: Request,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<DataDeletionRequestRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.saveDataDeletionRequest(request, deletionRequest);
+
+    const { data, error } = await supabase
+      .from("data_deletion_requests")
+      .insert(toDataDeletionRequestInsertRow(deletionRequest))
+      .select("*")
+      .single();
+    if (error) throw new Error(`SUPABASE_DATA_DELETION_INSERT_FAILED:${error.message}`);
+    return fromDataDeletionRequestRow(data as DataDeletionRequestRow);
+  }
+
+  async getDataDeletionRequest(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<DataDeletionRequestRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getDataDeletionRequest(request, context, id);
+
+    const { data, error } = await supabase
+      .from("data_deletion_requests")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_DATA_DELETION_SELECT_FAILED:${error.message}`);
+    return data ? fromDataDeletionRequestRow(data as DataDeletionRequestRow) : null;
+  }
+
   async savePerformanceFusionReport(
     request: Request,
     report: PerformanceFusionReportRecord
@@ -1573,6 +1657,18 @@ interface AdDraftRow {
   updated_at: string;
 }
 
+interface DataDeletionRequestRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  requested_by?: string | null;
+  scope: string;
+  status: DataDeletionRequestStatus;
+  result_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
 interface PerformanceFusionReportRow {
   id: string;
   tenant_id: string;
@@ -1888,6 +1984,32 @@ function fromAdDraftRow(row: AdDraftRow): AdDraftRecord {
     metaStatus: row.meta_status,
     preflightJson: row.preflight_json,
     payloadJson: row.payload_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toDataDeletionRequestInsertRow(deletionRequest: DataDeletionRequestRecord): Record<string, unknown> {
+  return {
+    id: deletionRequest.id,
+    tenant_id: deletionRequest.tenantId,
+    created_by: deletionRequest.createdBy,
+    requested_by: deletionRequest.requestedBy,
+    scope: deletionRequest.scope,
+    status: deletionRequest.status,
+    result_json: deletionRequest.resultJson ?? {}
+  };
+}
+
+function fromDataDeletionRequestRow(row: DataDeletionRequestRow): DataDeletionRequestRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    requestedBy: row.requested_by ?? undefined,
+    scope: row.scope,
+    status: row.status,
+    resultJson: row.result_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
