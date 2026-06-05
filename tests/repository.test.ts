@@ -143,6 +143,31 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps performance fusion reports tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const persisted = await repository.savePerformanceFusionReport(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      assetId: "asset-1",
+      bottleneckJobId: "job-1",
+      languageGuard: "correlation_not_causation",
+      reportJson: {
+        hypotheses: [{ observedCreativeElement: "Hook score low" }]
+      }
+    });
+
+    await expect(repository.getPerformanceFusionReport(request, owner, persisted.id!)).resolves.toMatchObject({
+      id: persisted.id,
+      tenantId: owner.tenantId,
+      assetId: "asset-1",
+      bottleneckJobId: "job-1",
+      languageGuard: "correlation_not_causation"
+    });
+    await expect(
+      repository.getPerformanceFusionReport(request, { ...owner, tenantId: "tenant-b" }, persisted.id!)
+    ).resolves.toBeNull();
+  });
+
   it("returns the latest connected Meta connection for the tenant and provider", async () => {
     const repository = new MemoryHermesRepository();
     await repository.saveMetaConnection(request, {

@@ -86,6 +86,18 @@ export interface AdDraftRecord {
   updatedAt?: string;
 }
 
+export interface PerformanceFusionReportRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetId?: string;
+  bottleneckJobId?: string;
+  reportJson: unknown;
+  languageGuard: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HermesRepository {
   saveApproval(request: Request, approval: ApprovalRequest): Promise<ApprovalRequest>;
   getApproval(request: Request, context: UserContext, id: string): Promise<ApprovalRequest | null>;
@@ -108,6 +120,15 @@ export interface HermesRepository {
   saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord>;
   saveAdDraft(request: Request, draft: AdDraftRecord): Promise<AdDraftRecord>;
   getAdDraft(request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null>;
+  savePerformanceFusionReport(
+    request: Request,
+    report: PerformanceFusionReportRecord
+  ): Promise<PerformanceFusionReportRecord>;
+  getPerformanceFusionReport(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PerformanceFusionReportRecord | null>;
 }
 
 interface HermesMemoryStore {
@@ -115,6 +136,7 @@ interface HermesMemoryStore {
   jobs: Map<string, Record<string, unknown>>;
   assets: Map<string, Record<string, unknown>>;
   adDrafts: Map<string, AdDraftRecord>;
+  performanceFusionReports: Map<string, PerformanceFusionReportRecord>;
   metaConnections: Map<string, MetaConnectionInput>;
   integrationSettings: Map<string, IntegrationSettingsRecord>;
   costUsage: unknown[];
@@ -130,6 +152,7 @@ function getMemoryStore(): HermesMemoryStore {
       jobs: new Map(),
       assets: new Map(),
       adDrafts: new Map(),
+      performanceFusionReports: new Map(),
       metaConnections: new Map(),
       integrationSettings: new Map(),
       costUsage: [],
@@ -267,6 +290,33 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return draft;
+  }
+
+  async savePerformanceFusionReport(
+    _request: Request,
+    report: PerformanceFusionReportRecord
+  ): Promise<PerformanceFusionReportRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...report,
+      id: report.id ?? crypto.randomUUID(),
+      createdAt: report.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().performanceFusionReports.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getPerformanceFusionReport(
+    _request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PerformanceFusionReportRecord | null> {
+    const report = getMemoryStore().performanceFusionReports.get(id);
+    if (!report || report.tenantId !== context.tenantId) {
+      return null;
+    }
+    return report;
   }
 }
 
@@ -528,6 +578,40 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_AD_DRAFT_SELECT_FAILED:${error.message}`);
     return data ? fromAdDraftRow(data as AdDraftRow) : null;
   }
+
+  async savePerformanceFusionReport(
+    request: Request,
+    report: PerformanceFusionReportRecord
+  ): Promise<PerformanceFusionReportRecord> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.savePerformanceFusionReport(request, report);
+
+    const { data, error } = await supabase
+      .from("performance_fusion_reports")
+      .insert(toPerformanceFusionReportInsertRow(report))
+      .select("*")
+      .single();
+    if (error) throw new Error(`SUPABASE_PERFORMANCE_FUSION_INSERT_FAILED:${error.message}`);
+    return fromPerformanceFusionReportRow(data as PerformanceFusionReportRow);
+  }
+
+  async getPerformanceFusionReport(
+    request: Request,
+    context: UserContext,
+    id: string
+  ): Promise<PerformanceFusionReportRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getPerformanceFusionReport(request, context, id);
+
+    const { data, error } = await supabase
+      .from("performance_fusion_reports")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_PERFORMANCE_FUSION_SELECT_FAILED:${error.message}`);
+    return data ? fromPerformanceFusionReportRow(data as PerformanceFusionReportRow) : null;
+  }
 }
 
 function createRequestClient(request: Request) {
@@ -621,6 +705,18 @@ interface AdDraftRow {
   meta_status: AdDraftRecord["metaStatus"];
   preflight_json: unknown;
   payload_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PerformanceFusionReportRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_id?: string | null;
+  bottleneck_job_id?: string | null;
+  report_json: unknown;
+  language_guard: string;
   created_at: string;
   updated_at: string;
 }
@@ -809,6 +905,32 @@ function fromAdDraftRow(row: AdDraftRow): AdDraftRecord {
     metaStatus: row.meta_status,
     preflightJson: row.preflight_json,
     payloadJson: row.payload_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toPerformanceFusionReportInsertRow(report: PerformanceFusionReportRecord): Record<string, unknown> {
+  return {
+    id: report.id,
+    tenant_id: report.tenantId,
+    created_by: report.createdBy,
+    asset_id: report.assetId,
+    bottleneck_job_id: report.bottleneckJobId,
+    report_json: report.reportJson ?? {},
+    language_guard: report.languageGuard
+  };
+}
+
+function fromPerformanceFusionReportRow(row: PerformanceFusionReportRow): PerformanceFusionReportRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetId: row.asset_id ?? undefined,
+    bottleneckJobId: row.bottleneck_job_id ?? undefined,
+    reportJson: row.report_json,
+    languageGuard: row.language_guard,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
