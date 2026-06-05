@@ -470,6 +470,40 @@ textarea {
   font-size: 13px;
 }
 
+.readiness-state {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.readiness-state span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readiness-state strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.readiness-state.ready {
+  border-color: #9bd7bd;
+  color: var(--good);
+}
+
+.readiness-state.pending {
+  border-color: #f2ce88;
+  color: var(--warn);
+}
+
+.readiness-state.blocked {
+  border-color: #f2b8b5;
+  color: var(--bad);
+}
+
 .field {
   display: grid;
   gap: 8px;

@@ -42,6 +42,13 @@ type ApprovalListResponse = {
 
 type LoadStatus = "loading" | "loaded" | "empty" | "blocked";
 type DecisionStatus = "idle" | "submitting" | "succeeded" | "blocked";
+type ReadinessTone = "ready" | "blocked" | "pending";
+
+type ReadinessStatus = {
+  tone: ReadinessTone;
+  label: string;
+  reason: string;
+};
 
 const TENANT_STORAGE_KEY = "hermes:tenant-id";
 
@@ -112,6 +119,7 @@ export function ApprovalCenterPanel() {
     : false;
   const canReject = selected ? selected.approval.status === "pending" || selected.approval.status === "approved" : false;
   const canSubmitApproval = canApprove && isMatched && decisionStatus !== "submitting";
+  const readiness = selected ? getReadinessStatus(selected) : null;
 
   async function submitDecision(decision: "approve" | "reject") {
     if (!selected || decisionStatus === "submitting") {
@@ -260,6 +268,13 @@ export function ApprovalCenterPanel() {
               <strong>{selected.approval.secondApprovedBy ? "Complete" : selected.guard.requiresSecondApproval ? "Required" : "Not required"}</strong>
             </div>
 
+            {readiness ? (
+              <div className={`readiness-state ${readiness.tone}`} role="status">
+                <span>{readiness.label}</span>
+                <strong>{readiness.reason}</strong>
+              </div>
+            ) : null}
+
             <div className={`guard-state ${getDecisionTone(decisionStatus, isMatched)}`} role="status">
               {decisionStatus === "submitting" ? (
                 <Loader2 aria-hidden="true" size={18} />
@@ -378,4 +393,54 @@ function getDecisionMessage(status: DecisionStatus, error: string | null, guardC
     return error ?? "APPROVAL_DECISION_BLOCKED";
   }
   return guardCode;
+}
+
+function getReadinessStatus(item: ApprovalListItem): ReadinessStatus {
+  const { approval, guard } = item;
+
+  if (approval.status === "executed") {
+    return {
+      tone: "blocked",
+      label: "Action readiness",
+      reason: "Already completed"
+    };
+  }
+
+  if (approval.status === "rejected" || approval.status === "cancelled" || approval.status === "expired") {
+    return {
+      tone: "blocked",
+      label: "Action readiness",
+      reason: `Closed by ${approval.status}`
+    };
+  }
+
+  if (approval.status !== "approved") {
+    return {
+      tone: "pending",
+      label: "Action readiness",
+      reason: "Approval pending"
+    };
+  }
+
+  if (guard.requiresSecondApproval && !approval.secondApprovedBy) {
+    return {
+      tone: "pending",
+      label: "Action readiness",
+      reason: "Second approval pending"
+    };
+  }
+
+  if (approval.action === "ai_paid_generation") {
+    return {
+      tone: "pending",
+      label: "Action readiness",
+      reason: "Domain route required"
+    };
+  }
+
+  return {
+    tone: "ready",
+    label: "Action readiness",
+    reason: "Ready for server executor"
+  };
 }

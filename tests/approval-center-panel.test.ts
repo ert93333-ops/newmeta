@@ -35,6 +35,15 @@ describe("Approval center panel", () => {
     expect(panelSource).not.toContain("/execute");
   });
 
+  it("shows read-only action readiness without dispatching execution", () => {
+    expect(panelSource).toContain("getReadinessStatus");
+    expect(panelSource).toContain("Second approval pending");
+    expect(panelSource).toContain("Domain route required");
+    expect(panelSource).toContain("Ready for server executor");
+    expect(panelSource).toContain("readiness-state");
+    expect(panelSource).not.toContain("executeApprovedAction");
+  });
+
   it("does not add client-side execution, budget mutation, or credential exposure", () => {
     expect(panelSource).not.toMatch(/daily_budget|lifetime_budget|budgetMutation|BUDGET_MUTATION/);
     expect(panelSource).not.toContain("encryptedAccessToken");
