@@ -379,6 +379,63 @@ describe("approval execution", () => {
     expect(stored?.executionResultJson).toBeUndefined();
   });
 
+  it("records executor-required metadata on the stored data deletion request when generic execution is attempted", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    const repository = new MemoryHermesRepository();
+    const pending = createApprovalRequest({
+      context: disconnectRequester,
+      action: "tenant_data_deletion",
+      objectType: "data_deletion_request",
+      objectId: "delete-tenant-2",
+      afterJson: { status: "delete_requested" }
+    });
+    const firstApproved = approveRequest(pending, approver, {
+      typedConfirmation: "APPROVE tenant_data_deletion"
+    });
+    const approval = approveRequest(firstApproved, secondApprover, {
+      typedConfirmation: "APPROVE tenant_data_deletion"
+    });
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+    await repository.saveDataDeletionRequest(new Request("http://localhost/api/test"), {
+      id: "delete-tenant-2",
+      tenantId,
+      createdBy: disconnectRequester.userId,
+      requestedBy: disconnectRequester.userId,
+      scope: "tenant",
+      status: "approval_required",
+      resultJson: {
+        approvalRequestId: approval.id,
+        approvalStatus: approval.status
+      }
+    });
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const storedDeletionRequest = await repository.getDataDeletionRequest(
+      new Request("http://localhost/api/test"),
+      approver,
+      "delete-tenant-2"
+    );
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("APPROVAL_ACTION_EXECUTOR_REQUIRED");
+    expect(storedDeletionRequest?.status).toBe("approval_required");
+    expect(storedDeletionRequest?.resultJson).toMatchObject({
+      approvalRequestId: approval.id,
+      approvalStatus: "approved",
+      secondApprovedBy: secondApprover.userId,
+      readyForExecution: true,
+      blockedReason: "APPROVAL_ACTION_EXECUTOR_REQUIRED",
+      requiredRoute: "/api/data-deletion-requests"
+    });
+  });
+
   it("persists action-specific execution details before returning success", async () => {
     clearEnv();
     setEnv("HERMES_AUTH_MODE", "mock");

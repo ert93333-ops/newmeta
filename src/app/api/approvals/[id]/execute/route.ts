@@ -1,10 +1,13 @@
 import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-policy";
-import { executeApprovedAction } from "@/lib/approval/execution-policy";
+import {
+  executeApprovedAction,
+  isApprovalActionDomainExecutorRequiredError
+} from "@/lib/approval/execution-policy";
 import { resolveUserContext } from "@/lib/api/context";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
-import type { HermesRepository } from "@/lib/repositories/hermes-repository";
-import { getRepository } from "@/lib/repositories/hermes-repository";
 import type { ApprovalExecutionResult } from "@/lib/approval/execution-policy";
+import { getRepository } from "@/lib/repositories/hermes-repository";
+import type { HermesRepository } from "@/lib/repositories/hermes-repository";
 import type { ApprovalRequest, UserContext } from "@/lib/types";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,12 +17,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const context = await resolveUserContext(request);
     const repository = getRepository();
     const approval = await repository.getApproval(request, context, id);
-    if (!approval) return fail("APPROVAL_NOT_FOUND", "?뱀씤 ?붿껌??李얠쓣 ???놁뒿?덈떎.", 404);
+    if (!approval) return fail("APPROVAL_NOT_FOUND", "Approval request was not found.", 404);
+
     assertExecutableApproval(approval, context);
-    const execution =
-      approval.action === "meta_disconnect_connection"
-        ? await executeMetaDisconnectApproval(request, context, approval, repository)
-        : executeApprovedAction(approval);
+
+    let execution: ApprovalExecutionResult;
+    try {
+      execution =
+        approval.action === "meta_disconnect_connection"
+          ? await executeMetaDisconnectApproval(request, context, approval, repository)
+          : executeApprovedAction(approval);
+    } catch (error) {
+      if (isApprovalActionDomainExecutorRequiredError(error)) {
+        await syncBlockedDataDeletionExecutionAttempt(request, context, approval, repository, error);
+      }
+      throw error;
+    }
+
     const executed = markExecuted(approval, execution);
     const persisted = await repository.updateApproval(request, executed);
     await repository.saveAuditLog(request, {
@@ -71,4 +85,42 @@ async function executeMetaDisconnectApproval(
       mockSafe: disconnected.mode === "mock"
     }
   };
+}
+
+async function syncBlockedDataDeletionExecutionAttempt(
+  request: Request,
+  context: UserContext,
+  approval: ApprovalRequest,
+  repository: HermesRepository,
+  error: { code: string; route: string }
+): Promise<void> {
+  if (approval.action !== "tenant_data_deletion" || !approval.objectId) {
+    return;
+  }
+
+  const deletionRequest = await repository.getDataDeletionRequest(request, context, approval.objectId);
+  if (!deletionRequest) {
+    return;
+  }
+
+  await repository.updateDataDeletionRequest(request, {
+    ...deletionRequest,
+    resultJson: {
+      ...asRecord(deletionRequest.resultJson),
+      approvalRequestId: approval.id,
+      approvalStatus: approval.status,
+      secondApprovedBy: approval.secondApprovedBy,
+      readyForExecution: approval.requiresSecondApproval ? Boolean(approval.secondApprovedBy) : approval.status === "approved",
+      blockedReason: error.code,
+      requiredRoute: error.route,
+      lastExecutionAttemptAt: new Date().toISOString()
+    }
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return { ...(value as Record<string, unknown>) };
+  }
+  return {};
 }
