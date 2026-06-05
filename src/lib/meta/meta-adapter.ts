@@ -18,6 +18,8 @@ export interface MetaAdapter {
   getCreative(creativeId: string): Promise<unknown>;
   getAdImages(adAccountId: string): Promise<unknown[]>;
   getAdVideos(adAccountId: string): Promise<unknown[]>;
+  validateCampaignCreate(input: ValidateCampaignRequest): Promise<void>;
+  validateAdSetCreate(input: ValidateAdSetRequest): Promise<void>;
   uploadImage(input: UploadAssetRequest): Promise<{ imageHash: string; status: "PAUSED_READY" }>;
   uploadVideo(input: UploadAssetRequest): Promise<{ videoId: string; status: "PAUSED_READY" }>;
   createCreative(input: CreateCreativeRequest): Promise<{ creativeId: string; status: "PAUSED_READY" }>;
@@ -71,6 +73,8 @@ export interface CreateCampaignRequest {
   approval: ApprovalRequest;
 }
 
+export type ValidateCampaignRequest = Omit<CreateCampaignRequest, "approval">;
+
 export interface CreateAdSetRequest {
   adAccountId: string;
   campaignId: string;
@@ -87,6 +91,8 @@ export interface CreateAdSetRequest {
   endTime?: string;
   approval: ApprovalRequest;
 }
+
+export type ValidateAdSetRequest = Omit<CreateAdSetRequest, "approval">;
 
 export interface CreateAdRequest {
   adAccountId: string;

@@ -276,7 +276,7 @@ async function executePausedDraftThroughAdapter(
   const campaignId =
     input.existingCampaignId ??
     (
-      await adapter.createCampaignPaused({
+      await createCampaignWithValidation(adapter, {
         adAccountId: input.adAccountId,
         name: readPayloadString(input.payload, "campaignName") ?? `Hermes campaign ${input.draftId}`,
         objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
@@ -289,7 +289,7 @@ async function executePausedDraftThroughAdapter(
   const adsetId =
     input.existingAdsetId ??
     (
-      await adapter.createAdSetPaused({
+      await createAdSetWithValidation(adapter, {
         adAccountId: input.adAccountId,
         campaignId,
         name: readPayloadString(input.payload, "adsetName") ?? `Hermes adset ${input.draftId}`,
@@ -401,12 +401,45 @@ async function resolvePausedDraftReadiness(input: {
   }
 
   if (resolvedAdapter.mode === "live") {
+    const hasApprovedExecutionRequest = Boolean(readOptionalString(input.body.approvalRequestId));
+    const objective = readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES";
+    const targeting = readPayloadRecord(input.payload, "targeting") ?? {};
+    const promotedObject = readPayloadRecord(input.payload, "promotedObject");
     assertLiveMetaAdSetInput({
-      objective: readPayloadString(input.payload, "objective") ?? "OUTCOME_SALES",
+      objective,
       optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
-      targeting: readPayloadRecord(input.payload, "targeting") ?? {},
-      promotedObject: readPayloadRecord(input.payload, "promotedObject")
+      targeting,
+      promotedObject
     });
+
+    if (!hasApprovedExecutionRequest) {
+      await resolvedAdapter.adapter.validateCampaignCreate({
+        adAccountId,
+        name: readPayloadString(input.payload, "campaignName") ?? `Hermes campaign ${readOptionalString(input.body.draftId) ?? "validate"}`,
+        objective,
+        buyingType: readPayloadString(input.payload, "buyingType"),
+        specialAdCategories: readPayloadStringArray(input.payload, "specialAdCategories")
+      });
+
+      const existingCampaignId = readOptionalString(input.body.metaCampaignId);
+      if (existingCampaignId && !readOptionalString(input.body.metaAdsetId)) {
+        await resolvedAdapter.adapter.validateAdSetCreate({
+          adAccountId,
+          campaignId: existingCampaignId,
+          name: readPayloadString(input.payload, "adsetName") ?? `Hermes adset ${readOptionalString(input.body.draftId) ?? "validate"}`,
+          objective,
+          optimizationGoal: readPayloadString(input.payload, "optimizationGoal") ?? "OFFSITE_CONVERSIONS",
+          targeting,
+          billingEvent: readPayloadString(input.payload, "billingEvent"),
+          bidStrategy: readPayloadString(input.payload, "bidStrategy"),
+          promotedObject,
+          attributionSpec: readPayloadArray(input.payload, "attributionSpec"),
+          destinationType: readPayloadString(input.payload, "destinationType"),
+          startTime: readPayloadString(input.payload, "startTime"),
+          endTime: readPayloadString(input.payload, "endTime")
+        });
+      }
+    }
   }
 
   return {
@@ -414,6 +447,42 @@ async function resolvePausedDraftReadiness(input: {
     asset,
     resolvedAdapter
   };
+}
+
+async function createCampaignWithValidation(
+  adapter: Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"],
+  input: Parameters<Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"]["createCampaignPaused"]>[0]
+): Promise<{ campaignId: string; status: "PAUSED" }> {
+  await adapter.validateCampaignCreate({
+    adAccountId: input.adAccountId,
+    name: input.name,
+    objective: input.objective,
+    buyingType: input.buyingType,
+    specialAdCategories: input.specialAdCategories
+  });
+  return adapter.createCampaignPaused(input);
+}
+
+async function createAdSetWithValidation(
+  adapter: Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"],
+  input: Parameters<Awaited<ReturnType<typeof resolveMetaAdapter>>["adapter"]["createAdSetPaused"]>[0]
+): Promise<{ adsetId: string; status: "PAUSED" }> {
+  await adapter.validateAdSetCreate({
+    adAccountId: input.adAccountId,
+    campaignId: input.campaignId,
+    name: input.name,
+    objective: input.objective,
+    optimizationGoal: input.optimizationGoal,
+    targeting: input.targeting,
+    billingEvent: input.billingEvent,
+    bidStrategy: input.bidStrategy,
+    promotedObject: input.promotedObject,
+    attributionSpec: input.attributionSpec,
+    destinationType: input.destinationType,
+    startTime: input.startTime,
+    endTime: input.endTime
+  });
+  return adapter.createAdSetPaused(input);
 }
 
 function toCreativeAssetMetadata(asset: CreativeAssetRecord): CreativeAssetMetadata {

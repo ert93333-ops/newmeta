@@ -7,6 +7,8 @@ import type {
   CreateCampaignRequest,
   CreateCreativeRequest,
   MetaAdapter,
+  ValidateAdSetRequest,
+  ValidateCampaignRequest,
   UploadAssetRequest
 } from "@/lib/meta/meta-adapter";
 import { assertLiveMetaAdSetInput } from "@/lib/meta/live-draft-validation";
@@ -18,6 +20,20 @@ const graphExecutor = {
   tenantId: "00000000-0000-0000-0000-000000000001",
   role: "owner" as const
 };
+
+export class MetaGraphRequestError extends Error {
+  readonly code = "META_GRAPH_REQUEST_FAILED";
+
+  constructor(
+    readonly status: number,
+    readonly metaErrorType?: string,
+    readonly metaErrorCode?: number,
+    readonly metaErrorSubcode?: number,
+    readonly providerMessage?: string
+  ) {
+    super("META_GRAPH_REQUEST_FAILED");
+  }
+}
 
 export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter {
   private readonly accessToken: string;
@@ -49,7 +65,7 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
       cache: "no-store"
     });
     if (!response.ok) {
-      throw new Error(`META_GRAPH_REQUEST_FAILED:${response.status}`);
+      throw await parseMetaGraphError(response);
     }
     return (await response.json()) as T;
   }
@@ -73,9 +89,44 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
       body: form
     });
     if (!response.ok) {
-      throw new Error(`META_GRAPH_REQUEST_FAILED:${response.status}`);
+      throw await parseMetaGraphError(response);
     }
     return (await response.json()) as T;
+  }
+
+  override async validateCampaignCreate(input: ValidateCampaignRequest): Promise<void> {
+    await this.graphPost<Record<string, unknown>>(`${input.adAccountId}/campaigns`, {
+      name: input.name,
+      objective: input.objective,
+      buying_type: input.buyingType,
+      special_ad_categories: input.specialAdCategories ?? [],
+      status: "PAUSED",
+      execution_options: ["validate_only"]
+    });
+  }
+
+  override async validateAdSetCreate(input: ValidateAdSetRequest): Promise<void> {
+    assertLiveMetaAdSetInput({
+      objective: input.objective ?? "OUTCOME_SALES",
+      optimizationGoal: input.optimizationGoal,
+      targeting: input.targeting,
+      promotedObject: input.promotedObject
+    });
+    await this.graphPost<Record<string, unknown>>(`${input.adAccountId}/adsets`, {
+      name: input.name,
+      campaign_id: input.campaignId,
+      optimization_goal: input.optimizationGoal,
+      targeting: input.targeting,
+      billing_event: input.billingEvent,
+      bid_strategy: input.bidStrategy,
+      promoted_object: input.promotedObject,
+      attribution_spec: input.attributionSpec,
+      destination_type: input.destinationType,
+      start_time: input.startTime,
+      end_time: input.endTime,
+      status: "PAUSED",
+      execution_options: ["validate_only"]
+    });
   }
 
   override async listAdAccounts(): Promise<MetaAdAccount[]> {
@@ -367,6 +418,35 @@ function readImageHash(body: Record<string, unknown>): string | undefined {
   }
 
   return undefined;
+}
+
+async function parseMetaGraphError(response: Response): Promise<MetaGraphRequestError> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = undefined;
+  }
+
+  const graphError =
+    payload && typeof payload === "object" && "error" in payload && payload.error && typeof payload.error === "object"
+      ? (payload.error as Record<string, unknown>)
+      : undefined;
+
+  return new MetaGraphRequestError(
+    response.status,
+    readString(graphError?.type),
+    readNumber(graphError?.code),
+    readNumber(graphError?.error_subcode),
+    sanitizeProviderMessage(readString(graphError?.message))
+  );
+}
+
+function sanitizeProviderMessage(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]");
 }
 
 function serializeGraphValue(value: unknown): string {

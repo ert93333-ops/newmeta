@@ -14,6 +14,7 @@ import {
   CostSettingsInvalidError,
   CostSettingsNotConfiguredError
 } from "@/lib/settings/cost-settings";
+import { MetaGraphRequestError } from "@/lib/meta/graph-meta-adapter";
 import {
   assertNoCredentialPayload,
   isCredentialPayloadBlockedError,
@@ -73,6 +74,20 @@ export function handleError(error: unknown): NextResponse {
     return fail(error.code, "Stored server cost settings are invalid for this provider.", 501, {
       providerName: error.providerName
     });
+  }
+  if (error instanceof MetaGraphRequestError) {
+    return fail(
+      error.code,
+      "Meta Graph API request failed.",
+      error.status >= 400 && error.status < 600 ? error.status : 502,
+      {
+        status: error.status,
+        metaErrorType: error.metaErrorType,
+        metaErrorCode: error.metaErrorCode,
+        metaErrorSubcode: error.metaErrorSubcode,
+        providerMessage: error.providerMessage
+      }
+    );
   }
   if (isPaidOperationDomainExecutorRequiredError(error)) {
     return fail(

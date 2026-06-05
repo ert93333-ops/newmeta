@@ -538,6 +538,102 @@ describe("create paused draft route", () => {
     expect(approvals.find((item) => item.objectId === "draft-live-missing-promoted-object")).toBeUndefined();
   });
 
+  it("fails closed before creating approval when live Meta validate_only rejects the campaign payload", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-live-validate-only-failure",
+      tenantId,
+      createdBy: requester.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      sourceUrl: "https://cdn.example.com/assets/live-validate-only-failure.png",
+      metadataJson: {}
+    });
+    mutableEnv.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 15).toString("base64");
+    const encrypted = encryptToken("server-token", mutableEnv.TOKEN_ENCRYPTION_KEY, "primary");
+    await repository.saveMetaConnection(request({}), {
+      id: "meta-live-draft-validate-only-failure",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: encrypted.encryptedAccessToken,
+      tokenIv: encrypted.tokenIv,
+      tokenAuthTag: encrypted.tokenAuthTag,
+      tokenKid: encrypted.tokenKid,
+      scopes: ["ads_read", "ads_management"],
+      status: "connected",
+      metadataJson: {
+        mode: "live"
+      }
+    });
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              message: "Campaign objective is invalid for this account",
+              type: "OAuthException",
+              code: 100,
+              error_subcode: 1815758
+            }
+          }),
+          { status: 400 }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await createPausedDraft(
+      request({
+        draftId: "draft-live-validate-only-failure",
+        adAccountId: "act_live_123",
+        assetId: "asset-live-validate-only-failure",
+        manifest,
+        pageId: "page_1",
+        payload: {
+          objective: "OUTCOME_SALES",
+          optimizationGoal: "OFFSITE_CONVERSIONS",
+          targeting: {
+            geo_locations: {
+              countries: ["KR"]
+            }
+          },
+          promotedObject: {
+            pixel_id: "pixel_123",
+            custom_event_type: "PURCHASE"
+          }
+        }
+      })
+    );
+    const body = (await response.json()) as {
+      error?: {
+        code?: string;
+        details?: {
+          status?: number;
+          metaErrorCode?: number;
+          metaErrorSubcode?: number;
+          providerMessage?: string;
+        };
+      };
+    };
+    const approvals = await repository.listApprovals(request({}), requester);
+
+    expect(response.status).toBe(400);
+    expect(body.error?.code).toBe("META_GRAPH_REQUEST_FAILED");
+    expect(body.error?.details).toMatchObject({
+      status: 400,
+      metaErrorCode: 100,
+      metaErrorSubcode: 1815758,
+      providerMessage: "Campaign objective is invalid for this account"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(approvals.find((item) => item.objectId === "draft-live-validate-only-failure")).toBeUndefined();
+  });
+
   it("executes the full live Meta paused-draft chain server-side when a stored connection and source URL exist", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();
@@ -585,7 +681,9 @@ describe("create paused draft route", () => {
         })
       )
       .mockImplementationOnce(async () => Response.json({ id: "creative_live_123" }))
+      .mockImplementationOnce(async () => Response.json({ success: true }))
       .mockImplementationOnce(async () => Response.json({ id: "cmp_live_123" }))
+      .mockImplementationOnce(async () => Response.json({ success: true }))
       .mockImplementationOnce(async () => Response.json({ id: "adset_live_123" }))
       .mockImplementationOnce(async () => Response.json({ id: "ad_live_123" }));
     vi.stubGlobal("fetch", fetchMock);
@@ -663,7 +761,7 @@ describe("create paused draft route", () => {
     });
 
     const calls = fetchMock.mock.calls as unknown as Array<[URL, RequestInit]>;
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(7);
     for (const [url, init] of calls) {
       expect(url.toString()).toContain("https://graph.facebook.com/");
       expect(url.searchParams.has("access_token")).toBe(false);
@@ -672,8 +770,12 @@ describe("create paused draft route", () => {
 
     const firstForm = calls[0][1].body as URLSearchParams;
     const secondForm = calls[1][1].body as URLSearchParams;
+    const thirdForm = calls[2][1].body as URLSearchParams;
+    const fifthForm = calls[4][1].body as URLSearchParams;
     expect(firstForm.get("url")).toBe("https://cdn.example.com/assets/live-success.png");
     expect(secondForm.get("object_story_spec")).toContain("\"image_hash\":\"hash_live_123\"");
+    expect(thirdForm.get("execution_options")).toBe("[\"validate_only\"]");
+    expect(fifthForm.get("execution_options")).toBe("[\"validate_only\"]");
     expect(JSON.stringify(body)).not.toContain("server-token");
   });
 });

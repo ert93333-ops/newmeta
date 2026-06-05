@@ -98,7 +98,7 @@ describe("MetaGraphApiAdapter token handling", () => {
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new TestableMetaGraphApiAdapter("server-token", "v24.0");
 
-    await expect(adapter.getForTest("me/adaccounts")).rejects.toThrow("META_GRAPH_REQUEST_FAILED:400");
+    await expect(adapter.getForTest("me/adaccounts")).rejects.toThrow("META_GRAPH_REQUEST_FAILED");
     await expect(adapter.getForTest("me/adaccounts")).rejects.not.toThrow("server-token");
   });
 
@@ -202,5 +202,58 @@ describe("MetaGraphApiAdapter token handling", () => {
     ).rejects.toThrow("META_TARGETING_REQUIRED");
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends validate_only execution options for campaign validation", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+    await adapter.validateCampaignCreate({
+      adAccountId: "act_123",
+      name: "Validate campaign",
+      objective: "OUTCOME_SALES"
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    const form = init.body as URLSearchParams;
+
+    expect(url.toString()).toBe("https://graph.facebook.com/v24.0/act_123/campaigns");
+    expect(form.get("execution_options")).toBe("[\"validate_only\"]");
+    expect(form.get("objective")).toBe("OUTCOME_SALES");
+  });
+
+  it("surfaces sanitized Meta provider details on validate_only failures", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              message: "Invalid ad set payload",
+              type: "OAuthException",
+              code: 100,
+              error_subcode: 1815758
+            }
+          }),
+          { status: 400 }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+
+    await expect(
+      adapter.validateCampaignCreate({
+        adAccountId: "act_123",
+        name: "Validate campaign",
+        objective: "OUTCOME_SALES"
+      })
+    ).rejects.toMatchObject({
+      code: "META_GRAPH_REQUEST_FAILED",
+      status: 400,
+      metaErrorCode: 100,
+      metaErrorSubcode: 1815758,
+      providerMessage: "Invalid ad set payload"
+    });
   });
 });

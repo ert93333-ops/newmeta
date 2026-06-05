@@ -100,6 +100,14 @@ export class MockMetaAdapter implements MetaAdapter {
     return [{ id: "mock_video_id", width: 1080, height: 1920, duration: 12 }];
   }
 
+  async validateCampaignCreate(_input: Parameters<MetaAdapter["validateCampaignCreate"]>[0]): Promise<void> {
+    return;
+  }
+
+  async validateAdSetCreate(_input: Parameters<MetaAdapter["validateAdSetCreate"]>[0]): Promise<void> {
+    return;
+  }
+
   async uploadImage(input: Parameters<MetaAdapter["uploadImage"]>[0]): Promise<{ imageHash: string; status: "PAUSED_READY" }> {
     assertExecutableApproval(input.approval, { ...systemExecutor, tenantId: input.approval.tenantId });
     return { imageHash: `mock_hash_${randomUUID()}`, status: "PAUSED_READY" };
