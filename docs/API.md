@@ -2,7 +2,7 @@
 
 All write-like routes parse request bodies through the guarded API JSON boundary and reject executable budget mutation payloads with `BUDGET_MUTATION_HARD_BLOCKED`. Credential-shaped request fields such as `access_token`, `refresh_token`, `client_secret`, `encrypted_access_token`, `token_iv`, `token_auth_tag`, `service_role_key`, `authorization`, and `token` are rejected with `CREDENTIAL_PAYLOAD_BLOCKED`; API responses redact those fields defensively if they are ever present.
 
-Routes resolve tenant/user context before persistence. In production, send a Supabase Auth bearer token and `x-tenant-id`; local mock mode falls back to the default mock tenant.
+Routes resolve tenant/user context before persistence. In production, `/api/me` can bootstrap the authenticated user's tenant memberships from a Supabase Auth bearer token alone. Tenant-scoped routes require the bearer token plus `x-tenant-id`; local mock mode falls back to the default mock tenant.
 
 Tenant-scoped GET routes also use the shared error boundary, so missing auth returns `AUTH_REQUIRED`/`SUPABASE_AUTH_REQUIRED` with 401 instead of an unhandled server error.
 
@@ -11,6 +11,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `GET /api/me`
 - `GET /api/tenants/:id`
 - `PATCH /api/settings/*`
+
+`GET /api/me` returns `memberships` and `activeTenant`. If `x-tenant-id` is provided, it verifies the requested tenant is one of the authenticated user's memberships and returns `TENANT_ACCESS_DENIED` otherwise. Without `x-tenant-id`, it returns the first visible membership as `activeTenant` so browser clients can choose a tenant before calling tenant-scoped APIs.
 
 ## Meta
 

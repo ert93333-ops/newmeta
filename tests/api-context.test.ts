@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isProductionRuntime, mockContext, resolveUserContext } from "@/lib/api/context";
+import { isProductionRuntime, mockContext, resolveIdentityContext, resolveUserContext } from "@/lib/api/context";
 
 const ENV_KEYS = [
   "NODE_ENV",
@@ -60,6 +60,21 @@ describe("API context", () => {
 
     expect(context.role).toBe("owner");
     expect(isProductionRuntime()).toBe(false);
+  });
+
+  it("returns mock tenant memberships for local identity bootstrap", async () => {
+    clearAuthEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+
+    const identity = await resolveIdentityContext(new Request("http://localhost/api/me"));
+
+    expect(identity.memberships).toEqual([
+      expect.objectContaining({
+        tenantId: expect.any(String),
+        role: "owner",
+        name: "Hermes Mock Tenant"
+      })
+    ]);
   });
 
   it("requires Supabase auth when production env is missing Supabase config", async () => {

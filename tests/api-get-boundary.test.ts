@@ -16,6 +16,7 @@ const ENV_KEYS = [
 
 const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const mutableEnv = process.env as unknown as Record<string, string | undefined>;
+const meRouteSource = readFileSync(join(process.cwd(), "src", "app", "api", "me", "route.ts"), "utf8");
 
 function restoreEnv(): void {
   for (const key of ENV_KEYS) {
@@ -62,6 +63,23 @@ describe("API GET auth boundary", () => {
 
     expect(response.status).toBe(401);
     expect((body.error as { code?: string }).code).toBe("SUPABASE_AUTH_REQUIRED");
+  });
+
+  it("lets /api/me bootstrap tenant memberships in local mock mode", async () => {
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+
+    const response = await getMe(new Request("http://localhost/api/me"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect((body.memberships as Array<{ tenantId?: string }>)[0].tenantId).toEqual(
+      (body.user as { tenantId?: string }).tenantId
+    );
+    expect(body.activeTenant).toEqual(
+      expect.objectContaining({
+        role: "owner"
+      })
+    );
   });
 
   it("requires auth for Meta ad account reads", async () => {
@@ -119,5 +137,10 @@ describe("API GET auth boundary", () => {
       .map(({ path }) => path.replace(process.cwd(), ""));
 
     expect(offenders).toEqual([]);
+  });
+
+  it("keeps /api/me on the identity bootstrap resolver instead of requiring tenant context first", () => {
+    expect(meRouteSource).toContain("resolveIdentityContext");
+    expect(meRouteSource).not.toContain("resolveUserContext");
   });
 });

@@ -115,6 +115,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "TENANT_REQUIRED") {
       return fail(error.message, "Tenant context is required.", 400);
     }
+    if (error.message === "TENANT_MEMBERSHIPS_UNAVAILABLE") {
+      return fail(error.message, "Tenant memberships could not be loaded.", 502);
+    }
     if (error.message === "APPROVAL_REQUIRED" || error.message === "SECOND_APPROVAL_REQUIRED") {
       return fail(error.message, "승인 후 실행할 수 있습니다.", 403);
     }

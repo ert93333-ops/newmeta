@@ -9,6 +9,7 @@ describe("Meta connection panel", () => {
   it("binds the browser handoff to the same tenant context as the OAuth state request", () => {
     expect(panelSource).toContain("hermes:tenant-id");
     expect(panelSource).toContain("/api/integrations/meta/connect-url");
+    expect(panelSource).toContain("/api/me");
     expect(panelSource).toContain('"x-tenant-id"');
     expect(panelSource).toContain("sessionStorage.setItem");
     expect(panelSource).toContain("localStorage.setItem");
@@ -18,6 +19,7 @@ describe("Meta connection panel", () => {
   it("uses Supabase session auth without rendering customer token inputs", () => {
     expect(panelSource).toContain("createSupabaseBrowserClient");
     expect(panelSource).toContain("headers.authorization");
+    expect(panelSource).toContain("<select");
     expect(panelSource).not.toMatch(/<input[^>]+(?:name|id|placeholder|aria-label)=["'][^"']*(token|secret)/iu);
     expect(panelSource).not.toContain("META_APP_SECRET");
     expect(panelSource).not.toContain("META_CLIENT_SECRET");

@@ -185,7 +185,8 @@ textarea {
   gap: 12px;
 }
 
-.meta-tenant-field input {
+.meta-tenant-field input,
+.meta-tenant-field select {
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
@@ -431,7 +432,8 @@ textarea {
   font-size: 13px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -441,7 +443,8 @@ textarea {
   font-size: 14px;
 }
 
-.field input:disabled {
+.field input:disabled,
+.field select:disabled {
   background: var(--panel-soft);
   color: var(--muted);
 }

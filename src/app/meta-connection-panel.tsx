@@ -19,16 +19,34 @@ interface ConnectUrlResponse {
   };
 }
 
+interface TenantMembership {
+  tenantId: string;
+  name: string;
+  role: string;
+}
+
+interface MeResponse {
+  memberships?: TenantMembership[];
+  activeTenant?: TenantMembership | null;
+  error?: {
+    code?: string;
+  };
+}
+
 const TENANT_STORAGE_KEY = "hermes:tenant-id";
 
 export function MetaConnectionPanel() {
   const [tenantId, setTenantId] = useState("");
+  const [memberships, setMemberships] = useState<TenantMembership[]>([]);
+  const [membershipStatus, setMembershipStatus] = useState<"idle" | "loaded" | "blocked">("idle");
   const [status, setStatus] = useState<ConnectStatus>("idle");
   const [result, setResult] = useState<ConnectUrlResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setTenantId(readTenantId());
+    const storedTenantId = readTenantId();
+    setTenantId(storedTenantId);
+    void loadTenantMemberships(storedTenantId, setTenantId, setMemberships, setMembershipStatus);
   }, []);
 
   const requiredScopes = useMemo(() => result?.requiredScopes ?? [], [result]);
@@ -91,14 +109,30 @@ export function MetaConnectionPanel() {
 
       <form className="meta-connect-form" onSubmit={handleSubmit}>
         <label className="field meta-tenant-field">
-          <span>Tenant ID</span>
-          <input
-            autoComplete="off"
-            inputMode="text"
-            onChange={(event) => setTenantId(event.target.value)}
-            placeholder="tenant uuid"
-            value={tenantId}
-          />
+          <span>{memberships.length > 0 ? "Tenant" : "Tenant ID"}</span>
+          {memberships.length > 0 ? (
+            <select
+              onChange={(event) => {
+                persistTenantId(event.target.value);
+                setTenantId(event.target.value);
+              }}
+              value={tenantId}
+            >
+              {memberships.map((membership) => (
+                <option key={membership.tenantId} value={membership.tenantId}>
+                  {membership.name} ({membership.role})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              autoComplete="off"
+              inputMode="text"
+              onChange={(event) => setTenantId(event.target.value)}
+              placeholder="tenant uuid"
+              value={tenantId}
+            />
+          )}
         </label>
         <button
           className="approve-button meta-connect-button"
@@ -112,7 +146,7 @@ export function MetaConnectionPanel() {
 
       <div className={`meta-connection-state ${status}`} aria-live="polite">
         <ShieldCheck aria-hidden="true" size={16} />
-        <span>{getStatusMessage(status, error)}</span>
+        <span>{getStatusMessage(status, error, membershipStatus)}</span>
       </div>
 
       {result ? (
@@ -186,7 +220,52 @@ async function getSupabaseBearer(): Promise<string | undefined> {
   return session.data.session?.access_token;
 }
 
-function getStatusMessage(status: ConnectStatus, error: string | null): string {
+async function loadTenantMemberships(
+  storedTenantId: string,
+  setTenantId: (tenantId: string) => void,
+  setMemberships: (memberships: TenantMembership[]) => void,
+  setMembershipStatus: (status: "idle" | "loaded" | "blocked") => void
+): Promise<void> {
+  try {
+    const bearer = await getSupabaseBearer();
+    if (!bearer) {
+      return;
+    }
+
+    const response = await fetch("/api/me", {
+      headers: {
+        authorization: `Bearer ${bearer}`
+      }
+    });
+    const body = (await response.json()) as MeResponse;
+    if (!response.ok) {
+      setMembershipStatus("blocked");
+      return;
+    }
+
+    const nextMemberships = body.memberships ?? [];
+    setMemberships(nextMemberships);
+    setMembershipStatus("loaded");
+
+    const preferredTenant =
+      nextMemberships.find((membership) => membership.tenantId === storedTenantId) ??
+      body.activeTenant ??
+      nextMemberships[0];
+
+    if (preferredTenant && preferredTenant.tenantId !== storedTenantId) {
+      setTenantId(preferredTenant.tenantId);
+      persistTenantId(preferredTenant.tenantId);
+    }
+  } catch {
+    setMembershipStatus("blocked");
+  }
+}
+
+function getStatusMessage(
+  status: ConnectStatus,
+  error: string | null,
+  membershipStatus: "idle" | "loaded" | "blocked"
+): string {
   if (status === "loading") {
     return "Preparing a signed OAuth state.";
   }
@@ -195,6 +274,12 @@ function getStatusMessage(status: ConnectStatus, error: string | null): string {
   }
   if (status === "blocked") {
     return `Connect URL blocked: ${error ?? "UNKNOWN_ERROR"}.`;
+  }
+  if (membershipStatus === "loaded") {
+    return "Tenant membership loaded from Supabase Auth.";
+  }
+  if (membershipStatus === "blocked") {
+    return "Tenant membership lookup was blocked.";
   }
   return "Ready to prepare a Meta OAuth URL.";
 }
