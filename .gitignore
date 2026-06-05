@@ -5,6 +5,7 @@ node_modules/
 coverage/
 dist/
 tmp/
+.codex-remote-attachments/
 .DS_Store
 *.log
 *.tsbuildinfo
