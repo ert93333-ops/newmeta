@@ -86,6 +86,23 @@ export interface AdDraftRecord {
   updatedAt?: string;
 }
 
+export interface CreativeAssetRecord {
+  id?: string;
+  tenantId: string;
+  createdBy?: string;
+  assetType: "image" | "video";
+  storagePath?: string;
+  sourceUrl?: string;
+  sha256?: string;
+  width: number;
+  height: number;
+  durationSeconds?: number;
+  mimeType?: string;
+  metadataJson: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PerformanceFusionReportRecord {
   id?: string;
   tenantId: string;
@@ -207,7 +224,8 @@ export interface HermesRepository {
   summarizeCostUsage(request: Request, context: UserContext, now?: Date): Promise<CostUsageSummary>;
   saveJob(request: Request, job: Record<string, unknown>): Promise<Record<string, unknown>>;
   getJob(request: Request, context: UserContext, id: string): Promise<Record<string, unknown> | null>;
-  saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>>;
+  saveAsset(request: Request, asset: CreativeAssetRecord): Promise<CreativeAssetRecord>;
+  getAsset(request: Request, context: UserContext, id: string): Promise<CreativeAssetRecord | null>;
   saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput>;
   getLatestMetaConnection(request: Request, context: UserContext, provider: string): Promise<MetaConnectionRecord | null>;
   getIntegrationSettings(
@@ -304,7 +322,7 @@ export interface HermesRepository {
 interface HermesMemoryStore {
   approvals: Map<string, ApprovalRequest>;
   jobs: Map<string, Record<string, unknown>>;
-  assets: Map<string, Record<string, unknown>>;
+  assets: Map<string, CreativeAssetRecord>;
   adDrafts: Map<string, AdDraftRecord>;
   performanceFusionReports: Map<string, PerformanceFusionReportRecord>;
   placementValidationReports: Map<string, PlacementValidationReportRecord>;
@@ -415,8 +433,23 @@ export class MemoryHermesRepository implements HermesRepository {
     return job;
   }
 
-  async saveAsset(_request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>> {
-    getMemoryStore().assets.set(String(asset.id), asset);
+  async saveAsset(_request: Request, asset: CreativeAssetRecord): Promise<CreativeAssetRecord> {
+    const now = new Date().toISOString();
+    const persisted = {
+      ...asset,
+      id: asset.id ?? crypto.randomUUID(),
+      createdAt: asset.createdAt ?? now,
+      updatedAt: now
+    };
+    getMemoryStore().assets.set(persisted.id, persisted);
+    return persisted;
+  }
+
+  async getAsset(_request: Request, context: UserContext, id: string): Promise<CreativeAssetRecord | null> {
+    const asset = getMemoryStore().assets.get(id);
+    if (!asset || asset.tenantId !== context.tenantId) {
+      return null;
+    }
     return asset;
   }
 
@@ -875,13 +908,27 @@ export class SupabaseHermesRepository implements HermesRepository {
     return data ? fromJobRow(data) : null;
   }
 
-  async saveAsset(request: Request, asset: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async saveAsset(request: Request, asset: CreativeAssetRecord): Promise<CreativeAssetRecord> {
     const supabase = createRequestClient(request);
     if (!supabase) return this.fallback.saveAsset(request, asset);
 
-    const { error } = await supabase.from("creative_assets").insert(toAssetRow(asset));
+    const { data, error } = await supabase.from("creative_assets").insert(toAssetRow(asset)).select("*").single();
     if (error) throw new Error(`SUPABASE_ASSET_INSERT_FAILED:${error.message}`);
-    return asset;
+    return fromAssetRow(data as AssetRow);
+  }
+
+  async getAsset(request: Request, context: UserContext, id: string): Promise<CreativeAssetRecord | null> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.getAsset(request, context, id);
+
+    const { data, error } = await supabase
+      .from("creative_assets")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", context.tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`SUPABASE_ASSET_SELECT_FAILED:${error.message}`);
+    return data ? fromAssetRow(data as AssetRow) : null;
   }
 
   async saveMetaConnection(request: Request, connection: MetaConnectionInput): Promise<MetaConnectionInput> {
@@ -1371,6 +1418,23 @@ interface MetaConnectionRow {
   created_at: string;
 }
 
+interface AssetRow {
+  id: string;
+  tenant_id: string;
+  created_by?: string | null;
+  asset_type: CreativeAssetRecord["assetType"];
+  storage_path?: string | null;
+  source_url?: string | null;
+  sha256?: string | null;
+  width: number;
+  height: number;
+  duration_seconds?: number | null;
+  mime_type?: string | null;
+  metadata_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
 interface AdDraftRow {
   id: string;
   tenant_id: string;
@@ -1570,18 +1634,39 @@ function fromJobRow(row: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-function toAssetRow(asset: Record<string, unknown>): Record<string, unknown> {
-  const inputAsset = asset.asset as Record<string, unknown> | undefined;
+function toAssetRow(asset: CreativeAssetRecord): Record<string, unknown> {
   return {
     id: asset.id,
     tenant_id: asset.tenantId,
     created_by: asset.createdBy,
-    asset_type: asset.assetType ?? inputAsset?.type ?? "image",
-    width: asset.width ?? inputAsset?.width,
-    height: asset.height ?? inputAsset?.height,
-    duration_seconds: asset.durationSeconds ?? inputAsset?.durationSeconds,
-    mime_type: asset.mimeType ?? inputAsset?.mimeType,
-    metadata_json: asset
+    asset_type: asset.assetType,
+    storage_path: asset.storagePath,
+    source_url: asset.sourceUrl,
+    sha256: asset.sha256,
+    width: asset.width,
+    height: asset.height,
+    duration_seconds: asset.durationSeconds,
+    mime_type: asset.mimeType,
+    metadata_json: asset.metadataJson ?? {}
+  };
+}
+
+function fromAssetRow(row: AssetRow): CreativeAssetRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    createdBy: row.created_by ?? undefined,
+    assetType: row.asset_type,
+    storagePath: row.storage_path ?? undefined,
+    sourceUrl: row.source_url ?? undefined,
+    sha256: row.sha256 ?? undefined,
+    width: row.width,
+    height: row.height,
+    durationSeconds: row.duration_seconds ?? undefined,
+    mimeType: row.mime_type ?? undefined,
+    metadataJson: row.metadata_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 

@@ -4,8 +4,8 @@ import { analyzeVideoCreative } from "@/lib/creative/video-analysis";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
 import { getRepository } from "@/lib/repositories/hermes-repository";
-import type { CreativeFeatureRecord } from "@/lib/repositories/hermes-repository";
-import type { CreativeManifest } from "@/lib/types";
+import type { CreativeAssetRecord, CreativeFeatureRecord } from "@/lib/repositories/hermes-repository";
+import type { CreativeAssetMetadata, CreativeManifest } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +16,17 @@ export async function POST(request: Request) {
     if (!assetId) {
       return fail("CREATIVE_ASSET_ID_REQUIRED", "Creative analysis requires a persisted asset id.", 400);
     }
-    const result = manifest.asset.type === "video" ? analyzeVideoCreative(manifest.asset) : analyzeImageCreative(manifest);
+    const persistedAsset = await repository.getAsset(request, context, assetId);
+    if (!persistedAsset) {
+      return fail("CREATIVE_ASSET_NOT_FOUND", "Creative analysis requires a same-tenant persisted asset.", 404, {
+        assetId
+      });
+    }
+    const normalizedManifest = normalizeManifest(manifest, persistedAsset);
+    const result =
+      normalizedManifest.asset.type === "video"
+        ? analyzeVideoCreative(normalizedManifest.asset)
+        : analyzeImageCreative(normalizedManifest);
     const jobId = randomUUID();
     await repository.saveCreativeAnalysisJob(request, {
       id: jobId,
@@ -24,7 +34,7 @@ export async function POST(request: Request) {
       createdBy: context.userId,
       assetId,
       status: "succeeded",
-      analysisType: manifest.asset.type,
+      analysisType: normalizedManifest.asset.type,
       resultJson: result
     });
     await repository.saveCreativeFeatures(request, buildFeatureRows(jobId, assetId, context.tenantId, context.userId, result));
@@ -44,7 +54,7 @@ export async function POST(request: Request) {
       await repository.saveVideoSegments(
         request,
         result.segments.map((segment) => {
-          const [startSeconds, endSeconds] = segmentBounds(segment.range, manifest.asset.durationSeconds);
+          const [startSeconds, endSeconds] = segmentBounds(segment.range, normalizedManifest.asset.durationSeconds);
           return {
             id: randomUUID(),
             tenantId: context.tenantId,
@@ -75,7 +85,7 @@ export async function POST(request: Request) {
       afterJson: {
         job,
         assetId,
-        analysisType: manifest.asset.type,
+        analysisType: normalizedManifest.asset.type,
         scoreCount: result.scores.length
       },
       result: "created"
@@ -87,11 +97,37 @@ export async function POST(request: Request) {
 }
 
 function readAssetId(manifest: CreativeManifest): string | undefined {
-  if (typeof manifest.asset.id !== "string") {
+  if (!manifest || typeof manifest !== "object" || !("asset" in manifest)) {
+    return undefined;
+  }
+  if (!manifest.asset || typeof manifest.asset.id !== "string") {
     return undefined;
   }
   const trimmed = manifest.asset.id.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeManifest(manifest: CreativeManifest, persistedAsset: CreativeAssetRecord): CreativeManifest {
+  return {
+    ...manifest,
+    asset: {
+      id: persistedAsset.id,
+      type: persistedAsset.assetType,
+      width: persistedAsset.width,
+      height: persistedAsset.height,
+      durationSeconds: persistedAsset.durationSeconds,
+      mimeType: persistedAsset.mimeType,
+      fileSizeBytes: readPersistedFileSizeBytes(persistedAsset)
+    } satisfies CreativeAssetMetadata
+  };
+}
+
+function readPersistedFileSizeBytes(asset: CreativeAssetRecord): number | undefined {
+  if (typeof asset.metadataJson !== "object" || asset.metadataJson === null || !("fileSizeBytes" in asset.metadataJson)) {
+    return undefined;
+  }
+  const value = (asset.metadataJson as Record<string, unknown>).fileSizeBytes;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function buildFeatureRows(

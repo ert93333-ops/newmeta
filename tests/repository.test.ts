@@ -143,6 +143,34 @@ describe("Hermes repository", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps creative assets tenant-scoped in memory fallback", async () => {
+    const repository = new MemoryHermesRepository();
+    const persisted = await repository.saveAsset(request, {
+      tenantId: owner.tenantId,
+      createdBy: owner.userId,
+      assetType: "image",
+      storagePath: "creative-assets/tenant-a/asset-1.png",
+      sourceUrl: "https://cdn.example.com/asset-1.png",
+      sha256: "sha256-asset-1",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {
+        fileSizeBytes: 2048
+      }
+    });
+
+    await expect(repository.getAsset(request, owner, persisted.id!)).resolves.toMatchObject({
+      id: persisted.id,
+      tenantId: owner.tenantId,
+      assetType: "image",
+      sha256: "sha256-asset-1",
+      width: 1080,
+      height: 1350
+    });
+    await expect(repository.getAsset(request, { ...owner, tenantId: "tenant-b" }, persisted.id!)).resolves.toBeNull();
+  });
+
   it("keeps performance fusion reports tenant-scoped in memory fallback", async () => {
     const repository = new MemoryHermesRepository();
     const persisted = await repository.savePerformanceFusionReport(request, {

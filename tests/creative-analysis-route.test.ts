@@ -95,13 +95,40 @@ describe("creative analysis route", () => {
     expect((body.error as { code?: string }).code).toBe("CREATIVE_ASSET_ID_REQUIRED");
   });
 
-  it("persists image analysis into dedicated creative analysis tables", async () => {
+  it("fails closed when the creative asset id does not exist for the tenant", async () => {
     setMockEnv();
-    const repository = new MemoryHermesRepository();
 
     const response = await creativeAnalysisRoute(
       request({
-        asset: { id: "asset-image-1", type: "image", width: 1080, height: 1350 },
+        asset: { id: "asset-missing-1", type: "image", width: 1080, height: 1350 },
+        textBoxes: []
+      })
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(404);
+    expect((body.error as { code?: string }).code).toBe("CREATIVE_ASSET_NOT_FOUND");
+  });
+
+  it("persists image analysis into dedicated creative analysis tables", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-image-1",
+      tenantId,
+      createdBy: mockUserId,
+      assetType: "image",
+      width: 1080,
+      height: 1350,
+      mimeType: "image/png",
+      metadataJson: {
+        fileSizeBytes: 245760
+      }
+    });
+
+    const response = await creativeAnalysisRoute(
+      request({
+        asset: { id: "asset-image-1", type: "video", width: 1, height: 1 },
         textBoxes: [
           { text: "Hook", x: 120, y: 140, width: 300, height: 80, role: "hook" },
           { text: "9,900", x: 120, y: 860, width: 220, height: 80, role: "price" },
@@ -137,15 +164,25 @@ describe("creative analysis route", () => {
   it("persists video segments for video creative analysis", async () => {
     setMockEnv();
     const repository = new MemoryHermesRepository();
+    await repository.saveAsset(request({}), {
+      id: "asset-video-1",
+      tenantId,
+      createdBy: mockUserId,
+      assetType: "video",
+      width: 1080,
+      height: 1920,
+      durationSeconds: 15,
+      mimeType: "video/mp4",
+      metadataJson: {}
+    });
 
     const response = await creativeAnalysisRoute(
       request({
         asset: {
           id: "asset-video-1",
-          type: "video",
-          width: 1080,
-          height: 1920,
-          durationSeconds: 15
+          type: "image",
+          width: 640,
+          height: 640
         },
         textBoxes: []
       })
