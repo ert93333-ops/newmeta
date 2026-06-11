@@ -31,6 +31,8 @@ Approval required:
 
 Image and video generation queueing must be bound to an approved `ai_paid_generation` approval request with a matching `objectType` of `image_generation` or `video_generation`. The render job API consumes the approval, queues a worker job, and records a `running` cost usage reservation linked by `relatedJobId = approval.id`.
 
+Production queueing is provider- and operation-specific. `HERMES_PAID_GENERATION_PROVIDER=openai` enables only approved `image_generation` jobs with server-only `OPENAI_API_KEY`; `video_generation` remains unavailable and cannot consume approvals until a video provider is wired. `HERMES_PAID_GENERATION_PROVIDER=generic_http` can enable both paid generation operation types through a server-side provider endpoint and key.
+
 The worker closes that reservation only when the queued paid generation reaches a terminal state. A succeeded job writes a final `succeeded` usage row with actual cost; an exhausted failed job writes a final `failed` row with zero actual cost. Requeued retry attempts do not close the reservation.
 
 Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches. Production variant batch execution fails closed with `PAID_VARIANT_DESIGN_NOT_CONFIGURED` until a real paid variant provider is wired.

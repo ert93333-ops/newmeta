@@ -64,12 +64,20 @@ describe("release env gate", () => {
       HERMES_PAID_GENERATION_API_URL: undefined,
       HERMES_PAID_GENERATION_API_KEY: undefined
     });
+    const openai = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_PAID_GENERATION_PROVIDER: "openai",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined,
+      OPENAI_API_KEY: "openai-secret"
+    });
     const insecure = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_API_URL: "http://provider.local/jobs" });
 
     expect(missing.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
     expect(missing.issues.map((issue) => issue.code)).toContain("PAID_GENERATION_PROVIDER_NOT_CONFIGURED");
     expect(disabled.passed).toBe(true);
     expect(disabledWithoutProviderSecrets.passed).toBe(true);
+    expect(openai.passed).toBe(true);
     expect(insecure.issues.map((issue) => issue.code)).toContain("INSECURE_URL");
   });
 
@@ -82,6 +90,17 @@ describe("release env gate", () => {
 
     expect(result.issues.some((issue) => issue.message.includes("HERMES_PAID_GENERATION_API_URL"))).toBe(true);
     expect(result.issues.some((issue) => issue.message.includes("HERMES_PAID_GENERATION_API_KEY"))).toBe(true);
+  });
+
+  it("requires OpenAI API key when the OpenAI paid provider is enabled", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_PAID_GENERATION_PROVIDER: "openai",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined
+    });
+
+    expect(result.issues.some((issue) => issue.message.includes("OPENAI_API_KEY"))).toBe(true);
   });
 
   it("requires live approval execution mode for release", () => {
@@ -163,6 +182,15 @@ describe("release env gate", () => {
     const result = checkReleaseEnv({
       ...validReleaseEnv(),
       NEXT_PUBLIC_SUPABASE_SECRET_KEY: "sb_secret_should_not_be_public"
+    });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("PUBLIC_SECRET_ENV");
+  });
+
+  it("blocks public OpenAI API key env names", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      NEXT_PUBLIC_OPENAI_API_KEY: "should-not-be-public"
     });
 
     expect(result.issues.map((issue) => issue.code)).toContain("PUBLIC_SECRET_ENV");

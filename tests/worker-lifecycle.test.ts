@@ -118,6 +118,98 @@ describe("Hermes worker lifecycle", () => {
     });
   });
 
+  it("calls OpenAI image generation in production without exposing the server key in persisted result", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              b64_json: "generated-image-base64",
+              revised_prompt: "A clean product photo"
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+
+    await expect(
+      processClaimedCreativeJob(
+        {
+          id: "00000000-0000-0000-0000-000000000114",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          job_type: "image_generation",
+          input_json: {
+            operation: "ai_paid_generation",
+            operationType: "image_generation",
+            prompt: "Generate a square Korean skincare ad image"
+          }
+        },
+        "test-worker",
+        {
+          NODE_ENV: "production",
+          HERMES_PAID_GENERATION_PROVIDER: "openai",
+          OPENAI_API_KEY: "openai-secret",
+          HERMES_OPENAI_IMAGE_MODEL: "gpt-image-test"
+        },
+        fetchImpl
+      )
+    ).resolves.toMatchObject({
+      worker: "test-worker",
+      jobType: "image_generation",
+      provider: "openai",
+      model: "gpt-image-test",
+      mockSafe: false,
+      providerResult: {
+        imageCount: 1,
+        data: [
+          {
+            b64_json: "generated-image-base64",
+            revised_prompt: "A clean product photo"
+          }
+        ]
+      }
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://api.openai.com/v1/images/generations");
+    expect(calls[0].init?.headers).toMatchObject({
+      authorization: "Bearer openai-secret"
+    });
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({
+        model: "gpt-image-test",
+        prompt: "Generate a square Korean skincare ad image",
+        n: 1
+      })
+    );
+  });
+
+  it("fails closed for OpenAI video generation until a video provider is configured", async () => {
+    await expect(
+      processClaimedCreativeJob(
+        {
+          id: "00000000-0000-0000-0000-000000000115",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          job_type: "video_generation",
+          input_json: {
+            operation: "ai_paid_generation",
+            operationType: "video_generation",
+            prompt: "Generate a video ad"
+          }
+        },
+        "test-worker",
+        {
+          NODE_ENV: "production",
+          HERMES_PAID_GENERATION_PROVIDER: "openai",
+          OPENAI_API_KEY: "openai-secret"
+        }
+      )
+    ).rejects.toThrow("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  });
+
   it("completes a claimed job through the private DB function", async () => {
     const { client, queries } = fakeClientFor(
       {

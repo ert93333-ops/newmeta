@@ -46,6 +46,7 @@ const ENV_KEYS = [
   "HERMES_PAID_GENERATION_PROVIDER",
   "HERMES_PAID_GENERATION_API_URL",
   "HERMES_PAID_GENERATION_API_KEY",
+  "OPENAI_API_KEY",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
   "SUPABASE_AUTH_SMOKE_TENANT_ID",
@@ -147,6 +148,38 @@ describe("ops health", () => {
 
     expect(result.status).toBe("ready");
     expect(result.checks.paidGenerationProvider).toBe("disabled");
+  });
+
+  it("reports ready when OpenAI paid image generation is configured server-side", () => {
+    const env = {
+      ...validReleaseEnv(),
+      NODE_ENV: "production",
+      HERMES_PAID_GENERATION_PROVIDER: "openai",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined,
+      OPENAI_API_KEY: "openai-secret"
+    };
+
+    const result = buildOpsHealth(env);
+
+    expect(result.status).toBe("ready");
+    expect(result.checks.paidGenerationProvider).toBe("configured");
+    expect(JSON.stringify(result)).not.toMatch(/openai-secret/);
+  });
+
+  it("blocks OpenAI paid generation when the server-only key is missing", () => {
+    const env = {
+      ...validReleaseEnv(),
+      HERMES_PAID_GENERATION_PROVIDER: "openai",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined,
+      OPENAI_API_KEY: undefined
+    };
+
+    const result = buildOpsHealth(env);
+
+    expect(result.status).toBe("blocked");
+    expect(result.checks.paidGenerationProvider).toBe("missing");
   });
 
   it("returns 503 while required release env is missing", async () => {

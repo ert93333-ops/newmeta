@@ -4,7 +4,7 @@ import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { checkForbiddenFinalText, checkPriceAccuracy, checkSafeArea } from "@/lib/creative/checkers";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { assertPaidOperationApproval, PaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
-import { isPaidGenerationProviderConfigured } from "@/lib/generation/paid-generation-provider";
+import { isPaidGenerationOperationConfigured } from "@/lib/generation/paid-generation-provider";
 import {
   costUsageFromExecutedApproval,
   getRepository,
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const body = (await parseWriteJson(request)) as RenderJobRequest;
     const paidGenerationOperationType = readPaidGenerationOperationType(body.operationType);
-    if (paidGenerationOperationType && isProductionRuntime() && !isPaidGenerationProviderConfigured()) {
+    if (paidGenerationOperationType && isProductionRuntime() && !isPaidGenerationOperationConfigured(paidGenerationOperationType)) {
       throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
     }
     if (!isRenderPipelineConfigured(paidGenerationOperationType)) {
@@ -169,7 +169,7 @@ export function isRenderPipelineConfigured(
   paidGenerationOperationType: PaidGenerationOperationType | undefined
 ): boolean {
   if (paidGenerationOperationType) {
-    return !isProductionRuntime() || isPaidGenerationProviderConfigured();
+    return !isProductionRuntime() || isPaidGenerationOperationConfigured(paidGenerationOperationType);
   }
   return !isProductionRuntime() || process.env.HERMES_RENDER_PIPELINE_MODE === "live";
 }

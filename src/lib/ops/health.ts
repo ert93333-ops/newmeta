@@ -37,9 +37,10 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     tokenKeyRotation: hasValue(env.TOKEN_ENCRYPTION_KEY_ID) && env.TOKEN_ENCRYPTION_KEY_ID !== "primary" ? "configured" : "missing",
     renderPipeline: env.HERMES_RENDER_PIPELINE_MODE === "live" ? "configured" : "not_configured",
     paidGenerationProvider:
-      env.HERMES_PAID_GENERATION_PROVIDER === "generic_http" &&
-      hasValue(env.HERMES_PAID_GENERATION_API_URL) &&
-      hasValue(env.HERMES_PAID_GENERATION_API_KEY)
+      (env.HERMES_PAID_GENERATION_PROVIDER === "generic_http" &&
+        hasValue(env.HERMES_PAID_GENERATION_API_URL) &&
+        hasValue(env.HERMES_PAID_GENERATION_API_KEY)) ||
+      (env.HERMES_PAID_GENERATION_PROVIDER === "openai" && hasValue(env.OPENAI_API_KEY))
         ? "configured"
         : env.HERMES_PAID_GENERATION_PROVIDER === "disabled"
           ? "disabled"

@@ -41,7 +41,7 @@ const PLACEHOLDER_PATTERNS = [
   /mock/i
 ];
 
-const PUBLIC_SECRET_NAME_PATTERN = /(SECRET|SERVICE|TOKEN|PRIVATE|PASSWORD|DB_URL|META_APP_SECRET|WORKER_SECRET)/i;
+const PUBLIC_SECRET_NAME_PATTERN = /(SECRET|SERVICE|TOKEN|PRIVATE|PASSWORD|DB_URL|API_KEY|META_APP_SECRET|WORKER_SECRET)/i;
 
 function value(env: EnvRecord, key: string): string | undefined {
   const raw = env[key]?.trim();
@@ -140,11 +140,11 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
     addIssue(issues, "RENDER_PIPELINE_NOT_LIVE", "HERMES_RENDER_PIPELINE_MODE=live is required for release.");
   }
   const paidGenerationProvider = value(env, "HERMES_PAID_GENERATION_PROVIDER");
-  if (paidGenerationProvider !== "generic_http" && paidGenerationProvider !== "disabled") {
+  if (paidGenerationProvider !== "generic_http" && paidGenerationProvider !== "openai" && paidGenerationProvider !== "disabled") {
     addIssue(
       issues,
       "PAID_GENERATION_PROVIDER_NOT_CONFIGURED",
-      "HERMES_PAID_GENERATION_PROVIDER must be generic_http or disabled for release."
+      "HERMES_PAID_GENERATION_PROVIDER must be generic_http, openai, or disabled for release."
     );
   }
   if (paidGenerationProvider === "generic_http") {
@@ -155,6 +155,14 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
       } else if (isPlaceholder(raw)) {
         addIssue(issues, "PLACEHOLDER_ENV", `${key} still contains a placeholder value.`);
       }
+    }
+  }
+  if (paidGenerationProvider === "openai") {
+    const raw = value(env, "OPENAI_API_KEY");
+    if (!raw) {
+      addIssue(issues, "MISSING_ENV", "OPENAI_API_KEY is required when HERMES_PAID_GENERATION_PROVIDER=openai.");
+    } else if (isPlaceholder(raw)) {
+      addIssue(issues, "PLACEHOLDER_ENV", "OPENAI_API_KEY still contains a placeholder value.");
     }
   }
 

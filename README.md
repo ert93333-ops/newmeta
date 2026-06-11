@@ -42,7 +42,7 @@ For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=moc
 npm run env:release-gates
 ```
 
-The gate fails closed on missing production Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, placeholder values, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names. Paid generation must either be configured with `HERMES_PAID_GENERATION_PROVIDER=generic_http` plus its server-only endpoint/key or explicitly disabled with `HERMES_PAID_GENERATION_PROVIDER=disabled`.
+The gate fails closed on missing production Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, placeholder values, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names. Paid generation must either be configured with `HERMES_PAID_GENERATION_PROVIDER=openai` plus server-only `OPENAI_API_KEY`, configured with `HERMES_PAID_GENERATION_PROVIDER=generic_http` plus its server-only endpoint/key, or explicitly disabled with `HERMES_PAID_GENERATION_PROVIDER=disabled`. The built-in OpenAI provider supports approved `image_generation` jobs only; paid `video_generation` remains fail-closed until a video provider is connected.
 
 Hermes can generate only the local release secrets it owns:
 
@@ -55,6 +55,8 @@ Use the printed values for `TOKEN_ENCRYPTION_KEY`, `TOKEN_ENCRYPTION_KEY_ID`, `H
 ## Render
 
 `render.yaml` defines a free Render web service for the Next.js app. Import this GitHub repo as a Render Blueprint, fill every `sync: false` env var from the production secret manager, and set both `NEXT_PUBLIC_APP_URL` and `HERMES_APP_URL` to the final Render URL. After deployment, set `META_REDIRECT_URI` to `https://<render-service>.onrender.com/api/integrations/meta/callback` in both Render and the TOmcp Meta app.
+
+The Render blueprint enables `HERMES_PAID_GENERATION_PROVIDER=openai` and declares `OPENAI_API_KEY` as `sync: false`. Keep that key only in Render and GitHub secrets; never put it in `NEXT_PUBLIC_*` env vars. The OpenAI provider calls the Images API from the worker with bearer auth in headers and persists the generated image response on the server-side job result.
 
 The GitHub workflow `.github/workflows/render-keepalive.yml` pings `RENDER_KEEPALIVE_URL` every 5 minutes. Store the deployed Render URL as a GitHub Actions repository variable or secret named `RENDER_KEEPALIVE_URL`; the workflow appends `/api/ping` automatically when needed. `/api/ping` is a shallow liveness endpoint for Render health checks and keepalive only. `/api/ops/health` remains the strict release-readiness endpoint.
 

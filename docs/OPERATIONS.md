@@ -40,7 +40,7 @@ The worker lifecycle is DB-owned:
 
 The default `max_attempts = 2` gives one retry after the first failed execution. These functions are private and executable by `service_role`; they are not exposed as public API routes.
 
-For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation API queueing and worker execution require `HERMES_PAID_GENERATION_PROVIDER=generic_http`, `HERMES_PAID_GENERATION_API_URL`, and server-only `HERMES_PAID_GENERATION_API_KEY`; otherwise they fail closed with `PAID_GENERATION_WORKER_NOT_CONFIGURED`. For releases without a paid provider account, set `HERMES_PAID_GENERATION_PROVIDER=disabled`; paid operations remain unavailable and cannot consume approvals or cost reservations. The worker sends `jobId`, `tenantId`, `jobType`, and `input` to the provider with the API key in the `Authorization` header only, then strips token/secret/key fields from provider responses before persistence.
+For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation API queueing and worker execution require a configured operation-specific provider. `HERMES_PAID_GENERATION_PROVIDER=openai` plus server-only `OPENAI_API_KEY` enables approved `image_generation` jobs through the OpenAI Images API. It does not enable `video_generation`; video requests fail closed before consuming approvals. `HERMES_PAID_GENERATION_PROVIDER=generic_http` enables both paid operation types when `HERMES_PAID_GENERATION_API_URL` and server-only `HERMES_PAID_GENERATION_API_KEY` are present. For releases without a paid provider account, set `HERMES_PAID_GENERATION_PROVIDER=disabled`; paid operations remain unavailable and cannot consume approvals or cost reservations. Provider secrets are sent in the `Authorization` header only, and token/secret/key fields are stripped from provider responses before persistence.
 
 ## Auth Mode
 
@@ -54,7 +54,7 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, `HERMES_PAID_GENERATION_PROVIDER` values other than `generic_http` or `disabled`, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names. When `HERMES_PAID_GENERATION_PROVIDER=generic_http`, `HERMES_PAID_GENERATION_API_URL` and `HERMES_PAID_GENERATION_API_KEY` are required.
+The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, `HERMES_PAID_GENERATION_PROVIDER` values other than `openai`, `generic_http`, or `disabled`, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names including public API keys. When `HERMES_PAID_GENERATION_PROVIDER=openai`, `OPENAI_API_KEY` is required. When `HERMES_PAID_GENERATION_PROVIDER=generic_http`, `HERMES_PAID_GENERATION_API_URL` and `HERMES_PAID_GENERATION_API_KEY` are required.
 
 ### Render free web service
 
@@ -66,7 +66,7 @@ The repo includes `render.yaml` for a Render Blueprint web service:
 - Start: `npm run start`
 - Health check: `/api/ping`
 
-Use Render's Blueprint flow to connect `https://github.com/ert93333-ops/newmeta` and provide all `sync: false` env vars in Render. Keep server-only values such as `META_APP_SECRET`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `TOKEN_ENCRYPTION_KEY`, `HERMES_OAUTH_STATE_SECRET`, and any future `HERMES_PAID_GENERATION_API_KEY` only in Render/GitHub secret stores.
+Use Render's Blueprint flow to connect `https://github.com/ert93333-ops/newmeta` and provide all `sync: false` env vars in Render. Keep server-only values such as `META_APP_SECRET`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `TOKEN_ENCRYPTION_KEY`, `HERMES_OAUTH_STATE_SECRET`, `OPENAI_API_KEY`, and any `HERMES_PAID_GENERATION_API_KEY` only in Render/GitHub secret stores.
 
 After Render creates the public URL:
 

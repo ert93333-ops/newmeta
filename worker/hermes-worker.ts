@@ -1,7 +1,7 @@
 import { Client } from "pg";
 import {
   executePaidGenerationJob,
-  isPaidGenerationProviderConfigured
+  isPaidGenerationOperationConfigured
 } from "@/lib/generation/paid-generation-provider";
 
 export interface ClaimedCreativeJob {
@@ -111,7 +111,7 @@ export async function processClaimedCreativeJob(
     throw new Error("WORKER_TEST_FAILURE");
   }
   if (isPaidGenerationJob(job.job_type) && isProductionRuntime(env)) {
-    if (!isPaidGenerationProviderConfigured(env)) {
+    if (!isPaidGenerationOperationConfigured(job.job_type, env)) {
       throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
     }
     return executePaidGenerationJob(job, currentWorkerName, env, fetchImpl);

@@ -8,22 +8,41 @@ export interface PaidGenerationJobInput {
 type EnvRecord = Record<string, string | undefined>;
 
 const GENERIC_HTTP_PROVIDER = "generic_http";
+const OPENAI_PROVIDER = "openai";
+const OPENAI_IMAGE_GENERATION_ENDPOINT = "https://api.openai.com/v1/images/generations";
+const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const SECRET_KEY_PATTERN = /(token|secret|key|authorization|password|credential)/i;
 
 export function isPaidGenerationProviderConfigured(env: EnvRecord = process.env): boolean {
-  return (
-    env.HERMES_PAID_GENERATION_PROVIDER?.trim() === GENERIC_HTTP_PROVIDER &&
-    hasValue(env.HERMES_PAID_GENERATION_API_URL) &&
-    hasValue(env.HERMES_PAID_GENERATION_API_KEY)
-  );
+  const provider = env.HERMES_PAID_GENERATION_PROVIDER?.trim();
+  if (provider === GENERIC_HTTP_PROVIDER) {
+    return hasValue(env.HERMES_PAID_GENERATION_API_URL) && hasValue(env.HERMES_PAID_GENERATION_API_KEY);
+  }
+  if (provider === OPENAI_PROVIDER) {
+    return hasValue(env.OPENAI_API_KEY);
+  }
+  return false;
+}
+
+export function isPaidGenerationOperationConfigured(jobType: string, env: EnvRecord = process.env): boolean {
+  const provider = env.HERMES_PAID_GENERATION_PROVIDER?.trim();
+  if (provider === GENERIC_HTTP_PROVIDER) {
+    return isPaidGenerationProviderConfigured(env);
+  }
+  if (provider === OPENAI_PROVIDER) {
+    return jobType === "image_generation" && isPaidGenerationProviderConfigured(env);
+  }
+  return false;
 }
 
 export function assertPaidGenerationProviderConfigured(env: EnvRecord = process.env): void {
   if (!isPaidGenerationProviderConfigured(env)) {
     throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
   }
-  readProviderEndpoint(env);
+  if (env.HERMES_PAID_GENERATION_PROVIDER?.trim() === GENERIC_HTTP_PROVIDER) {
+    readProviderEndpoint(env);
+  }
 }
 
 export async function executePaidGenerationJob(
@@ -33,6 +52,20 @@ export async function executePaidGenerationJob(
   fetchImpl: typeof fetch = fetch
 ): Promise<Record<string, unknown>> {
   assertPaidGenerationProviderConfigured(env);
+  const provider = env.HERMES_PAID_GENERATION_PROVIDER?.trim();
+  if (provider === OPENAI_PROVIDER) {
+    return executeOpenAiImageGenerationJob(job, workerName, env, fetchImpl);
+  }
+
+  return executeGenericHttpGenerationJob(job, workerName, env, fetchImpl);
+}
+
+async function executeGenericHttpGenerationJob(
+  job: PaidGenerationJobInput,
+  workerName: string,
+  env: EnvRecord,
+  fetchImpl: typeof fetch
+): Promise<Record<string, unknown>> {
   const endpoint = readProviderEndpoint(env);
   const apiKey = env.HERMES_PAID_GENERATION_API_KEY?.trim();
   if (!apiKey) {
@@ -70,6 +103,63 @@ export async function executePaidGenerationJob(
       providerResult,
       actualCredits: readNumberField(providerResult, "actualCredits"),
       actualCostKrw: readNumberField(providerResult, "actualCostKrw")
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("PAID_GENERATION_PROVIDER_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function executeOpenAiImageGenerationJob(
+  job: PaidGenerationJobInput,
+  workerName: string,
+  env: EnvRecord,
+  fetchImpl: typeof fetch
+): Promise<Record<string, unknown>> {
+  if (job.job_type !== "image_generation") {
+    throw new Error("PAID_GENERATION_OPERATION_NOT_SUPPORTED");
+  }
+
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  }
+
+  const model = env.HERMES_OPENAI_IMAGE_MODEL?.trim() || DEFAULT_OPENAI_IMAGE_MODEL;
+  const prompt = readOpenAiPrompt(job);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), readTimeoutMs(env));
+  try {
+    const response = await fetchImpl(OPENAI_IMAGE_GENERATION_ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        prompt,
+        n: 1
+      }),
+      signal: controller.signal
+    });
+
+    const providerResult = await readProviderResponse(response);
+    if (!response.ok) {
+      throw new Error(`PAID_GENERATION_PROVIDER_FAILED:${response.status}`);
+    }
+
+    return {
+      worker: workerName,
+      jobType: job.job_type,
+      provider: OPENAI_PROVIDER,
+      model,
+      mockSafe: false,
+      providerResult: sanitizeOpenAiImageResult(providerResult)
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -145,6 +235,47 @@ function readNumberField(row: Record<string, unknown>, key: string): number | un
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function readOpenAiPrompt(job: PaidGenerationJobInput): string {
+  const input = readRecord(job.input_json) ?? {};
+  const directPrompt = readStringField(input, "prompt");
+  if (directPrompt) {
+    return directPrompt;
+  }
+
+  const requestedInput = readRecord(input.requestedInput);
+  const nestedPrompt = requestedInput ? readStringField(requestedInput, "prompt") : undefined;
+  if (nestedPrompt) {
+    return nestedPrompt;
+  }
+
+  if (requestedInput && Object.keys(requestedInput).length > 0) {
+    return JSON.stringify(requestedInput);
+  }
+
+  throw new Error("PAID_GENERATION_PROMPT_REQUIRED");
+}
+
+function sanitizeOpenAiImageResult(providerResult: Record<string, unknown>): Record<string, unknown> {
+  const data = Array.isArray(providerResult.data) ? providerResult.data : [];
+  return {
+    ...providerResult,
+    imageCount: data.length
+  };
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function readStringField(row: Record<string, unknown>, key: string): string | undefined {
+  const value = row[key];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function hasValue(value: string | undefined): boolean {

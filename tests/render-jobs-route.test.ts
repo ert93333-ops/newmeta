@@ -10,6 +10,10 @@ const ENV_KEYS = [
   "HERMES_AUTH_MODE",
   "HERMES_DEFAULT_TENANT_ID",
   "HERMES_RENDER_PIPELINE_MODE",
+  "HERMES_PAID_GENERATION_PROVIDER",
+  "HERMES_PAID_GENERATION_API_URL",
+  "HERMES_PAID_GENERATION_API_KEY",
+  "OPENAI_API_KEY",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -203,6 +207,17 @@ describe("render jobs route", () => {
 
     expect(response.status).toBe(501);
     expect(body.error.code).toBe("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  });
+
+  it("allows only image paid generation through the production OpenAI gate", () => {
+    clearEnv();
+    setEnv("NODE_ENV", "production");
+    setEnv("HERMES_RENDER_PIPELINE_MODE", "live");
+    setEnv("HERMES_PAID_GENERATION_PROVIDER", "openai");
+    setEnv("OPENAI_API_KEY", "openai-secret");
+
+    expect(isRenderPipelineConfigured("image_generation")).toBe(true);
+    expect(isRenderPipelineConfigured("video_generation")).toBe(false);
   });
 
   it("rejects paid generation approvals for the wrong operation type", async () => {

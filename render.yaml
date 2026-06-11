@@ -45,7 +45,11 @@ services:
       - key: HERMES_RENDER_PIPELINE_MODE
         value: live
       - key: HERMES_PAID_GENERATION_PROVIDER
-        value: disabled
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: HERMES_OPENAI_IMAGE_MODEL
+        value: gpt-image-2
       - key: HERMES_DEFAULT_TENANT_ID
         sync: false
       - key: HERMES_WORKER_SECRET
