@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import {
   configuredApprovalExecutionMode,
@@ -7,6 +7,7 @@ import {
 } from "@/lib/approval/execution-policy";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
 import { POST as executeApproval } from "@/app/api/approvals/[id]/execute/route";
+import { encryptToken } from "@/lib/security/token-crypto";
 import type { UserContext } from "@/lib/types";
 
 const ENV_KEYS = [
@@ -14,6 +15,7 @@ const ENV_KEYS = [
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
   "HERMES_APPROVAL_EXECUTION_MODE",
+  "TOKEN_ENCRYPTION_KEY",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -136,6 +138,7 @@ function approvedDisconnectRequest() {
 describe("approval execution", () => {
   afterEach(() => {
     restoreEnv();
+    vi.unstubAllGlobals();
   });
 
   it("allows mock execution only outside production", () => {
@@ -175,7 +178,12 @@ describe("approval execution", () => {
     clearEnv();
     setEnv("HERMES_APPROVAL_EXECUTION_MODE", "live");
 
-    expect(() => planApprovalExecution("meta_activate_ad")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
+    expect(planApprovalExecution("meta_activate_ad")).toEqual({
+      mode: "live",
+      result: "meta_ad_activated"
+    });
+    expect(() => executeApprovedAction(approvedActivateAdRequest())).toThrow("LIVE_APPROVAL_EXECUTOR_CONTEXT_REQUIRED");
+    expect(() => planApprovalExecution("meta_change_targeting")).toThrow("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
   });
 
   it("keeps Meta connection disconnect execution approval-gated and mock-safe outside production", () => {
@@ -492,6 +500,70 @@ describe("approval execution", () => {
       }
     });
     expect(stored?.executionResultJson).toEqual(body.executionDetails);
+  });
+
+  it("executes a live Meta status approval through the stored tenant connection", async () => {
+    clearEnv();
+    setEnv("HERMES_AUTH_MODE", "mock");
+    setEnv("HERMES_APPROVAL_EXECUTION_MODE", "live");
+    const tokenKey = Buffer.alloc(32, 7).toString("base64");
+    setEnv("TOKEN_ENCRYPTION_KEY", tokenKey);
+
+    const fetchMock = vi.fn(async () => Response.json({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const repository = new MemoryHermesRepository();
+    const encrypted = encryptToken("server-token", tokenKey, "release-20260611");
+    await repository.saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "connection-live-status",
+      tenantId,
+      createdBy: requester.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      ...encrypted,
+      scopes: ["ads_read", "ads_management", "business_management"],
+      expiresAt: "2026-12-31T00:00:00.000Z",
+      status: "connected"
+    });
+
+    const approval = approvedActivateAdRequest();
+    await repository.saveApproval(new Request("http://localhost/api/test"), approval);
+
+    const response = await executeApproval(
+      new Request(`http://localhost/api/approvals/${approval.id}/execute`, {
+        method: "POST"
+      }),
+      { params: Promise.resolve({ id: approval.id }) }
+    );
+    const body = await response.json();
+    const stored = await repository.getApproval(
+      new Request("http://localhost/api/test"),
+      { ...approver, userId: "00000000-0000-0000-0000-000000000010" },
+      approval.id
+    );
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    const form = init.body as URLSearchParams;
+
+    expect(response.status).toBe(200);
+    expect(body.execution).toBe("meta_ad_activated");
+    expect(body.executionMode).toBe("live");
+    expect(body.executionDetails).toMatchObject({
+      operation: "meta_activate_ad",
+      externalObjectId: "ad-live-1",
+      externalStatus: "ACTIVE",
+      details: {
+        connectionId: "connection-live-status",
+        connectionSource: "stored_connection",
+        mockSafe: false
+      }
+    });
+    expect(stored?.status).toBe("executed");
+    expect(stored?.executionResultJson).toEqual(body.executionDetails);
+    expect(url.toString()).toBe("https://graph.facebook.com/v24.0/ad-live-1");
+    expect(url.searchParams.has("access_token")).toBe(false);
+    expect(headers.authorization).toBe("Bearer server-token");
+    expect(form.get("status")).toBe("ACTIVE");
   });
 
   it("executes a Meta disconnect approval by revoking stored token material", async () => {

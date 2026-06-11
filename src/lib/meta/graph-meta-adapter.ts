@@ -7,6 +7,7 @@ import type {
   CreateCampaignRequest,
   CreateCreativeRequest,
   MetaAdapter,
+  UpdateStatusRequest,
   ValidateAdSetRequest,
   ValidateCampaignRequest,
   UploadAssetRequest
@@ -353,6 +354,19 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
     return {
       adId,
       status: "PAUSED"
+    };
+  }
+
+  override async updateStatusWithApproval(
+    input: UpdateStatusRequest
+  ): Promise<{ id: string; status: "ACTIVE" | "PAUSED" | "DELETED" | "ARCHIVED" }> {
+    assertExecutableApproval(input.approval, { ...graphExecutor, tenantId: input.approval.tenantId });
+    await this.graphPost<Record<string, unknown>>(input.objectId, {
+      status: input.status
+    });
+    return {
+      id: input.objectId,
+      status: input.status
     };
   }
 

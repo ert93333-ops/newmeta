@@ -149,6 +149,12 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED") {
       return fail(error.message, "Live approval execution is not configured.", 501);
     }
+    if (error.message === "LIVE_APPROVAL_EXECUTOR_CONTEXT_REQUIRED") {
+      return fail(error.message, "Live approval execution requires the route context and server-side Meta connection.", 501);
+    }
+    if (error.message === "APPROVAL_OBJECT_ID_REQUIRED") {
+      return fail(error.message, "Approval execution requires a target object id.", 400);
+    }
     if (error.message === "META_CONNECTION_REQUIRED") {
       return fail(error.message, "A live Meta connection is required for this operation.", 409);
     }

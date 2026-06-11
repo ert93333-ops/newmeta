@@ -19,7 +19,7 @@ Hermes is an internal-first, SaaS-ready Meta Ads creative operations platform. I
 - Supabase Auth, Postgres, Storage-ready schema, and optional Edge Functions
 - Separate worker process for long-running video/render/AI work
 - Vitest for core engine and guardrail tests
-- GitHub Actions CI for typecheck, tests, local Supabase migration validation, and build
+- GitHub Actions CI for typecheck, lint, tests, local Supabase migration validation, and build
 
 ## Quick Start
 
@@ -77,6 +77,8 @@ Relevant official docs checked during implementation:
 - [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Supabase Edge Function authentication](https://supabase.com/docs/guides/functions/auth)
 - [Supabase Edge Function secrets](https://supabase.com/docs/guides/functions/secrets)
+
+`POST /api/approvals/:id/execute` now supports live execution for the generic Meta status actions Hermes already models directly: `meta_activate_campaign`, `meta_activate_adset`, `meta_activate_ad`, `meta_pause_ad`, and `meta_delete_ad`. Those executions resolve the tenant's stored Meta connection server-side and send the status mutation through Graph with bearer auth in headers. Unsupported generic actions still fail closed in live mode.
 
 ## GitHub
 

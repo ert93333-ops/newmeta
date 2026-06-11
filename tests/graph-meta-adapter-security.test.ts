@@ -223,6 +223,39 @@ describe("MetaGraphApiAdapter token handling", () => {
     expect(form.get("objective")).toBe("OUTCOME_SALES");
   });
 
+  it("updates live object status through Graph POST with Authorization headers", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new MetaGraphApiAdapter("server-token", "v24.0");
+    const approval = approveRequest(
+      createApprovalRequest({
+        context: requester,
+        action: "meta_activate_ad",
+        objectType: "ad",
+        objectId: "ad_live_1"
+      }),
+      approver,
+      { typedConfirmation: "APPROVE meta_activate_ad" }
+    );
+
+    await adapter.updateStatusWithApproval({
+      objectId: "ad_live_1",
+      objectType: "ad",
+      status: "ACTIVE",
+      approval
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    const form = init.body as URLSearchParams;
+
+    expect(url.toString()).toBe("https://graph.facebook.com/v24.0/ad_live_1");
+    expect(url.searchParams.has("access_token")).toBe(false);
+    expect(headers.authorization).toBe("Bearer server-token");
+    expect(form.get("status")).toBe("ACTIVE");
+  });
+
   it("surfaces sanitized Meta provider details on validate_only failures", async () => {
     const fetchMock = vi.fn(
       async () =>

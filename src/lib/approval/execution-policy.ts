@@ -1,5 +1,6 @@
 import { isProductionRuntime } from "@/lib/api/context";
 import { assertApprovalNotExpired } from "@/lib/approval/approval-policy";
+import { liveApprovalExecutionPlan } from "@/lib/approval/live-execution";
 import { assertNoBudgetMutation } from "@/lib/guards/budget-guard";
 import type { ApprovalAction, ApprovalRequest } from "@/lib/types";
 
@@ -131,6 +132,11 @@ export function planApprovalExecution(action: ApprovalAction): ApprovalExecution
     };
   }
 
+  const livePlan = liveApprovalExecutionPlan(executableAction);
+  if (livePlan) {
+    return livePlan;
+  }
+
   throw new Error("LIVE_APPROVAL_EXECUTOR_NOT_CONFIGURED");
 }
 
@@ -139,6 +145,9 @@ export function executeApprovedAction(approval: ApprovalRequest): ApprovalExecut
   assertNoBudgetMutation(approval);
   const action = genericApprovalAction(approval.action);
   const plan = planApprovalExecution(action);
+  if (plan.mode === "live") {
+    throw new Error("LIVE_APPROVAL_EXECUTOR_CONTEXT_REQUIRED");
+  }
   const template = MOCK_EXECUTION_TEMPLATES[action];
   const externalObjectId = approval.objectId ?? `${template.objectPrefix}_${approval.id}`;
 

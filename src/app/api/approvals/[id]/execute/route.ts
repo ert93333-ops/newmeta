@@ -1,8 +1,10 @@
 import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-policy";
 import {
+  configuredApprovalExecutionMode,
   executeApprovedAction,
   isApprovalActionDomainExecutorRequiredError
 } from "@/lib/approval/execution-policy";
+import { executeLiveApprovedAction, supportsLiveApprovalExecution } from "@/lib/approval/live-execution";
 import { resolveUserContext } from "@/lib/api/context";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import type { ApprovalExecutionResult } from "@/lib/approval/execution-policy";
@@ -26,6 +28,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       execution =
         approval.action === "meta_disconnect_connection"
           ? await executeMetaDisconnectApproval(request, context, approval, repository)
+          : configuredApprovalExecutionMode() === "live" && supportsLiveApprovalExecution(approval.action)
+            ? await executeLiveApprovedAction(request, context, approval, repository)
           : executeApprovedAction(approval);
     } catch (error) {
       if (isApprovalActionDomainExecutorRequiredError(error)) {
