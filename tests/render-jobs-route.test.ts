@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
-import { POST as renderJobsRoute } from "@/app/api/render/jobs/route";
+import { POST as renderJobsRoute, isRenderPipelineConfigured } from "@/app/api/render/jobs/route";
 import type { CostEstimateInput, CreativeManifest, UserContext } from "@/lib/types";
 
 const ENV_KEYS = [
@@ -139,6 +139,20 @@ describe("render jobs route", () => {
         qaImage: "ready_with_safezone_overlay"
       }
     });
+  });
+
+  it("fails closed for the free render checker path in production", async () => {
+    clearEnv();
+    setEnv("NODE_ENV", "production");
+
+    expect(isRenderPipelineConfigured(undefined)).toBe(false);
+    expect(isRenderPipelineConfigured("image_generation")).toBe(true);
+
+    const response = await renderJobsRoute(renderRequest(baseManifest as unknown as Record<string, unknown>));
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("RENDER_PIPELINE_NOT_CONFIGURED");
   });
 
   it("requires approval before queueing paid image generation", async () => {

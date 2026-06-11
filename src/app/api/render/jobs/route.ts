@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-policy";
+import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { checkForbiddenFinalText, checkPriceAccuracy, checkSafeArea } from "@/lib/creative/checkers";
-import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
-import { resolveUserContext } from "@/lib/api/context";
+import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { assertPaidOperationApproval, PaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
 import {
   costUsageFromExecutedApproval,
@@ -22,10 +22,13 @@ interface RenderJobRequest extends Partial<CreativeManifest> {
 
 export async function POST(request: Request) {
   try {
-    const context = await resolveUserContext(request);
-    const repository = getRepository();
     const body = (await parseWriteJson(request)) as RenderJobRequest;
     const paidGenerationOperationType = readPaidGenerationOperationType(body.operationType);
+    if (!isRenderPipelineConfigured(paidGenerationOperationType)) {
+      return fail("RENDER_PIPELINE_NOT_CONFIGURED", "The production render pipeline is not configured.", 501);
+    }
+    const context = await resolveUserContext(request);
+    const repository = getRepository();
 
     if (paidGenerationOperationType) {
       return await queuePaidGenerationJob(request, context, repository, body, paidGenerationOperationType);
@@ -156,4 +159,13 @@ function readOptionalString(value: unknown): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function isRenderPipelineConfigured(
+  paidGenerationOperationType: PaidGenerationOperationType | undefined
+): boolean {
+  if (paidGenerationOperationType) {
+    return true;
+  }
+  return !isProductionRuntime();
 }
