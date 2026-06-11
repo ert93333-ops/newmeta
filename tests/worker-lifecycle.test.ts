@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { processClaimedCreativeJob, runWorkerOnce } from "../worker/hermes-worker";
+import { processClaimedCreativeJob, readWorkerRuntimeEnv, runWorkerOnce } from "../worker/hermes-worker";
 
 function fakeClientFor(job: Record<string, unknown> | undefined, terminalStatus: "succeeded" | "queued" | "failed") {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
@@ -191,5 +191,29 @@ describe("Hermes worker lifecycle", () => {
     expect(result).toEqual({ claimed: false });
     expect(queries).toHaveLength(1);
     expect(queries[0].sql).toContain("private.claim_creative_job");
+  });
+
+  it("requires server-only worker runtime env before opening the DB connection", () => {
+    expect(() => readWorkerRuntimeEnv({})).toThrow("SUPABASE_DB_URL_REQUIRED");
+    expect(() =>
+      readWorkerRuntimeEnv({
+        SUPABASE_DB_URL: "postgresql://postgres:secret@db.project.supabase.co:5432/postgres"
+      })
+    ).toThrow("HERMES_WORKER_SECRET_REQUIRED");
+    expect(() =>
+      readWorkerRuntimeEnv({
+        SUPABASE_DB_URL: "postgresql://postgres:secret@db.project.supabase.co:5432/postgres",
+        HERMES_WORKER_SECRET: "short"
+      })
+    ).toThrow("HERMES_WORKER_SECRET_WEAK");
+
+    expect(
+      readWorkerRuntimeEnv({
+        SUPABASE_DB_URL: "postgresql://postgres:secret@db.project.supabase.co:5432/postgres",
+        HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters"
+      })
+    ).toEqual({
+      databaseUrl: "postgresql://postgres:secret@db.project.supabase.co:5432/postgres"
+    });
   });
 });

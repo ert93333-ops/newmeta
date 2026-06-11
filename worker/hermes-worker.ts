@@ -32,6 +32,7 @@ interface PaidGenerationCostInput {
 }
 
 const workerName = process.env.HERMES_WORKER_NAME ?? "hermes-worker";
+const MIN_WORKER_SECRET_LENGTH = 32;
 
 export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = workerName): Promise<WorkerRunResult> {
   const { rows } = await client.query("select * from private.claim_creative_job($1)", [currentWorkerName]);
@@ -212,10 +213,7 @@ async function rollbackQuietly(client: WorkerDbClient): Promise<void> {
 }
 
 async function main() {
-  const databaseUrl = process.env.SUPABASE_DB_URL;
-  if (!databaseUrl) {
-    throw new Error("SUPABASE_DB_URL is required for the worker.");
-  }
+  const { databaseUrl } = readWorkerRuntimeEnv(process.env);
 
   const client = new Client({
     connectionString: databaseUrl
@@ -234,4 +232,21 @@ if (process.argv[1]?.endsWith("hermes-worker.ts") || process.argv[1]?.endsWith("
     console.error(error);
     process.exitCode = 1;
   });
+}
+
+export function readWorkerRuntimeEnv(env: Record<string, string | undefined>): { databaseUrl: string } {
+  const databaseUrl = env.SUPABASE_DB_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error("SUPABASE_DB_URL_REQUIRED");
+  }
+
+  const workerSecret = env.HERMES_WORKER_SECRET?.trim();
+  if (!workerSecret) {
+    throw new Error("HERMES_WORKER_SECRET_REQUIRED");
+  }
+  if (workerSecret.length < MIN_WORKER_SECRET_LENGTH) {
+    throw new Error("HERMES_WORKER_SECRET_WEAK");
+  }
+
+  return { databaseUrl };
 }

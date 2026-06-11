@@ -41,6 +41,7 @@ Tenant-scoped settings writes go through `PATCH /api/settings/*`, require `marke
 - Approval request listing is tenant-scoped and returns guard metadata so clients do not infer approval policy from user-editable fields.
 - Budget mutation: hard block, no approval escape hatch.
 - Cost guard settings must be server-owned. `POST /api/cost/estimate` may accept a provider lookup key from the client, but pricing, credits, and caps must come from tenant-scoped `integration_settings`, not request-body overrides.
+- Worker execution requires server-only runtime configuration and fails closed before connecting to Postgres unless `SUPABASE_DB_URL` and a strong `HERMES_WORKER_SECRET` are configured.
 - Approval execution must go through the action-specific executor registry and fail closed in production unless a real live executor is configured; mock execution is local-only.
 - Generic live approval execution is limited to direct Meta status mutations already modeled by Hermes (`meta_activate_campaign`, `meta_activate_adset`, `meta_activate_ad`, `meta_pause_ad`, `meta_delete_ad`). Those paths resolve the stored tenant-scoped Meta connection server-side and send the Graph mutation with bearer auth headers; unsupported generic actions still fail closed in live mode.
 - `meta_create_ad_paused` is no longer executable through the generic `POST /api/approvals/:id/execute` route. Generic execution must return `APPROVAL_ACTION_EXECUTOR_REQUIRED` for that action so paused-draft approvals can only be consumed by `POST /api/drafts/create-paused`.

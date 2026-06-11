@@ -27,10 +27,10 @@ This starts the local Supabase database through Docker, resets it with committed
 The worker requires direct DB access:
 
 ```bash
-SUPABASE_DB_URL=postgres://... npm exec tsx worker/hermes-worker.ts
+SUPABASE_DB_URL=postgres://... HERMES_WORKER_SECRET=... npm exec tsx worker/hermes-worker.ts
 ```
 
-Use a secret-bearing server environment only. Do not run worker code in the browser.
+Use a secret-bearing server environment only. Do not run worker code in the browser. The worker process now fails closed before opening a DB connection unless `SUPABASE_DB_URL` and a `HERMES_WORKER_SECRET` of at least 32 characters are present.
 
 The worker lifecycle is DB-owned:
 
