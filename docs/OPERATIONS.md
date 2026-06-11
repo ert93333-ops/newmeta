@@ -42,6 +42,8 @@ The default `max_attempts = 2` gives one retry after the first failed execution.
 
 For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation API queueing and worker execution require a configured operation-specific provider. `HERMES_PAID_GENERATION_PROVIDER=openai` plus server-only `OPENAI_API_KEY` enables approved `image_generation` jobs through the OpenAI Images API. It does not enable `video_generation`; video requests fail closed before consuming approvals. `HERMES_PAID_GENERATION_PROVIDER=generic_http` enables both paid operation types when `HERMES_PAID_GENERATION_API_URL` and server-only `HERMES_PAID_GENERATION_API_KEY` are present. For releases without a paid provider account, set `HERMES_PAID_GENERATION_PROVIDER=disabled`; paid operations remain unavailable and cannot consume approvals or cost reservations. Provider secrets are sent in the `Authorization` header only, and token/secret/key fields are stripped from provider responses before persistence.
 
+The free Render deployment does not include an always-on background worker. `.github/workflows/hermes-worker-drain.yml` runs every 5 minutes and executes `npm run worker:once` from GitHub Actions when `SUPABASE_DB_URL`, `HERMES_WORKER_SECRET`, and `OPENAI_API_KEY` exist in GitHub Secrets. This drains one queued worker job per run and keeps provider credentials server-side. For higher queue volume or tighter latency, add a dedicated paid worker service instead of relying on scheduled GitHub Actions.
+
 ## Auth Mode
 
 Set `HERMES_AUTH_MODE=mock` only for local development without Supabase Auth. Runtime production is detected when `NODE_ENV=production` or `VERCEL_ENV=production`.
@@ -74,7 +76,8 @@ After Render creates the public URL:
 2. Set `META_REDIRECT_URI` to `<Render URL>/api/integrations/meta/callback`.
 3. Add that same redirect URI in the TOmcp Meta app.
 4. Set GitHub Actions variable or secret `RENDER_KEEPALIVE_URL` to the Render URL.
-5. Run `.github/workflows/render-keepalive.yml` manually once, then let the 5-minute schedule continue.
+5. Confirm GitHub Secrets include `SUPABASE_DB_URL`, `HERMES_WORKER_SECRET`, and `OPENAI_API_KEY` so `.github/workflows/hermes-worker-drain.yml` can process queued worker jobs.
+6. Run `.github/workflows/render-keepalive.yml` and `.github/workflows/hermes-worker-drain.yml` manually once, then let the 5-minute schedules continue.
 
 `/api/ping` is intentionally shallow so Render deploy health checks and keepalive pings do not depend on release env completeness. Use `/api/ops/health` for real release readiness; it should return `503` until Supabase, Meta OAuth, approval execution, render pipeline, paid generation configured-or-disabled policy, and worker secrets are fully configured.
 

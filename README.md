@@ -60,6 +60,8 @@ The Render blueprint enables `HERMES_PAID_GENERATION_PROVIDER=openai` and declar
 
 The GitHub workflow `.github/workflows/render-keepalive.yml` pings `RENDER_KEEPALIVE_URL` every 5 minutes. Store the deployed Render URL as a GitHub Actions repository variable or secret named `RENDER_KEEPALIVE_URL`; the workflow appends `/api/ping` automatically when needed. `/api/ping` is a shallow liveness endpoint for Render health checks and keepalive only. `/api/ops/health` remains the strict release-readiness endpoint.
 
+The GitHub workflow `.github/workflows/hermes-worker-drain.yml` also runs every 5 minutes and executes `npm run worker:once` when `SUPABASE_DB_URL`, `HERMES_WORKER_SECRET`, and `OPENAI_API_KEY` are present in GitHub Secrets. This gives the free Render web deployment a scheduled worker drain for queued paid image jobs without exposing provider keys to the browser.
+
 ## Important Files
 
 - `src/lib/guards/budget-guard.ts`: hard block for executable budget mutations

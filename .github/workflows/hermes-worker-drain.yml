@@ -1,0 +1,55 @@
+name: Hermes Worker Drain
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hermes-worker-drain
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NODE_ENV: production
+      HERMES_PAID_GENERATION_PROVIDER: openai
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      HERMES_WORKER_SECRET: ${{ secrets.HERMES_WORKER_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      HERMES_OPENAI_IMAGE_MODEL: gpt-image-2
+    steps:
+      - name: Check required secrets
+        id: secrets
+        shell: bash
+        run: |
+          missing=0
+          for key in SUPABASE_DB_URL HERMES_WORKER_SECRET OPENAI_API_KEY; do
+            if [ -z "${!key}" ]; then
+              echo "::warning::$key is not configured; skipping worker drain."
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.secrets.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v5
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+        if: steps.secrets.outputs.ready == 'true'
+
+      - name: Drain one queued Hermes worker job
+        if: steps.secrets.outputs.ready == 'true'
+        run: npm run worker:once
