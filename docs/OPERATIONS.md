@@ -56,6 +56,30 @@ npm run env:release-gates
 
 The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render/paid-generation env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, `HERMES_PAID_GENERATION_PROVIDER` values other than `generic_http`, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
+### Render free web service
+
+The repo includes `render.yaml` for a Render Blueprint web service:
+
+- Runtime: Node
+- Plan: `free`
+- Build: `npm ci && npm run build`
+- Start: `npm run start`
+- Health check: `/api/ping`
+
+Use Render's Blueprint flow to connect `https://github.com/ert93333-ops/newmeta` and provide all `sync: false` env vars in Render. Keep server-only values such as `META_APP_SECRET`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `TOKEN_ENCRYPTION_KEY`, `HERMES_OAUTH_STATE_SECRET`, and `HERMES_PAID_GENERATION_API_KEY` only in Render/GitHub secret stores.
+
+After Render creates the public URL:
+
+1. Set `NEXT_PUBLIC_APP_URL` and `HERMES_APP_URL` to the Render URL.
+2. Set `META_REDIRECT_URI` to `<Render URL>/api/integrations/meta/callback`.
+3. Add that same redirect URI in the TOmcp Meta app.
+4. Set GitHub Actions variable or secret `RENDER_KEEPALIVE_URL` to the Render URL.
+5. Run `.github/workflows/render-keepalive.yml` manually once, then let the 5-minute schedule continue.
+
+`/api/ping` is intentionally shallow so Render deploy health checks and keepalive pings do not depend on release env completeness. Use `/api/ops/health` for real release readiness; it should return `503` until Supabase, Meta OAuth, approval execution, render pipeline, paid generation, and worker secrets are fully configured.
+
+Render free web services may still have platform limits and scheduling is not a hard uptime SLA. Treat the GitHub keepalive as a cold-start mitigation, not a production availability guarantee.
+
 Generate the local secret values that Hermes is allowed to create itself with:
 
 ```bash

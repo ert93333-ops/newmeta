@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: newmeta-hermes
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/ping
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: HERMES_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY_ID
+        sync: false
+      - key: HERMES_OAUTH_STATE_SECRET
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_REDIRECT_URI
+        sync: false
+      - key: META_GRAPH_VERSION
+        value: v24.0
+      - key: HERMES_META_OAUTH_MODE
+        value: live
+      - key: HERMES_APPROVAL_EXECUTION_MODE
+        value: live
+      - key: HERMES_RENDER_PIPELINE_MODE
+        value: live
+      - key: HERMES_PAID_GENERATION_PROVIDER
+        value: generic_http
+      - key: HERMES_PAID_GENERATION_API_URL
+        sync: false
+      - key: HERMES_PAID_GENERATION_API_KEY
+        sync: false
+      - key: HERMES_DEFAULT_TENANT_ID
+        sync: false
+      - key: HERMES_WORKER_SECRET
+        sync: false

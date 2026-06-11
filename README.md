@@ -52,6 +52,12 @@ npm run env:generate-secrets
 
 Use the printed values for `TOKEN_ENCRYPTION_KEY`, `TOKEN_ENCRYPTION_KEY_ID`, `HERMES_OAUTH_STATE_SECRET`, and `HERMES_WORKER_SECRET`. Supabase credentials, Meta app credentials, smoke-test accounts, and production URLs still have to come from those external services.
 
+## Render
+
+`render.yaml` defines a free Render web service for the Next.js app. Import this GitHub repo as a Render Blueprint, fill every `sync: false` env var from the production secret manager, and set both `NEXT_PUBLIC_APP_URL` and `HERMES_APP_URL` to the final Render URL. After deployment, set `META_REDIRECT_URI` to `https://<render-service>.onrender.com/api/integrations/meta/callback` in both Render and the TOmcp Meta app.
+
+The GitHub workflow `.github/workflows/render-keepalive.yml` pings `RENDER_KEEPALIVE_URL` every 5 minutes. Store the deployed Render URL as a GitHub Actions repository variable or secret named `RENDER_KEEPALIVE_URL`; the workflow appends `/api/ping` automatically when needed. `/api/ping` is a shallow liveness endpoint for Render health checks and keepalive only. `/api/ops/health` remains the strict release-readiness endpoint.
+
 ## Important Files
 
 - `src/lib/guards/budget-guard.ts`: hard block for executable budget mutations
