@@ -4,9 +4,11 @@ import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { connectMetaOAuth } from "@/lib/meta/oauth";
 import { verifyMetaOAuthState } from "@/lib/meta/oauth-state";
 import { getRepository } from "@/lib/repositories/hermes-repository";
+import { assertRateLimit } from "@/lib/security/rate-limit";
 
 export async function GET(request: Request) {
   try {
+    assertRateLimit(request, { keyPrefix: "meta-oauth-callback-get", limit: 60, windowMs: 60_000 });
     const url = new URL(request.url);
     const error = readOptionalString(url.searchParams.get("error"));
     if (error) {
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    assertRateLimit(request, { keyPrefix: "meta-oauth-callback-post", limit: 30, windowMs: 60_000 });
     const body = (await parseWriteJson(request)) as { code?: unknown; state?: unknown };
     const context = await resolveUserContext(request);
     const code = readCode(body.code);

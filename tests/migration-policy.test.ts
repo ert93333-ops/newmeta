@@ -28,6 +28,10 @@ describe("Supabase migration guardrails", () => {
     join(process.cwd(), "supabase/migrations/20260606150500_align_data_deletion_request_status.sql"),
     "utf8"
   );
+  const dataDeletionExecutorMigration = readFileSync(
+    join(process.cwd(), "supabase/migrations/20260611121500_tenant_data_deletion_executor.sql"),
+    "utf8"
+  );
 
   it("enables RLS and keeps security definer functions out of public schema", () => {
     expect(migration).toContain("enable row level security");
@@ -75,5 +79,14 @@ describe("Supabase migration guardrails", () => {
     expect(workerLifecycleMigration).toContain("grant execute on function private.fail_creative_job");
     expect(workerLifecycleMigration).not.toContain("function public.complete_creative_job");
     expect(workerLifecycleMigration).not.toContain("function public.fail_creative_job");
+  });
+
+  it("keeps tenant data deletion execution in a private service-role RPC", () => {
+    expect(dataDeletionExecutorMigration).toContain("function private.execute_tenant_data_deletion");
+    expect(dataDeletionExecutorMigration).toContain("grant execute on function private.execute_tenant_data_deletion");
+    expect(dataDeletionExecutorMigration).toContain("to service_role");
+    expect(dataDeletionExecutorMigration).not.toContain("to authenticated");
+    expect(dataDeletionExecutorMigration).not.toContain("delete from public.tenants");
+    expect(dataDeletionExecutorMigration).not.toContain("delete from public.audit_logs");
   });
 });

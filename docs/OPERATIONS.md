@@ -54,9 +54,25 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker/OAuth-state env, missing auth-smoke env, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate blocks missing required Supabase/Meta/worker/OAuth-state env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+
+Generate the local secret values that Hermes is allowed to create itself with:
+
+```bash
+npm run env:generate-secrets
+```
+
+This prints fresh values for `TOKEN_ENCRYPTION_KEY`, `TOKEN_ENCRYPTION_KEY_ID`, `HERMES_OAUTH_STATE_SECRET`, and `HERMES_WORKER_SECRET`. It does not create Supabase credentials, Meta app credentials, smoke-test accounts, or public deployment URLs; those must come from the owning external services.
 
 Before enabling paid estimate/approval flows, persist tenant cost settings through `PATCH /api/settings/<providerName>` so `POST /api/cost/estimate` can resolve server-owned pricing and caps for that provider. Without that row, the route fails closed with `COST_SETTINGS_NOT_CONFIGURED`.
+
+In production, `POST /api/render/jobs` is also fail-closed for the deterministic no-paid-operation render checker path until a real render pipeline is configured behind the route. Paid `image_generation` and `video_generation` requests still use the approval-bound worker queue. This prevents release builds from reporting a false render success when only local validation logic exists.
+
+Use `GET /api/ops/health` for deployment monitoring. The endpoint returns `503` until release env, Supabase, live Meta OAuth, token key rotation id, worker secret, and production render pipeline readiness are all configured. It reports only issue codes and configured/missing states, not raw secret values.
+
+Meta OAuth connect and callback routes use an in-process request rate limiter keyed by client IP and user agent. This limits abuse at the app boundary; keep platform/CDN rate limits enabled in production as the outer layer.
+
+Use `PATCH /api/settings/commerce-db` to store non-secret 자사몰 DB readiness metadata such as `sourceType`, `connectionConfigured`, and table mappings. Secrets must stay in the deployment secret manager or Supabase vault and should be represented only by server-owned references. `GET /api/integrations/commerce-db/status` reports whether those readiness fields are complete.
 
 For a real Supabase Auth smoke test, run:
 

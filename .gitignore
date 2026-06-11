@@ -6,6 +6,9 @@ coverage/
 dist/
 tmp/
 .codex-remote-attachments/
+.playwright-cli/
+.playwright-mcp/
+/*.png
 .DS_Store
 *.log
 *.tsbuildinfo

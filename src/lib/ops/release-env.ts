@@ -16,6 +16,7 @@ const REQUIRED_RELEASE_ENV = [
   "SUPABASE_SECRET_KEY",
   "SUPABASE_DB_URL",
   "TOKEN_ENCRYPTION_KEY",
+  "TOKEN_ENCRYPTION_KEY_ID",
   "HERMES_OAUTH_STATE_SECRET",
   "META_APP_ID",
   "META_APP_SECRET",
@@ -142,6 +143,10 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   requireUrl(issues, env, "META_REDIRECT_URI", { allowLocalhost: false });
   requirePostgresUrl(issues, env, "SUPABASE_DB_URL");
   requireBase64Key(issues, env, "TOKEN_ENCRYPTION_KEY");
+
+  if (value(env, "TOKEN_ENCRYPTION_KEY_ID") === "primary") {
+    addIssue(issues, "DEFAULT_TOKEN_KEY_ID", "TOKEN_ENCRYPTION_KEY_ID must identify the active release key, not the default primary id.");
+  }
 
   const workerSecret = value(env, "HERMES_WORKER_SECRET");
   if (workerSecret && workerSecret.length < 32) {

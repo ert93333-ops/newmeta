@@ -21,6 +21,7 @@ import {
   isCredentialPayloadBlockedError,
   redactCredentialPayload
 } from "@/lib/guards/credential-guard";
+import { isRateLimitExceededError } from "@/lib/security/rate-limit";
 
 export function ok<T>(data: T, status = 200): NextResponse<T> {
   return NextResponse.json(redactCredentialPayload(data) as T, { status });
@@ -117,6 +118,13 @@ export function handleError(error: unknown): NextResponse {
   if (isCredentialPayloadBlockedError(error)) {
     return fail(error.code, error.message, 403, { paths: error.paths });
   }
+  if (isRateLimitExceededError(error)) {
+    return fail(error.code, "Too many requests. Try again later.", 429, {
+      retryAfterSeconds: error.retryAfterSeconds,
+      limit: error.limit,
+      windowMs: error.windowMs
+    });
+  }
   if (isTypedConfirmationRequiredError(error)) {
     return fail("TYPED_CONFIRMATION_REQUIRED", "위험 액션 승인을 위한 명시 확인 문구가 필요합니다.", 403, {
       requiredText: error.requiredText
@@ -202,6 +210,12 @@ export function handleError(error: unknown): NextResponse {
     }
     if (error.message === "TOKEN_ENCRYPTION_KEY_REQUIRED") {
       return fail(error.message, "Token encryption key is required before storing Meta tokens.", 501);
+    }
+    if (error.message === "TENANT_DATA_DELETION_EXECUTOR_NOT_CONFIGURED") {
+      return fail(error.message, "Tenant data deletion executor is not configured for this persistence backend.", 501);
+    }
+    if (error.message === "APPROVAL_REQUEST_ID_REQUIRED") {
+      return fail(error.message, "Approval request id is required.", 400);
     }
     if (error.message === "META_OAUTH_TOKEN_MISSING") {
       return fail(error.message, "Meta OAuth token exchange response did not include a usable token.", 502);

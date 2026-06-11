@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { approveRequest } from "@/lib/approval/approval-policy";
 import { GET as listDataDeletionRequests } from "@/app/api/data-deletion-requests/route";
 import { POST as requestDataDeletion } from "@/app/api/data-deletion-requests/route";
+import { POST as executeDataDeletion } from "@/app/api/data-deletion-requests/[id]/execute/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
 import type { UserContext } from "@/lib/types";
 
@@ -19,6 +21,11 @@ const mockContext: UserContext = {
   userId: "00000000-0000-0000-0000-000000000010",
   tenantId,
   role: "owner"
+};
+const secondApprover: UserContext = {
+  userId: "00000000-0000-0000-0000-000000000011",
+  tenantId,
+  role: "admin"
 };
 
 function restoreEnv(): void {
@@ -208,5 +215,120 @@ describe("data deletion request route", () => {
 
     expect(response.status).toBe(403);
     expect((body.error as { code?: string }).code).toBe("BUDGET_MUTATION_HARD_BLOCKED");
+  });
+
+  it("executes approved tenant data deletion through the dedicated domain route", async () => {
+    clearEnv();
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+    const repository = new MemoryHermesRepository();
+
+    const createResponse = await requestDataDeletion(
+      new Request("http://localhost/api/data-deletion-requests", {
+        method: "POST",
+        body: JSON.stringify({ scope: "tenant" })
+      })
+    );
+    const createBody = await json(createResponse);
+    const approval = createBody.approval as { id: string };
+    const deletionRequest = createBody.deletionRequest as { id: string };
+    const storedApproval = await repository.getApproval(new Request("http://localhost/api/test"), mockContext, approval.id);
+    if (!storedApproval) throw new Error("approval not stored");
+    const approvalRequestedByOtherUser = {
+      ...storedApproval,
+      requestedBy: "00000000-0000-0000-0000-000000000099"
+    };
+    await repository.updateApproval(
+      new Request("http://localhost/api/test"),
+      approveRequest(
+        approveRequest(approvalRequestedByOtherUser, mockContext, { typedConfirmation: "APPROVE tenant_data_deletion" }),
+        secondApprover,
+        { typedConfirmation: "APPROVE tenant_data_deletion" }
+      )
+    );
+    await repository.saveMetaConnection(new Request("http://localhost/api/test"), {
+      id: "meta-delete-me",
+      tenantId,
+      createdBy: mockContext.userId,
+      provider: "meta",
+      connectionMode: "oauth",
+      encryptedAccessToken: "encrypted",
+      tokenIv: "iv",
+      tokenAuthTag: "tag",
+      tokenKid: "release-20260611",
+      scopes: ["ads_read"],
+      status: "connected"
+    });
+    await repository.saveIntegrationSettings(new Request("http://localhost/api/test"), {
+      tenantId,
+      createdBy: mockContext.userId,
+      provider: "commerce-db",
+      settingsJson: { sourceType: "postgres" }
+    });
+    await repository.saveAsset(new Request("http://localhost/api/test"), {
+      id: "asset-delete-me",
+      tenantId,
+      createdBy: mockContext.userId,
+      assetType: "image",
+      width: 1080,
+      height: 1080,
+      metadataJson: {}
+    });
+    await repository.savePerformanceFusionReport(new Request("http://localhost/api/test"), {
+      id: "fusion-delete-me",
+      tenantId,
+      createdBy: mockContext.userId,
+      reportJson: {},
+      languageGuard: "correlation_not_causation"
+    });
+
+    const response = await executeDataDeletion(
+      new Request(`http://localhost/api/data-deletion-requests/${deletionRequest.id}/execute`, {
+        method: "POST",
+        body: JSON.stringify({ approvalRequestId: approval.id })
+      }),
+      { params: Promise.resolve({ id: deletionRequest.id }) }
+    );
+    const body = await json(response);
+    const completed = await repository.getDataDeletionRequest(
+      new Request("http://localhost/api/test"),
+      mockContext,
+      deletionRequest.id
+    );
+    const executed = await repository.getApproval(new Request("http://localhost/api/test"), mockContext, approval.id);
+    const scrubbedConnection = await repository.getMetaConnection(
+      new Request("http://localhost/api/test"),
+      mockContext,
+      "meta-delete-me"
+    );
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      deletionRequest: {
+        id: deletionRequest.id,
+        status: "succeeded"
+      },
+      approval: {
+        id: approval.id,
+        status: "executed"
+      },
+      execution: {
+        result: "mock_tenant_data_deleted"
+      }
+    });
+    expect(completed?.status).toBe("succeeded");
+    expect(executed?.status).toBe("executed");
+    expect(scrubbedConnection).toMatchObject({
+      status: "revoked",
+      encryptedAccessToken: "",
+      tokenKid: "deleted"
+    });
+    await expect(repository.getAsset(new Request("http://localhost/api/test"), mockContext, "asset-delete-me")).resolves.toBeNull();
+    await expect(
+      repository.getIntegrationSettings(new Request("http://localhost/api/test"), mockContext, "commerce-db")
+    ).resolves.toBeNull();
+    await expect(
+      repository.getPerformanceFusionReport(new Request("http://localhost/api/test"), mockContext, "fusion-delete-me")
+    ).resolves.toBeNull();
+    expect(JSON.stringify(body)).not.toContain("encrypted");
   });
 });

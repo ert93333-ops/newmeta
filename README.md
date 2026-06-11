@@ -44,6 +44,14 @@ npm run env:release-gates
 
 The gate fails closed on missing production Supabase/Meta/worker/OAuth-state env, missing auth-smoke env, placeholder values, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
+Hermes can generate only the local release secrets it owns:
+
+```bash
+npm run env:generate-secrets
+```
+
+Use the printed values for `TOKEN_ENCRYPTION_KEY`, `TOKEN_ENCRYPTION_KEY_ID`, `HERMES_OAUTH_STATE_SECRET`, and `HERMES_WORKER_SECRET`. Supabase credentials, Meta app credentials, smoke-test accounts, and production URLs still have to come from those external services.
+
 ## Important Files
 
 - `src/lib/guards/budget-guard.ts`: hard block for executable budget mutations

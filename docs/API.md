@@ -11,6 +11,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `GET /api/me`
 - `GET /api/tenants/:id`
 - `PATCH /api/settings/*`
+- `GET /api/ops/health`
 
 `GET /api/me` returns `memberships` and `activeTenant`. If `x-tenant-id` is provided, it verifies the requested tenant is one of the authenticated user's memberships and returns `TENANT_ACCESS_DENIED` otherwise. Without `x-tenant-id`, it returns the first visible membership as `activeTenant` so browser clients can choose a tenant before calling tenant-scoped APIs.
 
@@ -18,14 +19,18 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `PATCH /api/settings/*` requires the authenticated tenant context plus at least `marketer` role. It persists the request body to the tenant's `integration_settings` row keyed by the route path, writes an audit log with before/after JSON, and rejects any route path containing `budget` with `BUDGET_MUTATION_HARD_BLOCKED` even when the body itself is non-executable.
 
+`GET /api/ops/health` is a secret-free operational readiness endpoint. It returns `200` only when release env checks and core operational checks pass; otherwise it returns `503` with issue codes and configured/missing states, never raw secret values. Production health also requires a non-mock `HERMES_RENDER_PIPELINE_MODE` so render readiness cannot be reported green while the production render path is intentionally fail-closed.
+
 ## Meta
 
 - `GET /api/integrations/meta/connect-url`
 - `GET /api/integrations/meta/callback`
 - `POST /api/integrations/meta/callback`
 - `DELETE /api/integrations/meta/:id`
+- `GET /api/integrations/commerce-db/status`
 - `GET /api/meta/ad-accounts`
 - `POST /api/meta/sync/insights`
+- `GET /api/meta/signal-diagnostics`
 
 `POST /api/integrations/meta/callback` accepts an OAuth authorization code, exchanges it server-side, resolves granted scopes server-side from the resulting Meta token, verifies that all required scopes were actually granted, encrypts that token, stores it in `meta_connections`, writes an audit record, and returns only connection metadata such as `encryptedTokenStored`. Local mock exchange is disabled for release by `npm run env:release-gates`.
 
@@ -38,6 +43,10 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 `GET /api/meta/ad-accounts` resolves the Meta adapter on the server. If the tenant has a connected live `meta_connections` record, the route decrypts that token server-side and uses `MetaGraphApiAdapter`; otherwise, only non-production runtime may fall back to `MockMetaAdapter`. Production without a live connection returns `META_CONNECTION_REQUIRED`. Stored live connections are also revalidated for the required Meta scope set at runtime; old or incomplete connections now fail closed with `META_REQUIRED_SCOPES_MISSING`.
 
 `POST /api/meta/sync/insights` uses the same adapter resolution. In mock mode it can default to `act_mock_001`; live mode requires an explicit `adAccountId` and returns `META_AD_ACCOUNT_REQUIRED` otherwise. The route records the adapter mode inside the saved job input and writes an audit log for the sync request. Stored live connections missing required scopes now fail closed before sync begins.
+
+`GET /api/meta/signal-diagnostics?adAccountId=...` resolves the Meta adapter server-side and returns Pixel, CAPI, and GA4 readiness for the selected ad account. Mock mode can default to `act_mock_001`; live mode requires an explicit `adAccountId`, uses the tenant's stored encrypted Meta connection, and never exposes token material. The current live implementation reads Pixel status from Meta Graph `/{adAccountId}/adspixels`. CAPI and GA4 readiness are derived from tenant `integration_settings` provider `signal-diagnostics`, using non-secret fields such as `capi.datasetId`, `capi.eventsAccessConfigured`, `ga4.propertyId`, `ga4.measurementId`, and `ga4.serviceAccountConfigured`.
+
+`GET /api/integrations/commerce-db/status` reads tenant `integration_settings` provider `commerce-db` and returns non-secret readiness for 자사몰 DB integration. It checks `sourceType`, `connectionConfigured`, and required table mappings under `tables.orders`, `tables.customers`, and `tables.products`; it never returns connection strings or secret references.
 
 ## Creative and Diagnosis
 
@@ -60,7 +69,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `POST /api/performance-fusion/reports` is an authenticated tenant-scoped persistence route. It computes the fusion report, saves a `performance_fusion_reports` row, and writes an audit log instead of returning an ephemeral analysis object only. Callers may attach `assetId` and `bottleneckJobId` for traceability, but the route still preserves the report's `correlation_not_causation` language guard.
 
-`POST /api/render/jobs` keeps deterministic final/QA render checks approval-free when no paid operation is requested. When `operationType` is `image_generation` or `video_generation`, it becomes a paid AI generation queue endpoint: callers must provide an approved same-tenant `ai_paid_generation` approval for the matching operation type. On success, the API marks that approval `executed`, records a `running` cost usage reservation linked by `relatedJobId = approval.id`, queues a `creative_jobs` worker job with server-derived cost metadata, and writes an audit log. The worker later writes the final succeeded/failed usage row for the same `relatedJobId` so cost summaries do not leave stale reservations. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; reused approvals return `APPROVAL_REQUIRED`.
+`POST /api/render/jobs` keeps deterministic final/QA render checks approval-free in local development when no paid operation is requested. Production fails this no-paid-operation path closed with `RENDER_PIPELINE_NOT_CONFIGURED` until a real render pipeline is configured, so the route cannot report a false production render success. When `operationType` is `image_generation` or `video_generation`, it becomes a paid AI generation queue endpoint: callers must provide an approved same-tenant `ai_paid_generation` approval for the matching operation type. On success, the API marks that approval `executed`, records a `running` cost usage reservation linked by `relatedJobId = approval.id`, queues a `creative_jobs` worker job with server-derived cost metadata, and writes an audit log. The worker later writes the final succeeded/failed usage row for the same `relatedJobId` so cost summaries do not leave stale reservations. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; reused approvals return `APPROVAL_REQUIRED`.
 
 `POST /api/variants/design` is treated as a paid variant batch operation. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed`, writes an audit log, and records a succeeded cost usage entry linked by `relatedJobId = approval.id`. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
 
@@ -120,6 +129,7 @@ Successful execution persists the action-specific execution result on `approval_
 - `GET /api/cost/usage`
 - `GET /api/data-deletion-requests`
 - `POST /api/data-deletion-requests`
+- `POST /api/data-deletion-requests/:id/execute`
 
 `POST /api/cost/estimate` returns a cost guard decision and records an estimate. For paid operations such as `image_generation`, `video_generation`, and `variant_batch`, clients may include:
 
@@ -145,7 +155,9 @@ The API creates a pending `ai_paid_generation` approval only when the estimate i
 
 `GET /api/data-deletion-requests` returns the authenticated tenant's persisted deletion-request rows in newest-first order. The response is tenant-scoped and includes the stored `resultJson` lifecycle metadata, so operators can inspect approval progress, rejections, and blocked execution attempts without querying approvals and request rows separately.
 
-`POST /api/data-deletion-requests` does not immediately delete or queue tenant data deletion work. It first persists a tenant-scoped `data_deletion_requests` row with status `approval_required`, then creates the destructive `tenant_data_deletion` approval request, writes an audit record, and returns typed-confirmation guard metadata. Subsequent approve/reject actions now sync that stored row's lifecycle metadata: approval progress stays in `resultJson`, rejection moves the request to `cancelled`, and a blocked generic execute attempt records `blockedReason=APPROVAL_ACTION_EXECUTOR_REQUIRED`, the required domain route, the last execution attempt actor/time, and a matching audit breadcrumb. Actual deletion execution must happen only after the two-step destructive approval flow, and the generic `POST /api/approvals/:id/execute` route now fails closed with `APPROVAL_ACTION_EXECUTOR_REQUIRED` until a dedicated deletion executor exists.
+`POST /api/data-deletion-requests` does not immediately delete tenant data. It first persists a tenant-scoped `data_deletion_requests` row with status `approval_required`, then creates the destructive `tenant_data_deletion` approval request, writes an audit record, and returns typed-confirmation guard metadata. Subsequent approve/reject actions sync that stored row's lifecycle metadata: approval progress stays in `resultJson`, rejection moves the request to `cancelled`, and a blocked generic execute attempt records `blockedReason=APPROVAL_ACTION_EXECUTOR_REQUIRED`, the required domain route, the last execution attempt actor/time, and a matching audit breadcrumb.
+
+`POST /api/data-deletion-requests/:id/execute` is the dedicated data-deletion executor. It requires the matching fully approved `tenant_data_deletion` approval id in `approvalRequestId`, reruns the normal executable-approval guard, marks the request `running`, executes the tenant deletion scope, marks the request `succeeded`, marks the approval `executed`, and writes an audit log. Local memory execution scrubs/revokes tenant Meta token material and removes tenant-scoped assets, reports, drafts, learning records, cost usage, and integration settings according to the requested scope. Supabase-backed execution uses the private service-role RPC `private.execute_tenant_data_deletion`; if the admin key or RPC is unavailable it fails closed with `TENANT_DATA_DELETION_EXECUTOR_NOT_CONFIGURED` or a sanitized Supabase executor error.
 
 ## Budget Policy
 

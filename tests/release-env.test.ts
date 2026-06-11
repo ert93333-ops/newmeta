@@ -10,6 +10,7 @@ function validReleaseEnv(): Record<string, string> {
     SUPABASE_SECRET_KEY: "sb_secret_test_value",
     SUPABASE_DB_URL: "postgresql://postgres:strong-password@db.project.supabase.co:5432/postgres",
     TOKEN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    TOKEN_ENCRYPTION_KEY_ID: "release-20260611",
     HERMES_OAUTH_STATE_SECRET: "oauth-state-secret-with-at-least-32-characters",
     META_APP_ID: "123456789",
     META_APP_SECRET: "meta-secret-value",
@@ -78,6 +79,14 @@ describe("release env gate", () => {
     const result = checkReleaseEnv({ ...validReleaseEnv(), TOKEN_ENCRYPTION_KEY: "not-base64" });
 
     expect(result.issues.map((issue) => issue.code)).toContain("INVALID_TOKEN_KEY");
+  });
+
+  it("requires an explicit token encryption key id for rotation", () => {
+    const missing = checkReleaseEnv({ ...validReleaseEnv(), TOKEN_ENCRYPTION_KEY_ID: undefined });
+    const primary = checkReleaseEnv({ ...validReleaseEnv(), TOKEN_ENCRYPTION_KEY_ID: "primary" });
+
+    expect(missing.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+    expect(primary.issues.map((issue) => issue.code)).toContain("DEFAULT_TOKEN_KEY_ID");
   });
 
   it("blocks weak OAuth state secrets", () => {

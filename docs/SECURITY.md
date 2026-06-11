@@ -26,6 +26,9 @@ Tenant-scoped settings writes go through `PATCH /api/settings/*`, require `marke
 - Write API payloads reject token-shaped fields and encrypted token material before persistence or audit logging. API responses and audit JSON payloads defensively redact those fields.
 - Meta OAuth callback exchanges codes server-side and stores only encrypted token material. `HERMES_META_OAUTH_MODE=mock` is local-only; release requires `HERMES_META_OAUTH_MODE=live`.
 - Meta OAuth state is signed, expires after 10 minutes, and is bound to the authenticated user and tenant through hashed identifiers. Production requires `HERMES_OAUTH_STATE_SECRET`.
+- Meta OAuth connect and callback routes are rate-limited at the app boundary by client IP and user agent. Production should also keep CDN/platform rate limits enabled.
+- Release requires an explicit `TOKEN_ENCRYPTION_KEY_ID` so newly stored encrypted Meta tokens have a non-default key id and future rotation can identify which server key was active.
+- Tenant data deletion has a dedicated domain executor at `POST /api/data-deletion-requests/:id/execute`. Generic approval execution stays blocked for this action so deletion scope, persistence cleanup, approval consumption, and audit logging run together.
 - Token test responses expose only account, permission, and expiry status.
 
 ## Approval

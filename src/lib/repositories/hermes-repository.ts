@@ -65,6 +65,12 @@ export interface MetaConnectionDisconnectResult {
   tokenMaterialCleared: boolean;
 }
 
+export interface TenantDataDeletionResult {
+  mode: "mock" | "live";
+  scope: string;
+  deletedCounts: Record<string, number>;
+}
+
 export interface IntegrationSettingsRecord {
   id?: string;
   tenantId: string;
@@ -361,6 +367,11 @@ export interface HermesRepository {
     context: UserContext,
     assetId: string
   ): Promise<VideoSegmentRecord[]>;
+  executeTenantDataDeletion(
+    request: Request,
+    context: UserContext,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<TenantDataDeletionResult>;
 }
 
 interface HermesMemoryStore {
@@ -652,6 +663,98 @@ export class MemoryHermesRepository implements HermesRepository {
     };
     getMemoryStore().dataDeletionRequests.set(persisted.id, persisted);
     return persisted;
+  }
+
+  async executeTenantDataDeletion(
+    _request: Request,
+    context: UserContext,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<TenantDataDeletionResult> {
+    if (deletionRequest.tenantId !== context.tenantId) {
+      throw new Error("TENANT_ACCESS_DENIED");
+    }
+    const store = getMemoryStore();
+    const deletedCounts: Record<string, number> = {};
+    const deleteFromMap = <T extends { tenantId: string }>(name: string, map: Map<string, T>): void => {
+      let count = 0;
+      for (const [id, value] of map.entries()) {
+        if (value.tenantId === context.tenantId) {
+          map.delete(id);
+          count += 1;
+        }
+      }
+      deletedCounts[name] = count;
+    };
+    const scrubMetaConnections = (): void => {
+      let count = 0;
+      for (const [id, connection] of store.metaConnections.entries()) {
+        if (connection.tenantId === context.tenantId) {
+          store.metaConnections.set(id, {
+            ...connection,
+            encryptedAccessToken: "",
+            tokenIv: "",
+            tokenAuthTag: "",
+            tokenKid: "deleted",
+            scopes: [],
+            expiresAt: undefined,
+            status: "revoked",
+            metadataJson: mergeMetaConnectionMetadata(connection.metadataJson, {
+              deletionRequestId: deletionRequest.id,
+              deletionScope: deletionRequest.scope
+            })
+          });
+          count += 1;
+        }
+      }
+      deletedCounts.metaConnectionsRevoked = count;
+    };
+    const deleteSettings = (predicate: (provider: string) => boolean): void => {
+      let count = 0;
+      for (const [key, value] of store.integrationSettings.entries()) {
+        if (value.tenantId === context.tenantId && predicate(value.provider)) {
+          store.integrationSettings.delete(key);
+          count += 1;
+        }
+      }
+      deletedCounts.integrationSettings = (deletedCounts.integrationSettings ?? 0) + count;
+    };
+
+    if (deletionRequest.scope === "tenant" || deletionRequest.scope === "meta_integration") {
+      scrubMetaConnections();
+      deleteSettings((provider) => deletionRequest.scope === "tenant" || provider === "meta" || provider === "signal-diagnostics");
+    }
+    if (deletionRequest.scope === "tenant" || deletionRequest.scope === "creative_assets") {
+      deleteFromMap("assets", store.assets);
+      deleteFromMap("adDrafts", store.adDrafts);
+      deleteFromMap("creativeAnalysisJobs", store.creativeAnalysisJobs);
+      deleteFromMap("creativeFeatures", store.creativeFeatures);
+      deleteFromMap("creativeComponentScores", store.creativeComponentScores);
+      deleteFromMap("videoSegments", store.videoSegments);
+      deleteFromMap("placementValidationReports", store.placementValidationReports);
+      deleteFromMap("performanceFusionReports", store.performanceFusionReports);
+    }
+    if (deletionRequest.scope === "tenant" || deletionRequest.scope === "learning_patterns") {
+      deleteFromMap("bottleneckAnalysisJobs", store.bottleneckAnalysisJobs);
+      deleteFromMap("bottleneckStageScores", store.bottleneckStageScores);
+      deleteFromMap("bottleneckHypotheses", store.bottleneckHypotheses);
+      deleteFromMap("performanceFusionReports", store.performanceFusionReports);
+    }
+    if (deletionRequest.scope === "tenant") {
+      deleteFromMap("jobs", store.jobs as Map<string, { tenantId: string }>);
+      store.costUsage = store.costUsage.filter((item) => {
+        if (typeof item === "object" && item !== null && "tenantId" in item && item.tenantId === context.tenantId) {
+          deletedCounts.costUsage = (deletedCounts.costUsage ?? 0) + 1;
+          return false;
+        }
+        return true;
+      });
+    }
+
+    return {
+      mode: "mock",
+      scope: deletionRequest.scope,
+      deletedCounts
+    };
   }
 
   async savePerformanceFusionReport(
@@ -1310,6 +1413,30 @@ export class SupabaseHermesRepository implements HermesRepository {
     if (error) throw new Error(`SUPABASE_DATA_DELETION_UPDATE_FAILED:${error.message}`);
     if (!data) throw new Error("SUPABASE_DATA_DELETION_UPDATE_MISSED");
     return fromDataDeletionRequestRow(data as DataDeletionRequestRow);
+  }
+
+  async executeTenantDataDeletion(
+    request: Request,
+    context: UserContext,
+    deletionRequest: DataDeletionRequestRecord
+  ): Promise<TenantDataDeletionResult> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.executeTenantDataDeletion(request, context, deletionRequest);
+    const admin = createSupabaseClient("admin");
+    if (!admin) {
+      throw new Error("TENANT_DATA_DELETION_EXECUTOR_NOT_CONFIGURED");
+    }
+    const deletionRequestId = deletionRequest.id;
+    if (!deletionRequestId) {
+      throw new Error("DATA_DELETION_REQUEST_NOT_FOUND");
+    }
+    const { data, error } = await admin.schema("private").rpc("execute_tenant_data_deletion", {
+      target_tenant_id: context.tenantId,
+      deletion_scope: deletionRequest.scope,
+      deletion_request_id: deletionRequestId
+    });
+    if (error) throw new Error(`SUPABASE_TENANT_DATA_DELETION_FAILED:${error.message}`);
+    return parseTenantDataDeletionResult(data, deletionRequest.scope);
   }
 
   async savePerformanceFusionReport(
@@ -2477,6 +2604,27 @@ function readNumberField(row: unknown, key: string): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function parseTenantDataDeletionResult(data: unknown, fallbackScope: string): TenantDataDeletionResult {
+  const record = typeof data === "object" && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  return {
+    mode: record.mode === "mock" ? "mock" : "live",
+    scope: readStringField(record, "scope") ?? fallbackScope,
+    deletedCounts: readNumberMap(record.deletedCounts)
+  };
+}
+
+function readNumberMap(value: unknown): Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
+      const parsed = readNumberField({ value: raw }, "value");
+      return parsed === undefined ? [] : [[key, parsed]];
+    })
+  );
 }
 
 function dayStartUtc(now: Date): Date {

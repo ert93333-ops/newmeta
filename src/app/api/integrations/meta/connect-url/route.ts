@@ -3,9 +3,11 @@ import { handleError, ok } from "@/lib/api/responses";
 import { resolveMetaOAuthMode } from "@/lib/meta/oauth";
 import { OPTIONAL_META_OAUTH_SCOPES, REQUIRED_META_OAUTH_SCOPES } from "@/lib/meta/oauth-scopes";
 import { createMetaOAuthState } from "@/lib/meta/oauth-state";
+import { assertRateLimit } from "@/lib/security/rate-limit";
 
 export async function GET(request: Request) {
   try {
+    assertRateLimit(request, { keyPrefix: "meta-oauth-connect", limit: 30, windowMs: 60_000 });
     const context = await resolveUserContext(request);
     const state = createMetaOAuthState(context);
     const oauthMode = resolveMetaOAuthMode();

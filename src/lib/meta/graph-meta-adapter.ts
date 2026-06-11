@@ -184,6 +184,52 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
     }));
   }
 
+  override async getPixelDiagnostics(adAccountId: string): Promise<unknown> {
+    const body = await this.graphGet<{
+      data?: Array<Record<string, unknown>>;
+    }>(`${adAccountId}/adspixels`, {
+      fields: "id,name,last_fired_time,creation_time,is_unavailable"
+    });
+
+    const pixels = (body.data ?? []).map((row) => {
+      const lastFiredTime = readString(row.last_fired_time);
+      return {
+        id: readString(row.id),
+        name: readString(row.name) ?? "Unnamed pixel",
+        lastFiredTime,
+        creationTime: readString(row.creation_time),
+        unavailable: Boolean(row.is_unavailable),
+        status: readPixelStatus(row)
+      };
+    });
+
+    return {
+      adAccountId,
+      status: pixels.length > 0 ? "connected" : "missing",
+      pixels,
+      warnings:
+        pixels.length > 0
+          ? pixels.filter((pixel) => pixel.status !== "active").map((pixel) => `${pixel.name}: ${pixel.status}`)
+          : ["No Meta Pixel was returned for this ad account."]
+    };
+  }
+
+  override async getSignalDiagnostics(adAccountId: string): Promise<unknown> {
+    const pixelDiagnostics = await this.getPixelDiagnostics(adAccountId);
+    return {
+      adAccountId,
+      pixel: pixelDiagnostics,
+      capi: {
+        status: "not_configured",
+        reason: "CAPI dataset diagnostics are not connected yet."
+      },
+      ga4: {
+        status: "not_configured",
+        reason: "GA4 diagnostics are not connected yet."
+      }
+    };
+  }
+
   override async uploadImage(input: UploadAssetRequest): Promise<{ imageHash: string; status: "PAUSED_READY" }> {
     assertExecutableApproval(input.approval, { ...graphExecutor, tenantId: input.approval.tenantId });
     const sourceUrl = readRequiredSourceUrl(input);
@@ -518,6 +564,17 @@ function readRoas(value: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function readPixelStatus(row: Record<string, unknown>): "active" | "inactive" | "unavailable" {
+  if (row.is_unavailable === true) {
+    return "unavailable";
+  }
+  const lastFiredTime = readString(row.last_fired_time);
+  if (!lastFiredTime) {
+    return "inactive";
+  }
+  return "active";
 }
 
 function readString(value: unknown): string | undefined {
