@@ -50,3 +50,9 @@ services:
         sync: false
       - key: HERMES_WORKER_SECRET
         sync: false
+      - key: SUPABASE_AUTH_SMOKE_EMAIL
+        sync: false
+      - key: SUPABASE_AUTH_SMOKE_PASSWORD
+        sync: false
+      - key: SUPABASE_AUTH_SMOKE_TENANT_ID
+        sync: false
