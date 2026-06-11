@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       oauthMode === "live"
         ? readRequiredEnv("META_REDIRECT_URI")
         : process.env.META_REDIRECT_URI?.trim() || "http://localhost:3000/api/integrations/meta/callback";
-    const scope = [...REQUIRED_META_OAUTH_SCOPES, ...OPTIONAL_META_OAUTH_SCOPES].join(",");
+    const scope = REQUIRED_META_OAUTH_SCOPES.join(",");
     const url = new URL("https://www.facebook.com/dialog/oauth");
     url.searchParams.set("client_id", appId);
     url.searchParams.set("redirect_uri", redirectUri);

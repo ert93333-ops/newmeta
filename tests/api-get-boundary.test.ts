@@ -128,6 +128,24 @@ describe("API GET auth boundary", () => {
     expect(serializedStatePayload).not.toContain("00000000-0000-0000-0000-000000000010");
   });
 
+  it("requests only required Meta scopes in the OAuth dialog", async () => {
+    mutableEnv.HERMES_AUTH_MODE = "mock";
+    mutableEnv.HERMES_OAUTH_STATE_SECRET = "state-secret-with-at-least-32-characters";
+
+    const response = await getMetaConnectUrl(new Request("http://localhost/api/integrations/meta/connect-url"));
+    const body = await json(response);
+    const connectUrl = new URL(String(body.connectUrl));
+    const requestedScopes = new Set((connectUrl.searchParams.get("scope") ?? "").split(","));
+
+    expect(response.status).toBe(200);
+    expect(requestedScopes).toEqual(new Set(["ads_read", "ads_management", "business_management"]));
+    expect(connectUrl.searchParams.get("scope")).not.toContain("instagram_basic");
+    expect(connectUrl.searchParams.get("scope")).not.toContain("instagram_manage_insights");
+    expect(body.optionalScopes).toEqual(
+      expect.arrayContaining(["pages_show_list", "pages_read_engagement", "instagram_basic", "instagram_manage_insights"])
+    );
+  });
+
   it("fails closed when live Meta OAuth connect env is missing", async () => {
     mutableEnv.HERMES_AUTH_MODE = "mock";
     mutableEnv.HERMES_META_OAUTH_MODE = "live";

@@ -22,6 +22,8 @@ Optional expansion scopes:
 - `instagram_manage_insights`
 - `catalog_management` when needed
 
+`GET /api/integrations/meta/connect-url` requests only the required Meta scopes by default. Optional expansion scopes are displayed as product roadmap context and should be added to the OAuth request only after the Meta app product configuration supports them, otherwise Facebook Login can reject the dialog before the user reaches consent.
+
 External customer connections must use OAuth / Business Login. Customers must not paste access tokens.
 
 `GET /api/integrations/meta/connect-url` returns a Meta OAuth URL containing a signed, 10-minute `state` value. The state is bound to the current authenticated user and tenant through HMAC-derived hashes, not raw user or tenant ids.
