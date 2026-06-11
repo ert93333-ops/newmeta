@@ -187,6 +187,24 @@ describe("render jobs route", () => {
     expect(body.error.details.operationType).toBe("image_generation");
   });
 
+  it("fails closed before queueing paid generation in production until a real worker is configured", async () => {
+    clearEnv();
+    setEnv("NODE_ENV", "production");
+    setEnv("HERMES_RENDER_PIPELINE_MODE", "live");
+
+    const response = await renderJobsRoute(
+      renderRequest({
+        operationType: "image_generation",
+        approvalRequestId: "approval-would-not-be-consumed",
+        prompt: "Generate one approved image creative."
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  });
+
   it("rejects paid generation approvals for the wrong operation type", async () => {
     clearEnv();
     const executor = useMockTenant("00000000-0000-0000-0000-000000000303");

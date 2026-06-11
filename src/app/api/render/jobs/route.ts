@@ -24,6 +24,9 @@ export async function POST(request: Request) {
   try {
     const body = (await parseWriteJson(request)) as RenderJobRequest;
     const paidGenerationOperationType = readPaidGenerationOperationType(body.operationType);
+    if (paidGenerationOperationType && isProductionRuntime()) {
+      throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+    }
     if (!isRenderPipelineConfigured(paidGenerationOperationType)) {
       return fail("RENDER_PIPELINE_NOT_CONFIGURED", "The production render pipeline is not configured.", 501);
     }
