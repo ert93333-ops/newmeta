@@ -22,6 +22,7 @@ const REQUIRED_RELEASE_ENV = [
   "META_APP_SECRET",
   "META_REDIRECT_URI",
   "HERMES_META_OAUTH_MODE",
+  "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_RENDER_PIPELINE_MODE",
   "HERMES_WORKER_SECRET",
   "SUPABASE_AUTH_SMOKE_EMAIL",
@@ -130,6 +131,9 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   }
   if (value(env, "HERMES_META_OAUTH_MODE") !== "live") {
     addIssue(issues, "META_OAUTH_NOT_LIVE", "HERMES_META_OAUTH_MODE=live is required for release.");
+  }
+  if (value(env, "HERMES_APPROVAL_EXECUTION_MODE") !== "live") {
+    addIssue(issues, "APPROVAL_EXECUTION_NOT_LIVE", "HERMES_APPROVAL_EXECUTION_MODE=live is required for release.");
   }
   if (value(env, "HERMES_RENDER_PIPELINE_MODE") !== "live") {
     addIssue(issues, "RENDER_PIPELINE_NOT_LIVE", "HERMES_RENDER_PIPELINE_MODE=live is required for release.");

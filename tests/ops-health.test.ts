@@ -17,6 +17,7 @@ function validReleaseEnv(): Record<string, string> {
     META_APP_SECRET: "meta-secret-value",
     META_REDIRECT_URI: "https://app.newmeta.test/api/integrations/meta/callback",
     HERMES_META_OAUTH_MODE: "live",
+    HERMES_APPROVAL_EXECUTION_MODE: "live",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
     SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
@@ -37,6 +38,7 @@ const ENV_KEYS = [
   "META_APP_SECRET",
   "META_REDIRECT_URI",
   "HERMES_META_OAUTH_MODE",
+  "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_WORKER_SECRET",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
@@ -77,6 +79,7 @@ describe("ops health", () => {
     expect(result.checks).toMatchObject({
       supabase: "configured",
       metaOAuth: "live",
+      approvalExecution: "live",
       tokenKeyRotation: "configured",
       renderPipeline: "configured",
       workerSecret: "configured"
@@ -92,6 +95,16 @@ describe("ops health", () => {
 
     expect(result.status).toBe("blocked");
     expect(result.checks.renderPipeline).toBe("not_configured");
+  });
+
+  it("blocks production health when approval execution is not live", () => {
+    const env = validReleaseEnv();
+    delete env.HERMES_APPROVAL_EXECUTION_MODE;
+
+    const result = buildOpsHealth({ ...env, NODE_ENV: "production" });
+
+    expect(result.status).toBe("blocked");
+    expect(result.checks.approvalExecution).toBe("not_live");
   });
 
   it("blocks health when token key rotation id is missing", () => {

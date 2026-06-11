@@ -16,6 +16,7 @@ function validReleaseEnv(): Record<string, string> {
     META_APP_SECRET: "meta-secret-value",
     META_REDIRECT_URI: "https://app.newmeta.test/api/integrations/meta/callback",
     HERMES_META_OAUTH_MODE: "live",
+    HERMES_APPROVAL_EXECUTION_MODE: "live",
     HERMES_RENDER_PIPELINE_MODE: "live",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
@@ -49,6 +50,16 @@ describe("release env gate", () => {
     expect(missing.issues.map((issue) => issue.code)).toContain("RENDER_PIPELINE_NOT_LIVE");
     expect(mock.issues.map((issue) => issue.code)).toContain("PLACEHOLDER_ENV");
     expect(mock.issues.map((issue) => issue.code)).toContain("RENDER_PIPELINE_NOT_LIVE");
+  });
+
+  it("requires live approval execution mode for release", () => {
+    const missing = checkReleaseEnv({ ...validReleaseEnv(), HERMES_APPROVAL_EXECUTION_MODE: undefined });
+    const mock = checkReleaseEnv({ ...validReleaseEnv(), HERMES_APPROVAL_EXECUTION_MODE: "mock" });
+
+    expect(missing.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+    expect(missing.issues.map((issue) => issue.code)).toContain("APPROVAL_EXECUTION_NOT_LIVE");
+    expect(mock.issues.map((issue) => issue.code)).toContain("PLACEHOLDER_ENV");
+    expect(mock.issues.map((issue) => issue.code)).toContain("APPROVAL_EXECUTION_NOT_LIVE");
   });
 
   it("blocks placeholder and missing env values", () => {

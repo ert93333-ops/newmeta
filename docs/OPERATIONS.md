@@ -54,7 +54,7 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker/OAuth-state/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
 Generate the local secret values that Hermes is allowed to create itself with:
 
@@ -68,7 +68,7 @@ Before enabling paid estimate/approval flows, persist tenant cost settings throu
 
 In production, `POST /api/render/jobs` is fail-closed for the deterministic no-paid-operation render checker path unless `HERMES_RENDER_PIPELINE_MODE=live`. Paid `image_generation` and `video_generation` requests still use the approval-bound worker queue. This prevents release builds from reporting render readiness before the deployment explicitly enables the render pipeline mode.
 
-Use `GET /api/ops/health` for deployment monitoring. The endpoint returns `503` until release env, Supabase, live Meta OAuth, token key rotation id, worker secret, and production render pipeline readiness are all configured. It reports only issue codes and configured/missing states, not raw secret values.
+Use `GET /api/ops/health` for deployment monitoring. The endpoint returns `503` until release env, Supabase, live Meta OAuth, live approval execution mode, token key rotation id, worker secret, and production render pipeline readiness are all configured. It reports only issue codes and configured/missing states, not raw secret values.
 
 Meta OAuth connect and callback routes use an in-process request rate limiter keyed by client IP and user agent. This limits abuse at the app boundary; keep platform/CDN rate limits enabled in production as the outer layer.
 

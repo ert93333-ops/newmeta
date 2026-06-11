@@ -14,6 +14,7 @@ export interface OpsHealthResult {
   checks: {
     supabase: "configured" | "missing";
     metaOAuth: "live" | "not_live";
+    approvalExecution: "live" | "not_live";
     tokenKeyRotation: "configured" | "missing";
     renderPipeline: "configured" | "not_configured";
     workerSecret: "configured" | "missing";
@@ -31,6 +32,7 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
         ? "configured"
         : "missing",
     metaOAuth: env.HERMES_META_OAUTH_MODE === "live" ? "live" : "not_live",
+    approvalExecution: env.HERMES_APPROVAL_EXECUTION_MODE === "live" ? "live" : "not_live",
     tokenKeyRotation: hasValue(env.TOKEN_ENCRYPTION_KEY_ID) && env.TOKEN_ENCRYPTION_KEY_ID !== "primary" ? "configured" : "missing",
     renderPipeline: env.HERMES_RENDER_PIPELINE_MODE === "live" ? "configured" : "not_configured",
     workerSecret: hasValue(env.HERMES_WORKER_SECRET) ? "configured" : "missing"
@@ -39,6 +41,7 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     release.passed &&
     checks.supabase === "configured" &&
     checks.metaOAuth === "live" &&
+    checks.approvalExecution === "live" &&
     checks.tokenKeyRotation === "configured" &&
     checks.workerSecret === "configured" &&
     (!production || checks.renderPipeline === "configured");
