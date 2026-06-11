@@ -167,5 +167,5 @@ export function isRenderPipelineConfigured(
   if (paidGenerationOperationType) {
     return true;
   }
-  return !isProductionRuntime();
+  return !isProductionRuntime() || process.env.HERMES_RENDER_PIPELINE_MODE === "live";
 }

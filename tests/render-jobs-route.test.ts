@@ -9,6 +9,7 @@ const ENV_KEYS = [
   "VERCEL_ENV",
   "HERMES_AUTH_MODE",
   "HERMES_DEFAULT_TENANT_ID",
+  "HERMES_RENDER_PIPELINE_MODE",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
 ] as const;
@@ -153,6 +154,20 @@ describe("render jobs route", () => {
 
     expect(response.status).toBe(501);
     expect(body.error.code).toBe("RENDER_PIPELINE_NOT_CONFIGURED");
+  });
+
+  it("allows the free render checker path past the pipeline gate in production only when live mode is set", async () => {
+    clearEnv();
+    setEnv("NODE_ENV", "production");
+    setEnv("HERMES_RENDER_PIPELINE_MODE", "live");
+
+    expect(isRenderPipelineConfigured(undefined)).toBe(true);
+
+    const response = await renderJobsRoute(renderRequest(baseManifest as unknown as Record<string, unknown>));
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error.code).toBe("SUPABASE_AUTH_REQUIRED");
   });
 
   it("requires approval before queueing paid image generation", async () => {

@@ -32,7 +32,7 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
         : "missing",
     metaOAuth: env.HERMES_META_OAUTH_MODE === "live" ? "live" : "not_live",
     tokenKeyRotation: hasValue(env.TOKEN_ENCRYPTION_KEY_ID) && env.TOKEN_ENCRYPTION_KEY_ID !== "primary" ? "configured" : "missing",
-    renderPipeline: hasValue(env.HERMES_RENDER_PIPELINE_MODE) && env.HERMES_RENDER_PIPELINE_MODE !== "mock" ? "configured" : "not_configured",
+    renderPipeline: env.HERMES_RENDER_PIPELINE_MODE === "live" ? "configured" : "not_configured",
     workerSecret: hasValue(env.HERMES_WORKER_SECRET) ? "configured" : "missing"
   } as const;
   const operationallyReady =
