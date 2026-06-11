@@ -17,7 +17,7 @@ export interface OpsHealthResult {
     approvalExecution: "live" | "not_live";
     tokenKeyRotation: "configured" | "missing";
     renderPipeline: "configured" | "not_configured";
-    paidGenerationProvider: "configured" | "missing";
+    paidGenerationProvider: "configured" | "disabled" | "missing";
     workerSecret: "configured" | "missing";
   };
 }
@@ -41,6 +41,8 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
       hasValue(env.HERMES_PAID_GENERATION_API_URL) &&
       hasValue(env.HERMES_PAID_GENERATION_API_KEY)
         ? "configured"
+        : env.HERMES_PAID_GENERATION_PROVIDER === "disabled"
+          ? "disabled"
         : "missing",
     workerSecret: hasValue(env.HERMES_WORKER_SECRET) ? "configured" : "missing"
   } as const;
@@ -50,7 +52,7 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     checks.metaOAuth === "live" &&
     checks.approvalExecution === "live" &&
     checks.tokenKeyRotation === "configured" &&
-    checks.paidGenerationProvider === "configured" &&
+    (checks.paidGenerationProvider === "configured" || checks.paidGenerationProvider === "disabled") &&
     checks.workerSecret === "configured" &&
     (!production || checks.renderPipeline === "configured");
 

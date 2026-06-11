@@ -42,7 +42,7 @@ For deployment, start from `.env.production.example`, omit `HERMES_AUTH_MODE=moc
 npm run env:release-gates
 ```
 
-The gate fails closed on missing production Supabase/Meta/worker/OAuth-state/approval-execution/render/paid-generation env, missing auth-smoke env, placeholder values, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate fails closed on missing production Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, placeholder values, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names. Paid generation must either be configured with `HERMES_PAID_GENERATION_PROVIDER=generic_http` plus its server-only endpoint/key or explicitly disabled with `HERMES_PAID_GENERATION_PROVIDER=disabled`.
 
 Hermes can generate only the local release secrets it owns:
 

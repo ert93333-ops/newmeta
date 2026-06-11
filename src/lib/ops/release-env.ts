@@ -25,8 +25,6 @@ const REQUIRED_RELEASE_ENV = [
   "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_RENDER_PIPELINE_MODE",
   "HERMES_PAID_GENERATION_PROVIDER",
-  "HERMES_PAID_GENERATION_API_URL",
-  "HERMES_PAID_GENERATION_API_KEY",
   "HERMES_WORKER_SECRET",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
@@ -141,8 +139,23 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   if (value(env, "HERMES_RENDER_PIPELINE_MODE") !== "live") {
     addIssue(issues, "RENDER_PIPELINE_NOT_LIVE", "HERMES_RENDER_PIPELINE_MODE=live is required for release.");
   }
-  if (value(env, "HERMES_PAID_GENERATION_PROVIDER") !== "generic_http") {
-    addIssue(issues, "PAID_GENERATION_PROVIDER_NOT_CONFIGURED", "HERMES_PAID_GENERATION_PROVIDER=generic_http is required for release.");
+  const paidGenerationProvider = value(env, "HERMES_PAID_GENERATION_PROVIDER");
+  if (paidGenerationProvider !== "generic_http" && paidGenerationProvider !== "disabled") {
+    addIssue(
+      issues,
+      "PAID_GENERATION_PROVIDER_NOT_CONFIGURED",
+      "HERMES_PAID_GENERATION_PROVIDER must be generic_http or disabled for release."
+    );
+  }
+  if (paidGenerationProvider === "generic_http") {
+    for (const key of ["HERMES_PAID_GENERATION_API_URL", "HERMES_PAID_GENERATION_API_KEY"] as const) {
+      const raw = value(env, key);
+      if (!raw) {
+        addIssue(issues, "MISSING_ENV", `${key} is required when HERMES_PAID_GENERATION_PROVIDER=generic_http.`);
+      } else if (isPlaceholder(raw)) {
+        addIssue(issues, "PLACEHOLDER_ENV", `${key} still contains a placeholder value.`);
+      }
+    }
   }
 
   for (const key of Object.keys(env)) {

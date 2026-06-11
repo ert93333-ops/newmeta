@@ -55,15 +55,33 @@ describe("release env gate", () => {
     expect(mock.issues.map((issue) => issue.code)).toContain("RENDER_PIPELINE_NOT_LIVE");
   });
 
-  it("requires a configured paid generation provider for release", () => {
+  it("allows paid generation to be configured or explicitly disabled for release", () => {
     const missing = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_PROVIDER: undefined });
     const disabled = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_PROVIDER: "disabled" });
+    const disabledWithoutProviderSecrets = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_PAID_GENERATION_PROVIDER: "disabled",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined
+    });
     const insecure = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_API_URL: "http://provider.local/jobs" });
 
     expect(missing.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
     expect(missing.issues.map((issue) => issue.code)).toContain("PAID_GENERATION_PROVIDER_NOT_CONFIGURED");
-    expect(disabled.issues.map((issue) => issue.code)).toContain("PAID_GENERATION_PROVIDER_NOT_CONFIGURED");
+    expect(disabled.passed).toBe(true);
+    expect(disabledWithoutProviderSecrets.passed).toBe(true);
     expect(insecure.issues.map((issue) => issue.code)).toContain("INSECURE_URL");
+  });
+
+  it("requires paid provider endpoint and API key when generic_http is enabled", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined
+    });
+
+    expect(result.issues.some((issue) => issue.message.includes("HERMES_PAID_GENERATION_API_URL"))).toBe(true);
+    expect(result.issues.some((issue) => issue.message.includes("HERMES_PAID_GENERATION_API_KEY"))).toBe(true);
   });
 
   it("requires live approval execution mode for release", () => {

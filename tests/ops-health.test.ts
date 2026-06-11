@@ -134,6 +134,21 @@ describe("ops health", () => {
     expect(result.checks.paidGenerationProvider).toBe("missing");
   });
 
+  it("reports ready when paid generation is explicitly disabled", () => {
+    const env = {
+      ...validReleaseEnv(),
+      NODE_ENV: "production",
+      HERMES_PAID_GENERATION_PROVIDER: "disabled",
+      HERMES_PAID_GENERATION_API_URL: undefined,
+      HERMES_PAID_GENERATION_API_KEY: undefined
+    };
+
+    const result = buildOpsHealth(env);
+
+    expect(result.status).toBe("ready");
+    expect(result.checks.paidGenerationProvider).toBe("disabled");
+  });
+
   it("returns 503 while required release env is missing", async () => {
     clearReleaseEnv();
 
