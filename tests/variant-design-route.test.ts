@@ -114,6 +114,22 @@ describe("variant design route paid operation guard", () => {
     expect(body.error.details.operationType).toBe("variant_batch");
   });
 
+  it("fails closed for paid variant batch execution in production until a real provider is configured", async () => {
+    clearEnv();
+    setEnv("NODE_ENV", "production");
+
+    const response = await designVariantsRoute(
+      variantRequest({
+        ...variantBody,
+        approvalRequestId: "approval-would-not-be-consumed"
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(501);
+    expect(body.error.code).toBe("PAID_VARIANT_DESIGN_NOT_CONFIGURED");
+  });
+
   it("rejects an approval that is not scoped to variant batches", async () => {
     clearEnv();
     setEnv("HERMES_AUTH_MODE", "mock");

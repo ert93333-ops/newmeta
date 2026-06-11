@@ -33,7 +33,7 @@ Image and video generation queueing must be bound to an approved `ai_paid_genera
 
 The worker closes that reservation only when the queued paid generation reaches a terminal state. A succeeded job writes a final `succeeded` usage row with actual cost; an exhausted failed job writes a final `failed` row with zero actual cost. Requeued retry attempts do not close the reservation.
 
-Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches.
+Variant design execution must be bound to an approved `ai_paid_generation` approval request with `objectType = "variant_batch"`. The approval is consumed by marking it `executed`, so the same approval cannot be reused for duplicate paid batches. Production variant batch execution fails closed with `PAID_VARIANT_DESIGN_NOT_CONFIGURED` until a real paid variant provider is wired.
 
 The generic approval execution route does not execute `ai_paid_generation`. Paid generation approvals must be consumed by their domain route or worker so generation output, validation, audit logging, and cost usage logging cannot drift apart.
 

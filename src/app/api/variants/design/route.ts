@@ -1,5 +1,5 @@
 import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-policy";
-import { resolveUserContext } from "@/lib/api/context";
+import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { designVariants } from "@/lib/variants/variant-designer";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
 import { assertPaidOperationApproval, PaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
@@ -12,9 +12,12 @@ interface VariantDesignRequest extends VariantDesignInput {
 
 export async function POST(request: Request) {
   try {
+    const body = (await parseWriteJson(request)) as VariantDesignRequest;
+    if (isProductionRuntime()) {
+      throw new Error("PAID_VARIANT_DESIGN_NOT_CONFIGURED");
+    }
     const context = await resolveUserContext(request);
     const repository = getRepository();
-    const body = (await parseWriteJson(request)) as VariantDesignRequest;
     const approvalRequestId = readApprovalRequestId(body.approvalRequestId);
     const approval = await repository.getApproval(request, context, approvalRequestId);
 

@@ -223,6 +223,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "PAID_GENERATION_WORKER_NOT_CONFIGURED") {
       return fail(error.message, "Paid generation worker execution is not configured.", 501);
     }
+    if (error.message === "PAID_VARIANT_DESIGN_NOT_CONFIGURED") {
+      return fail(error.message, "Paid variant design execution is not configured.", 501);
+    }
     if (error.message === "APPROVAL_REQUEST_ID_REQUIRED") {
       return fail(error.message, "Approval request id is required.", 400);
     }
