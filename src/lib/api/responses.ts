@@ -229,6 +229,9 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "APPROVAL_REQUEST_ID_REQUIRED") {
       return fail(error.message, "Approval request id is required.", 400);
     }
+    if (error.message === "APPROVAL_ACTION_UNSUPPORTED") {
+      return fail(error.message, "Approval action is not supported.", 400);
+    }
     if (error.message === "META_OAUTH_TOKEN_MISSING") {
       return fail(error.message, "Meta OAuth token exchange response did not include a usable token.", 502);
     }

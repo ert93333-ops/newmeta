@@ -154,7 +154,11 @@ const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
 };
 
 export function getApprovalPolicy(action: ApprovalAction): ApprovalPolicy {
-  return POLICIES[action];
+  const policy = POLICIES[action];
+  if (!policy) {
+    throw new Error("APPROVAL_ACTION_UNSUPPORTED");
+  }
+  return policy;
 }
 
 export function isTypedConfirmationRequiredError(error: unknown): error is TypedConfirmationRequiredError {

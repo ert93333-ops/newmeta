@@ -54,6 +54,16 @@ describe("approval policy", () => {
     expect(() => assertExecutableApproval(approval, approver)).toThrow("APPROVAL_REQUIRED");
   });
 
+  it("rejects unsupported approval actions at runtime", () => {
+    expect(() =>
+      createApprovalRequest({
+        context: requester,
+        action: "meta_scale_campaign" as never,
+        objectType: "campaign"
+      })
+    ).toThrow("APPROVAL_ACTION_UNSUPPORTED");
+  });
+
   it("allows execution after approval", () => {
     const approval = createApprovalRequest({
       context: requester,
