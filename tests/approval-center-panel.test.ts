@@ -37,9 +37,9 @@ describe("Approval center panel", () => {
 
   it("shows read-only action readiness without dispatching execution", () => {
     expect(panelSource).toContain("getReadinessStatus");
-    expect(panelSource).toContain("Second approval pending");
-    expect(panelSource).toContain("Domain route required");
-    expect(panelSource).toContain("Ready for server executor");
+    expect(panelSource).toContain("2차 승인 대기 중");
+    expect(panelSource).toContain("전용 도메인 경로 필요");
+    expect(panelSource).toContain("서버 실행기 준비 완료");
     expect(panelSource).toContain("readiness-state");
     expect(panelSource).not.toContain("executeApprovedAction");
   });

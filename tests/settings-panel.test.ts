@@ -20,7 +20,7 @@ describe("Settings panel", () => {
     expect(panelSource).toContain("ROLE_RANK.marketer");
     expect(panelSource).toContain("ROLE_ACCESS_DENIED");
     expect(panelSource).toContain("toSettingsPayload");
-    expect(panelSource).toContain("Fails closed until saved");
+    expect(panelSource).toContain("저장 전까지 차단");
     expect(panelSource).not.toContain("fetch('/api/cost/estimate'");
   });
 

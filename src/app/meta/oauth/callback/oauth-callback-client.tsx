@@ -14,7 +14,7 @@ export function MetaOAuthCallbackClient() {
   const started = useRef(false);
   const [state, setState] = useState<CallbackState>({
     status: "pending",
-    message: "Meta OAuth callback received."
+    message: "메타 OAuth callback을 받았습니다."
   });
 
   useEffect(() => {
@@ -32,14 +32,14 @@ export function MetaOAuthCallbackClient() {
     if (error) {
       setState({
         status: "blocked",
-        message: `Meta OAuth failed: ${error}`
+        message: `메타 OAuth가 실패했습니다: ${error}`
       });
       return;
     }
     if (!code || !oauthState) {
       setState({
         status: "blocked",
-        message: "Missing Meta OAuth code or state."
+        message: "메타 OAuth code 또는 state가 없습니다."
       });
       return;
     }
@@ -50,8 +50,8 @@ export function MetaOAuthCallbackClient() {
   return (
     <main className="oauth-callback-shell">
       <section className="oauth-callback-panel" aria-live="polite">
-        <p className={`oauth-status ${state.status}`}>{state.status}</p>
-        <h1>Meta Connection</h1>
+        <p className={`oauth-status ${state.status}`}>{formatCallbackStatus(state.status)}</p>
+        <h1>메타 연결</h1>
         <p>{state.message}</p>
       </section>
     </main>
@@ -65,7 +65,7 @@ async function completeMetaOAuth(
 ): Promise<void> {
   setState({
     status: "working",
-    message: "Completing Meta connection."
+    message: "메타 연결을 완료하는 중입니다."
   });
 
   const headers: Record<string, string> = {
@@ -94,13 +94,32 @@ async function completeMetaOAuth(
   if (!response.ok) {
     setState({
       status: "blocked",
-      message: `Meta connection blocked: ${body.error?.code ?? response.status}`
+      message: `메타 연결이 차단됐습니다: ${body.error?.code ?? response.status}`
     });
     return;
   }
 
   setState({
     status: "connected",
-    message: `Meta connection ${body.connection?.status ?? "connected"}.`
+    message: `메타 연결 상태: ${formatConnectionStatus(body.connection?.status ?? "connected")}.`
   });
+}
+
+function formatCallbackStatus(status: CallbackStatus): string {
+  const labels: Record<CallbackStatus, string> = {
+    pending: "대기",
+    working: "처리 중",
+    connected: "연결됨",
+    blocked: "차단됨"
+  };
+  return labels[status];
+}
+
+function formatConnectionStatus(status: string): string {
+  const labels: Record<string, string> = {
+    connected: "연결됨",
+    revoked: "해제됨",
+    expired: "만료됨"
+  };
+  return labels[status] ?? status;
 }

@@ -99,17 +99,17 @@ export function MetaConnectionPanel() {
         <div>
           <p className="eyebrow">
             <Link2 aria-hidden="true" size={14} />
-            Meta Connection
+            메타 연결
           </p>
-          <h2>OAuth connection handoff</h2>
-          <p className="muted">Tenant-scoped signed state is prepared before the Meta OAuth redirect.</p>
+          <h2>OAuth 연결 넘겨주기</h2>
+          <p className="muted">메타 OAuth로 이동하기 전에 테넌트 단위 서명 state를 준비합니다.</p>
         </div>
-        <span className="tag good">Server-token storage</span>
+        <span className="tag good">서버 토큰 저장</span>
       </div>
 
       <form className="meta-connect-form" onSubmit={handleSubmit}>
         <label className="field meta-tenant-field">
-          <span>{memberships.length > 0 ? "Tenant" : "Tenant ID"}</span>
+          <span>{memberships.length > 0 ? "테넌트" : "테넌트 ID"}</span>
           {memberships.length > 0 ? (
             <select
               onChange={(event) => {
@@ -129,7 +129,7 @@ export function MetaConnectionPanel() {
               autoComplete="off"
               inputMode="text"
               onChange={(event) => setTenantId(event.target.value)}
-              placeholder="tenant uuid"
+              placeholder="테넌트 UUID"
               value={tenantId}
             />
           )}
@@ -140,7 +140,7 @@ export function MetaConnectionPanel() {
           type="submit"
         >
           <RefreshCw aria-hidden="true" size={16} />
-          Prepare URL
+          URL 준비
         </button>
       </form>
 
@@ -152,25 +152,25 @@ export function MetaConnectionPanel() {
       {result ? (
         <div className="meta-connection-details">
           <div className="meta-detail-row">
-            <span>Token policy</span>
-            <strong>{result.tokenPolicy ?? "Customers never paste Meta access tokens."}</strong>
+            <span>토큰 정책</span>
+            <strong>{result.tokenPolicy ?? "고객은 메타 액세스 토큰을 직접 붙여넣지 않습니다."}</strong>
           </div>
           <div className="meta-detail-row">
-            <span>Signed state</span>
-            <strong>{result.stateBound ? "Bound to user and tenant" : "Unavailable"}</strong>
+            <span>서명 state</span>
+            <strong>{result.stateBound ? "사용자와 테넌트에 바인딩됨" : "사용 불가"}</strong>
           </div>
           <div className="meta-detail-row">
-            <span>State expiry</span>
+            <span>state 만료</span>
             <strong>{formatExpiry(result.stateExpiresAt)}</strong>
           </div>
           <div className="scope-groups">
-            <ScopeList label="Required scopes" scopes={requiredScopes} />
-            <ScopeList label="Optional scopes" scopes={optionalScopes} />
+            <ScopeList label="필수 권한" scopes={requiredScopes} />
+            <ScopeList label="확장 권한" scopes={optionalScopes} />
           </div>
           {result.connectUrl ? (
             <a className="meta-oauth-link" href={result.connectUrl} rel="noreferrer" target="_blank">
               <ExternalLink aria-hidden="true" size={16} />
-              Open Meta OAuth
+              메타 OAuth 열기
             </a>
           ) : null}
         </div>
@@ -184,7 +184,7 @@ function ScopeList({ label, scopes }: { label: string; scopes: string[] }) {
     <div className="scope-list">
       <span>{label}</span>
       <ul>
-        {scopes.length > 0 ? scopes.map((scope) => <li key={scope}>{scope}</li>) : <li>Unavailable</li>}
+        {scopes.length > 0 ? scopes.map((scope) => <li key={scope}>{scope}</li>) : <li>사용 불가</li>}
       </ul>
     </div>
   );
@@ -267,26 +267,26 @@ function getStatusMessage(
   membershipStatus: "idle" | "loaded" | "blocked"
 ): string {
   if (status === "loading") {
-    return "Preparing a signed OAuth state.";
+    return "서명된 OAuth state를 준비하는 중입니다.";
   }
   if (status === "ready") {
-    return "Meta OAuth URL is ready.";
+    return "메타 OAuth URL이 준비됐습니다.";
   }
   if (status === "blocked") {
-    return `Connect URL blocked: ${error ?? "UNKNOWN_ERROR"}.`;
+    return `연결 URL 생성이 차단됐습니다: ${error ?? "UNKNOWN_ERROR"}.`;
   }
   if (membershipStatus === "loaded") {
-    return "Tenant membership loaded from Supabase Auth.";
+    return "Supabase Auth에서 테넌트 멤버십을 불러왔습니다.";
   }
   if (membershipStatus === "blocked") {
-    return "Tenant membership lookup was blocked.";
+    return "테넌트 멤버십 조회가 차단됐습니다.";
   }
-  return "Ready to prepare a Meta OAuth URL.";
+  return "메타 OAuth URL을 준비할 수 있습니다.";
 }
 
 function formatExpiry(value: string | undefined): string {
   if (!value) {
-    return "Unavailable";
+    return "사용 불가";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {

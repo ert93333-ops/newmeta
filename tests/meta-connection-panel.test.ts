@@ -29,6 +29,6 @@ describe("Meta connection panel", () => {
     expect(pageSource).toContain("MetaConnectionPanel");
     expect(panelSource).toContain("stateExpiresAt");
     expect(panelSource).toContain("stateBound");
-    expect(panelSource).toContain("Open Meta OAuth");
+    expect(panelSource).toContain("메타 OAuth 열기");
   });
 });

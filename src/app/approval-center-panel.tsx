@@ -138,7 +138,7 @@ export function ApprovalCenterPanel() {
       body: JSON.stringify(
         decision === "approve"
           ? { typedConfirmation }
-          : { reason: rejectionReason.trim() || "Rejected from Approval Center" }
+          : { reason: rejectionReason.trim() || "승인 센터에서 거절됨" }
       )
     });
     const body = (await response.json()) as ApprovalListResponse;
@@ -159,24 +159,24 @@ export function ApprovalCenterPanel() {
     <section className="panel approval-panel" id="approval-center">
       <div className="panel-heading">
         <div>
-          <h2>Approval Center</h2>
+          <h2>승인 센터</h2>
           <p className="muted">{getLoadMessage(loadStatus, loadError)}</p>
         </div>
-        <span className={`tag ${loadStatus === "blocked" ? "bad" : "warn"}`}>server guarded</span>
+        <span className={`tag ${loadStatus === "blocked" ? "bad" : "warn"}`}>서버 가드 적용</span>
       </div>
 
       <div className="approval-layout">
-        <div className="approval-list" aria-label="Approval requests">
+        <div className="approval-list" aria-label="승인 요청">
           {loadStatus === "loading" ? (
             <div className="approval-empty" role="status">
               <Loader2 aria-hidden="true" size={18} />
-              <span>Loading approvals</span>
+              <span>승인 요청을 불러오는 중</span>
             </div>
           ) : null}
           {loadStatus === "empty" ? (
             <div className="approval-empty" role="status">
               <CheckCircle2 aria-hidden="true" size={18} />
-              <span>No pending approvals</span>
+              <span>대기 중인 승인 요청 없음</span>
             </div>
           ) : null}
           {loadStatus === "blocked" ? (
@@ -201,7 +201,7 @@ export function ApprovalCenterPanel() {
               <span>
                 <strong>{formatAction(approval.action)}</strong>
                 <small>
-                  {formatObject(approval.objectType, approval.objectId)} - {approval.status}
+                  {formatObject(approval.objectType, approval.objectId)} - {formatApprovalStatus(approval.status)}
                 </small>
               </span>
               <span className={`risk-chip ${guard.riskLevel}`}>{guard.riskLevel}</span>
@@ -222,50 +222,50 @@ export function ApprovalCenterPanel() {
               <div>
                 <strong>{selected.approval.action}</strong>
                 <small>
-                  Requested by {selected.approval.requestedBy ?? selected.approval.createdBy ?? "unknown"}
-                  {selected.guard.requiresSecondApproval ? " - second approval required" : ""}
+                  요청자: {selected.approval.requestedBy ?? selected.approval.createdBy ?? "알 수 없음"}
+                  {selected.guard.requiresSecondApproval ? " - 2차 승인 필요" : ""}
                 </small>
               </div>
             </div>
 
             <label className="field">
-              <span>Typed confirmation</span>
-              <code>{requiredText ?? "Not required"}</code>
+              <span>입력 확인 문구</span>
+              <code>{requiredText ?? "필요 없음"}</code>
               <input
-                aria-label="Typed confirmation"
+                aria-label="입력 확인 문구"
                 disabled={!requiredText}
                 onChange={(event) => {
                   setTypedConfirmation(event.target.value);
                   setDecisionStatus("idle");
                   setDecisionError(null);
                 }}
-                placeholder={requiredText ?? "No typed confirmation required"}
+                placeholder={requiredText ?? "입력 확인 문구가 필요 없습니다"}
                 value={typedConfirmation}
               />
             </label>
 
             <label className="field">
-              <span>Rejection reason</span>
+              <span>거절 사유</span>
               <textarea
                 onChange={(event) => {
                   setRejectionReason(event.target.value);
                   setDecisionStatus("idle");
                   setDecisionError(null);
                 }}
-                placeholder="Optional rejection note"
+                placeholder="선택 사항: 거절 메모"
                 value={rejectionReason}
               />
             </label>
 
             <div className="approval-meta">
-              <span>Status</span>
-              <strong>{selected.approval.status}</strong>
-              <span>Expires</span>
+              <span>상태</span>
+              <strong>{formatApprovalStatus(selected.approval.status)}</strong>
+              <span>만료</span>
               <strong>{formatDate(selected.guard.expiresAt ?? selected.approval.expiresAt)}</strong>
-              <span>Reason</span>
-              <strong>{selected.approval.reason ?? "Unavailable"}</strong>
-              <span>Second approval</span>
-              <strong>{selected.approval.secondApprovedBy ? "Complete" : selected.guard.requiresSecondApproval ? "Required" : "Not required"}</strong>
+              <span>사유</span>
+              <strong>{selected.approval.reason ?? "사용 불가"}</strong>
+              <span>2차 승인</span>
+              <strong>{selected.approval.secondApprovedBy ? "완료" : selected.guard.requiresSecondApproval ? "필수" : "필요 없음"}</strong>
             </div>
 
             {readiness ? (
@@ -289,7 +289,7 @@ export function ApprovalCenterPanel() {
             <div className="approval-actions">
               <button className="approve-button" disabled={!canSubmitApproval} type="submit">
                 <CheckCircle2 aria-hidden="true" size={18} />
-                Approve
+                승인
               </button>
               <button
                 className="reject-button"
@@ -298,7 +298,7 @@ export function ApprovalCenterPanel() {
                 type="button"
               >
                 <XCircle aria-hidden="true" size={18} />
-                Reject
+                거절
               </button>
             </div>
           </form>
@@ -344,7 +344,20 @@ async function getSupabaseBearer(): Promise<string | undefined> {
 }
 
 function formatAction(action: string): string {
-  return action.replaceAll("_", " ");
+  const labels: Record<string, string> = {
+    meta_activate_campaign: "메타 캠페인 활성화",
+    meta_activate_adset: "메타 광고 세트 활성화",
+    meta_activate_ad: "메타 광고 활성화",
+    meta_pause_campaign: "메타 캠페인 일시정지",
+    meta_pause_adset: "메타 광고 세트 일시정지",
+    meta_pause_ad: "메타 광고 일시정지",
+    meta_delete_ad: "메타 광고 삭제",
+    meta_create_ad_paused: "PAUSED 광고 초안 생성",
+    meta_disconnect_connection: "메타 연결 해제",
+    tenant_data_deletion: "테넌트 데이터 삭제",
+    ai_paid_generation: "유료 AI 생성"
+  };
+  return labels[action] ?? action.replaceAll("_", " ");
 }
 
 function formatObject(objectType: string, objectId: string | undefined): string {
@@ -353,7 +366,7 @@ function formatObject(objectType: string, objectId: string | undefined): string 
 
 function formatDate(value: string | undefined): string {
   if (!value) {
-    return "Unavailable";
+    return "사용 불가";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -364,15 +377,15 @@ function formatDate(value: string | undefined): string {
 
 function getLoadMessage(status: LoadStatus, error: string | null): string {
   if (status === "loading") {
-    return "Loading tenant approval queue.";
+    return "테넌트 승인 대기열을 불러오는 중입니다.";
   }
   if (status === "loaded") {
-    return "Tenant-scoped approvals loaded from the server.";
+    return "서버에서 테넌트 승인 요청을 불러왔습니다.";
   }
   if (status === "empty") {
-    return "No pending approval requests.";
+    return "대기 중인 승인 요청이 없습니다.";
   }
-  return `Approval list blocked: ${error ?? "UNKNOWN_ERROR"}.`;
+  return `승인 목록이 차단됐습니다: ${error ?? "UNKNOWN_ERROR"}.`;
 }
 
 function getDecisionTone(status: DecisionStatus, confirmationMatched: boolean): "ready" | "blocked" {
@@ -384,10 +397,10 @@ function getDecisionTone(status: DecisionStatus, confirmationMatched: boolean): 
 
 function getDecisionMessage(status: DecisionStatus, error: string | null, guardCode: string): string {
   if (status === "submitting") {
-    return "SUBMITTING_APPROVAL_DECISION";
+    return "승인 결정을 제출하는 중입니다.";
   }
   if (status === "succeeded") {
-    return "APPROVAL_DECISION_RECORDED";
+    return "승인 결정이 기록됐습니다.";
   }
   if (status === "blocked") {
     return error ?? "APPROVAL_DECISION_BLOCKED";
@@ -401,46 +414,58 @@ function getReadinessStatus(item: ApprovalListItem): ReadinessStatus {
   if (approval.status === "executed") {
     return {
       tone: "blocked",
-      label: "Action readiness",
-      reason: "Already completed"
+      label: "작업 준비 상태",
+      reason: "이미 완료됨"
     };
   }
 
   if (approval.status === "rejected" || approval.status === "cancelled" || approval.status === "expired") {
     return {
       tone: "blocked",
-      label: "Action readiness",
-      reason: `Closed by ${approval.status}`
+      label: "작업 준비 상태",
+      reason: `${formatApprovalStatus(approval.status)} 상태로 종료됨`
     };
   }
 
   if (approval.status !== "approved") {
     return {
       tone: "pending",
-      label: "Action readiness",
-      reason: "Approval pending"
+      label: "작업 준비 상태",
+      reason: "승인 대기 중"
     };
   }
 
   if (guard.requiresSecondApproval && !approval.secondApprovedBy) {
     return {
       tone: "pending",
-      label: "Action readiness",
-      reason: "Second approval pending"
+      label: "작업 준비 상태",
+      reason: "2차 승인 대기 중"
     };
   }
 
   if (approval.action === "ai_paid_generation") {
     return {
       tone: "pending",
-      label: "Action readiness",
-      reason: "Domain route required"
+      label: "작업 준비 상태",
+      reason: "전용 도메인 경로 필요"
     };
   }
 
   return {
     tone: "ready",
-    label: "Action readiness",
-    reason: "Ready for server executor"
+    label: "작업 준비 상태",
+    reason: "서버 실행기 준비 완료"
   };
+}
+
+function formatApprovalStatus(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "대기",
+    approved: "승인됨",
+    rejected: "거절됨",
+    executed: "실행됨",
+    cancelled: "취소됨",
+    expired: "만료됨"
+  };
+  return labels[status] ?? status;
 }

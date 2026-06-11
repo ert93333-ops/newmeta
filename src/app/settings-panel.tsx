@@ -93,10 +93,10 @@ export function SettingsPanel() {
   const statusTone = status === "blocked" ? "blocked" : status === "saved" || status === "ready" ? "ready" : "pending";
   const formSummary = useMemo(
     () => [
-      { label: "Daily cap", value: form.dailyCostCapKrw || "Unset" },
-      { label: "Hard cap", value: form.hardDailyCapKrw || "Unset" },
-      { label: "Image cost", value: form.imageGenerationCreditCost || "Unset" },
-      { label: "Video cost", value: form.videoGenerationCreditCost || "Unset" }
+      { label: "일일 한도", value: form.dailyCostCapKrw || "미설정" },
+      { label: "하드 한도", value: form.hardDailyCapKrw || "미설정" },
+      { label: "이미지 비용", value: form.imageGenerationCreditCost || "미설정" },
+      { label: "비디오 비용", value: form.videoGenerationCreditCost || "미설정" }
     ],
     [form]
   );
@@ -193,19 +193,19 @@ export function SettingsPanel() {
         <div>
           <p className="eyebrow">
             <SlidersHorizontal aria-hidden="true" size={14} />
-            Settings
+            설정
           </p>
-          <h2>Server-owned cost guard settings</h2>
-          <p className="muted">Provider pricing and caps are stored per tenant and used by the estimate API.</p>
+          <h2>서버 소유 비용 가드 설정</h2>
+          <p className="muted">프로바이더 가격과 한도는 테넌트별로 저장되며 비용 추정 API에서 사용됩니다.</p>
         </div>
-        <span className={`tag ${configured ? "good" : "warn"}`}>{configured ? "configured" : "needs setup"}</span>
+        <span className={`tag ${configured ? "good" : "warn"}`}>{configured ? "설정됨" : "설정 필요"}</span>
       </div>
 
       <div className="settings-layout">
         <form className="settings-form" onSubmit={handleSave}>
           <div className="settings-toolbar">
             <label className="field">
-              <span>Provider key</span>
+              <span>프로바이더 키</span>
               <input
                 autoComplete="off"
                 onChange={(event) => setForm((current) => ({ ...current, providerName: event.target.value }))}
@@ -215,13 +215,13 @@ export function SettingsPanel() {
             </label>
             <button className="reject-button settings-refresh" onClick={() => void handleLoad()} type="button">
               <RefreshCw aria-hidden="true" size={16} />
-              Load
+              불러오기
             </button>
           </div>
 
           <div className="settings-grid">
             <label className="field">
-              <span>Plan name</span>
+              <span>요금제 이름</span>
               <input
                 autoComplete="off"
                 onChange={(event) => setForm((current) => ({ ...current, planName: event.target.value }))}
@@ -230,7 +230,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Credit unit cost (KRW)</span>
+              <span>크레딧 단가 (KRW)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, creditUnitCostKrw: event.target.value }))}
@@ -238,7 +238,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Monthly plan price (KRW)</span>
+              <span>월 요금제 가격 (KRW)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, monthlyPlanPriceKrw: event.target.value }))}
@@ -246,7 +246,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Monthly credits</span>
+              <span>월 크레딧</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, monthlyCredits: event.target.value }))}
@@ -254,7 +254,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Image generation credits</span>
+              <span>이미지 생성 크레딧</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, imageGenerationCreditCost: event.target.value }))}
@@ -262,7 +262,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Video generation credits</span>
+              <span>비디오 생성 크레딧</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, videoGenerationCreditCost: event.target.value }))}
@@ -270,7 +270,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Analysis credits</span>
+              <span>분석 크레딧</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, analysisCreditCost: event.target.value }))}
@@ -278,7 +278,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Daily cap (KRW)</span>
+              <span>일일 한도 (KRW)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, dailyCostCapKrw: event.target.value }))}
@@ -286,7 +286,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Hard daily cap (KRW)</span>
+              <span>일일 하드 한도 (KRW)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, hardDailyCapKrw: event.target.value }))}
@@ -294,7 +294,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Monthly cap (KRW)</span>
+              <span>월 한도 (KRW)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, monthlyCostCapKrw: event.target.value }))}
@@ -302,7 +302,7 @@ export function SettingsPanel() {
               />
             </label>
             <label className="field">
-              <span>Reference ad budget (KRW/day)</span>
+              <span>참고 광고 예산 (KRW/일)</span>
               <input
                 inputMode="decimal"
                 onChange={(event) => setForm((current) => ({ ...current, referenceDailyAdBudgetKrw: event.target.value }))}
@@ -318,15 +318,15 @@ export function SettingsPanel() {
           <div className="settings-actions">
             <button className="approve-button" disabled={status === "saving" || status === "loading" || !canSave} type="submit">
               <Save aria-hidden="true" size={16} />
-              Save settings
+              설정 저장
             </button>
           </div>
         </form>
 
         <div className="settings-summary">
           <div className="settings-summary-head">
-            <strong>Server state</strong>
-            <small>{updatedAt ? `Updated ${formatDate(updatedAt)}` : "No saved row yet"}</small>
+            <strong>서버 상태</strong>
+            <small>{updatedAt ? `업데이트 ${formatDate(updatedAt)}` : "아직 저장된 행 없음"}</small>
           </div>
           <div className="checks settings-checks">
             {formSummary.map((item) => (
@@ -337,12 +337,12 @@ export function SettingsPanel() {
             ))}
           </div>
           <div className="settings-note">
-            <span>Tenant</span>
+            <span>테넌트</span>
             <strong>{tenantId || memberships[0]?.tenantId || "mock-default"}</strong>
-            <span>Role</span>
+            <span>역할</span>
             <strong>{activeRole ?? "mock-owner"}</strong>
-            <span>Estimate API</span>
-            <strong>{configured ? "Can resolve provider row" : "Fails closed until saved"}</strong>
+            <span>추정 API</span>
+            <strong>{configured ? "프로바이더 행 확인 가능" : "저장 전까지 차단"}</strong>
           </div>
         </div>
       </div>
@@ -483,24 +483,24 @@ async function loadMembershipContext(storedTenantId: string): Promise<{
 
 function getSettingsStatusMessage(status: SettingsStatus, error: string | null, activeRole: string | null): string {
   if (status === "loading") {
-    return "Loading server cost settings.";
+    return "서버 비용 설정을 불러오는 중입니다.";
   }
   if (status === "saving") {
-    return "Saving tenant cost settings.";
+    return "테넌트 비용 설정을 저장하는 중입니다.";
   }
   if (status === "saved") {
-    return "Tenant cost settings saved.";
+    return "테넌트 비용 설정을 저장했습니다.";
   }
   if (status === "ready") {
-    return "Server cost settings loaded.";
+    return "서버 비용 설정을 불러왔습니다.";
   }
   if (status === "blocked") {
     return error ?? "SETTINGS_BLOCKED";
   }
   if (activeRole) {
-    return `Current tenant role: ${activeRole}.`;
+    return `현재 테넌트 역할: ${activeRole}.`;
   }
-  return "Ready to load provider settings.";
+  return "프로바이더 설정을 불러올 수 있습니다.";
 }
 
 function readOptionalString(value: string): string | undefined {
