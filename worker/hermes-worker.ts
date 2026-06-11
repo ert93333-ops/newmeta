@@ -99,10 +99,14 @@ export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = 
 
 export function processClaimedCreativeJob(
   job: ClaimedCreativeJob,
-  currentWorkerName = workerName
+  currentWorkerName = workerName,
+  env: Record<string, string | undefined> = process.env
 ): Record<string, unknown> {
   if (job.job_type === "worker_test_fail") {
     throw new Error("WORKER_TEST_FAILURE");
+  }
+  if (isPaidGenerationJob(job.job_type) && isProductionRuntime(env)) {
+    throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
   }
 
   return {
@@ -111,6 +115,14 @@ export function processClaimedCreativeJob(
     input: job.input_json ?? {},
     mockSafe: true
   };
+}
+
+function isPaidGenerationJob(jobType: string): boolean {
+  return jobType === "image_generation" || jobType === "video_generation";
+}
+
+function isProductionRuntime(env: Record<string, string | undefined>): boolean {
+  return env.NODE_ENV === "production" || env.VERCEL_ENV === "production";
 }
 
 async function recordPaidGenerationCostUsage(

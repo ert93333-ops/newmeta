@@ -44,6 +44,24 @@ describe("Hermes worker lifecycle", () => {
     });
   });
 
+  it("fails closed for paid generation jobs in production until a real generation worker is configured", () => {
+    expect(() =>
+      processClaimedCreativeJob(
+        {
+          id: "00000000-0000-0000-0000-000000000112",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          job_type: "image_generation",
+          input_json: {
+            operation: "ai_paid_generation",
+            operationType: "image_generation"
+          }
+        },
+        "test-worker",
+        { NODE_ENV: "production" }
+      )
+    ).toThrow("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  });
+
   it("completes a claimed job through the private DB function", async () => {
     const { client, queries } = fakeClientFor(
       {

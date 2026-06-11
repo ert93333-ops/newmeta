@@ -40,7 +40,7 @@ The worker lifecycle is DB-owned:
 
 The default `max_attempts = 2` gives one retry after the first failed execution. These functions are private and executable by `service_role`; they are not exposed as public API routes.
 
-For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost.
+For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation worker execution fails closed with `PAID_GENERATION_WORKER_NOT_CONFIGURED` until a real generation provider is wired behind the worker; local deterministic mock results must not be reported as paid production output.
 
 ## Auth Mode
 
