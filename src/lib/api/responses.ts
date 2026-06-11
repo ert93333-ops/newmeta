@@ -223,6 +223,12 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "PAID_GENERATION_WORKER_NOT_CONFIGURED") {
       return fail(error.message, "Paid generation worker execution is not configured.", 501);
     }
+    if (error.message === "PAID_GENERATION_PROVIDER_URL_INVALID") {
+      return fail(error.message, "Paid generation provider URL is invalid.", 501);
+    }
+    if (error.message === "PAID_GENERATION_PROVIDER_URL_INSECURE") {
+      return fail(error.message, "Paid generation provider URL must use https in production.", 501);
+    }
     if (error.message === "PAID_VARIANT_DESIGN_NOT_CONFIGURED") {
       return fail(error.message, "Paid variant design execution is not configured.", 501);
     }

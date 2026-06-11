@@ -25,8 +25,8 @@ function fakeClientFor(job: Record<string, unknown> | undefined, terminalStatus:
 }
 
 describe("Hermes worker lifecycle", () => {
-  it("returns a mock-safe deterministic result for claimed jobs", () => {
-    expect(
+  it("returns a mock-safe deterministic result for claimed jobs", async () => {
+    await expect(
       processClaimedCreativeJob(
         {
           id: "00000000-0000-0000-0000-000000000111",
@@ -36,7 +36,7 @@ describe("Hermes worker lifecycle", () => {
         },
         "test-worker"
       )
-    ).toEqual({
+    ).resolves.toEqual({
       worker: "test-worker",
       jobType: "render",
       input: { assetId: "asset-1" },
@@ -44,8 +44,8 @@ describe("Hermes worker lifecycle", () => {
     });
   });
 
-  it("fails closed for paid generation jobs in production until a real generation worker is configured", () => {
-    expect(() =>
+  it("fails closed for paid generation jobs in production until a real generation worker is configured", async () => {
+    await expect(
       processClaimedCreativeJob(
         {
           id: "00000000-0000-0000-0000-000000000112",
@@ -59,7 +59,63 @@ describe("Hermes worker lifecycle", () => {
         "test-worker",
         { NODE_ENV: "production" }
       )
-    ).toThrow("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+    ).rejects.toThrow("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+  });
+
+  it("calls the configured paid generation provider in production without leaking provider secrets", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          assetUrl: "https://cdn.example.com/generated.png",
+          actualCredits: 5,
+          actualCostKrw: 500,
+          access_token: "must-not-persist",
+          nested: {
+            apiKey: "must-not-persist"
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+
+    await expect(
+      processClaimedCreativeJob(
+        {
+          id: "00000000-0000-0000-0000-000000000113",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          job_type: "image_generation",
+          input_json: {
+            operation: "ai_paid_generation",
+            operationType: "image_generation"
+          }
+        },
+        "test-worker",
+        {
+          NODE_ENV: "production",
+          HERMES_PAID_GENERATION_PROVIDER: "generic_http",
+          HERMES_PAID_GENERATION_API_URL: "https://provider.example.com/hermes/jobs",
+          HERMES_PAID_GENERATION_API_KEY: "provider-secret"
+        },
+        fetchImpl
+      )
+    ).resolves.toMatchObject({
+      worker: "test-worker",
+      jobType: "image_generation",
+      provider: "generic_http",
+      mockSafe: false,
+      actualCredits: 5,
+      actualCostKrw: 500,
+      providerResult: {
+        assetUrl: "https://cdn.example.com/generated.png",
+        nested: {}
+      }
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init?.headers).toMatchObject({
+      authorization: "Bearer provider-secret"
+    });
   });
 
   it("completes a claimed job through the private DB function", async () => {

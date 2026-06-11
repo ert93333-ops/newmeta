@@ -18,6 +18,9 @@ function validReleaseEnv(): Record<string, string> {
     HERMES_META_OAUTH_MODE: "live",
     HERMES_APPROVAL_EXECUTION_MODE: "live",
     HERMES_RENDER_PIPELINE_MODE: "live",
+    HERMES_PAID_GENERATION_PROVIDER: "generic_http",
+    HERMES_PAID_GENERATION_API_URL: "https://provider.newmeta.test/hermes/jobs",
+    HERMES_PAID_GENERATION_API_KEY: "paid-provider-secret",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
     SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
@@ -50,6 +53,17 @@ describe("release env gate", () => {
     expect(missing.issues.map((issue) => issue.code)).toContain("RENDER_PIPELINE_NOT_LIVE");
     expect(mock.issues.map((issue) => issue.code)).toContain("PLACEHOLDER_ENV");
     expect(mock.issues.map((issue) => issue.code)).toContain("RENDER_PIPELINE_NOT_LIVE");
+  });
+
+  it("requires a configured paid generation provider for release", () => {
+    const missing = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_PROVIDER: undefined });
+    const disabled = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_PROVIDER: "disabled" });
+    const insecure = checkReleaseEnv({ ...validReleaseEnv(), HERMES_PAID_GENERATION_API_URL: "http://provider.local/jobs" });
+
+    expect(missing.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+    expect(missing.issues.map((issue) => issue.code)).toContain("PAID_GENERATION_PROVIDER_NOT_CONFIGURED");
+    expect(disabled.issues.map((issue) => issue.code)).toContain("PAID_GENERATION_PROVIDER_NOT_CONFIGURED");
+    expect(insecure.issues.map((issue) => issue.code)).toContain("INSECURE_URL");
   });
 
   it("requires live approval execution mode for release", () => {

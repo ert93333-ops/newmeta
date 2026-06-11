@@ -40,7 +40,7 @@ The worker lifecycle is DB-owned:
 
 The default `max_attempts = 2` gives one retry after the first failed execution. These functions are private and executable by `service_role`; they are not exposed as public API routes.
 
-For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation API queueing and worker execution fail closed with `PAID_GENERATION_WORKER_NOT_CONFIGURED` until a real generation provider is wired behind the worker; local deterministic mock results must not be reported as paid production output.
+For paid image/video generation jobs, the render API stores server-derived cost metadata in `creative_jobs.input_json`. The worker writes the terminal `cost_usage_logs` row in the same DB transaction as job completion/final failure, using `related_job_id = approval.id`. A retryable failure leaves the existing running reservation intact; a final failure closes it with zero actual cost. In production, paid generation API queueing and worker execution require `HERMES_PAID_GENERATION_PROVIDER=generic_http`, `HERMES_PAID_GENERATION_API_URL`, and server-only `HERMES_PAID_GENERATION_API_KEY`; otherwise they fail closed with `PAID_GENERATION_WORKER_NOT_CONFIGURED`. The worker sends `jobId`, `tenantId`, `jobType`, and `input` to the provider with the API key in the `Authorization` header only, then strips token/secret/key fields from provider responses before persistence.
 
 ## Auth Mode
 
@@ -54,7 +54,7 @@ For deployment env validation, start from `.env.production.example` and run:
 npm run env:release-gates
 ```
 
-The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, localhost app/callback URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
+The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render/paid-generation env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, `HERMES_PAID_GENERATION_PROVIDER` values other than `generic_http`, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names.
 
 Generate the local secret values that Hermes is allowed to create itself with:
 
@@ -68,7 +68,7 @@ Before enabling paid estimate/approval flows, persist tenant cost settings throu
 
 In production, `POST /api/render/jobs` is fail-closed for the deterministic no-paid-operation render checker path unless `HERMES_RENDER_PIPELINE_MODE=live`. Paid `image_generation` and `video_generation` requests still use the approval-bound worker queue. This prevents release builds from reporting render readiness before the deployment explicitly enables the render pipeline mode.
 
-Use `GET /api/ops/health` for deployment monitoring. The endpoint returns `503` until release env, Supabase, live Meta OAuth, live approval execution mode, token key rotation id, worker secret, and production render pipeline readiness are all configured. It reports only issue codes and configured/missing states, not raw secret values.
+Use `GET /api/ops/health` for deployment monitoring. The endpoint returns `503` until release env, Supabase, live Meta OAuth, live approval execution mode, token key rotation id, worker secret, paid generation provider, and production render pipeline readiness are all configured. It reports only issue codes and configured/missing states, not raw secret values.
 
 Meta OAuth connect and callback routes use an in-process request rate limiter keyed by client IP and user agent. This limits abuse at the app boundary; keep platform/CDN rate limits enabled in production as the outer layer.
 

@@ -147,7 +147,7 @@ describe("render jobs route", () => {
     setEnv("NODE_ENV", "production");
 
     expect(isRenderPipelineConfigured(undefined)).toBe(false);
-    expect(isRenderPipelineConfigured("image_generation")).toBe(true);
+    expect(isRenderPipelineConfigured("image_generation")).toBe(false);
 
     const response = await renderJobsRoute(renderRequest(baseManifest as unknown as Record<string, unknown>));
     const body = await response.json();

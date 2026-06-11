@@ -19,6 +19,9 @@ function validReleaseEnv(): Record<string, string> {
     HERMES_META_OAUTH_MODE: "live",
     HERMES_APPROVAL_EXECUTION_MODE: "live",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
+    HERMES_PAID_GENERATION_PROVIDER: "generic_http",
+    HERMES_PAID_GENERATION_API_URL: "https://provider.newmeta.test/hermes/jobs",
+    HERMES_PAID_GENERATION_API_KEY: "paid-provider-secret",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
     SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
     SUPABASE_AUTH_SMOKE_TENANT_ID: "00000000-0000-0000-0000-000000000001",
@@ -40,6 +43,9 @@ const ENV_KEYS = [
   "HERMES_META_OAUTH_MODE",
   "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_WORKER_SECRET",
+  "HERMES_PAID_GENERATION_PROVIDER",
+  "HERMES_PAID_GENERATION_API_URL",
+  "HERMES_PAID_GENERATION_API_KEY",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
   "SUPABASE_AUTH_SMOKE_TENANT_ID",
@@ -82,6 +88,7 @@ describe("ops health", () => {
       approvalExecution: "live",
       tokenKeyRotation: "configured",
       renderPipeline: "configured",
+      paidGenerationProvider: "configured",
       workerSecret: "configured"
     });
     expect(JSON.stringify(result)).not.toMatch(/meta-secret-value|smoke-password|sb_secret_test_value/);
@@ -115,6 +122,16 @@ describe("ops health", () => {
 
     expect(result.status).toBe("blocked");
     expect(result.checks.tokenKeyRotation).toBe("missing");
+  });
+
+  it("blocks health when paid generation provider env is missing", () => {
+    const env = validReleaseEnv();
+    delete env.HERMES_PAID_GENERATION_API_KEY;
+
+    const result = buildOpsHealth(env);
+
+    expect(result.status).toBe("blocked");
+    expect(result.checks.paidGenerationProvider).toBe("missing");
   });
 
   it("returns 503 while required release env is missing", async () => {

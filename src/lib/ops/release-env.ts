@@ -24,6 +24,9 @@ const REQUIRED_RELEASE_ENV = [
   "HERMES_META_OAUTH_MODE",
   "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_RENDER_PIPELINE_MODE",
+  "HERMES_PAID_GENERATION_PROVIDER",
+  "HERMES_PAID_GENERATION_API_URL",
+  "HERMES_PAID_GENERATION_API_KEY",
   "HERMES_WORKER_SECRET",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
@@ -138,6 +141,9 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   if (value(env, "HERMES_RENDER_PIPELINE_MODE") !== "live") {
     addIssue(issues, "RENDER_PIPELINE_NOT_LIVE", "HERMES_RENDER_PIPELINE_MODE=live is required for release.");
   }
+  if (value(env, "HERMES_PAID_GENERATION_PROVIDER") !== "generic_http") {
+    addIssue(issues, "PAID_GENERATION_PROVIDER_NOT_CONFIGURED", "HERMES_PAID_GENERATION_PROVIDER=generic_http is required for release.");
+  }
 
   for (const key of Object.keys(env)) {
     if (key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET_NAME_PATTERN.test(key)) {
@@ -149,6 +155,7 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   requireUrl(issues, env, "HERMES_APP_URL", { allowLocalhost: false });
   requireUrl(issues, env, "NEXT_PUBLIC_APP_URL", { allowLocalhost: false });
   requireUrl(issues, env, "META_REDIRECT_URI", { allowLocalhost: false });
+  requireUrl(issues, env, "HERMES_PAID_GENERATION_API_URL", { allowLocalhost: false });
   requirePostgresUrl(issues, env, "SUPABASE_DB_URL");
   requireBase64Key(issues, env, "TOKEN_ENCRYPTION_KEY");
 

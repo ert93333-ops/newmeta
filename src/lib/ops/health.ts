@@ -17,6 +17,7 @@ export interface OpsHealthResult {
     approvalExecution: "live" | "not_live";
     tokenKeyRotation: "configured" | "missing";
     renderPipeline: "configured" | "not_configured";
+    paidGenerationProvider: "configured" | "missing";
     workerSecret: "configured" | "missing";
   };
 }
@@ -35,6 +36,12 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     approvalExecution: env.HERMES_APPROVAL_EXECUTION_MODE === "live" ? "live" : "not_live",
     tokenKeyRotation: hasValue(env.TOKEN_ENCRYPTION_KEY_ID) && env.TOKEN_ENCRYPTION_KEY_ID !== "primary" ? "configured" : "missing",
     renderPipeline: env.HERMES_RENDER_PIPELINE_MODE === "live" ? "configured" : "not_configured",
+    paidGenerationProvider:
+      env.HERMES_PAID_GENERATION_PROVIDER === "generic_http" &&
+      hasValue(env.HERMES_PAID_GENERATION_API_URL) &&
+      hasValue(env.HERMES_PAID_GENERATION_API_KEY)
+        ? "configured"
+        : "missing",
     workerSecret: hasValue(env.HERMES_WORKER_SECRET) ? "configured" : "missing"
   } as const;
   const operationallyReady =
@@ -43,6 +50,7 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     checks.metaOAuth === "live" &&
     checks.approvalExecution === "live" &&
     checks.tokenKeyRotation === "configured" &&
+    checks.paidGenerationProvider === "configured" &&
     checks.workerSecret === "configured" &&
     (!production || checks.renderPipeline === "configured");
 

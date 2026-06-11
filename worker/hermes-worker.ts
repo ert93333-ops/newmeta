@@ -1,4 +1,8 @@
 import { Client } from "pg";
+import {
+  executePaidGenerationJob,
+  isPaidGenerationProviderConfigured
+} from "@/lib/generation/paid-generation-provider";
 
 export interface ClaimedCreativeJob {
   id: string;
@@ -45,7 +49,7 @@ export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = 
   console.log(`Claimed creative job ${job.id}.`);
 
   try {
-    const result = processClaimedCreativeJob(job, currentWorkerName);
+    const result = await processClaimedCreativeJob(job, currentWorkerName);
     await client.query("begin");
     try {
       const completed = await client.query("select * from private.complete_creative_job($1, $2, $3::jsonb)", [
@@ -97,16 +101,20 @@ export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = 
   }
 }
 
-export function processClaimedCreativeJob(
+export async function processClaimedCreativeJob(
   job: ClaimedCreativeJob,
   currentWorkerName = workerName,
-  env: Record<string, string | undefined> = process.env
-): Record<string, unknown> {
+  env: Record<string, string | undefined> = process.env,
+  fetchImpl: typeof fetch = fetch
+): Promise<Record<string, unknown>> {
   if (job.job_type === "worker_test_fail") {
     throw new Error("WORKER_TEST_FAILURE");
   }
   if (isPaidGenerationJob(job.job_type) && isProductionRuntime(env)) {
-    throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+    if (!isPaidGenerationProviderConfigured(env)) {
+      throw new Error("PAID_GENERATION_WORKER_NOT_CONFIGURED");
+    }
+    return executePaidGenerationJob(job, currentWorkerName, env, fetchImpl);
   }
 
   return {
