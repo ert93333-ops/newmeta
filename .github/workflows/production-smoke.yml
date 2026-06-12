@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  smoke:
+  auth-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
@@ -22,12 +22,9 @@ jobs:
       SUPABASE_AUTH_SMOKE_PASSWORD: ${{ secrets.SUPABASE_AUTH_SMOKE_PASSWORD }}
       SUPABASE_AUTH_SMOKE_TENANT_ID: ${{ secrets.SUPABASE_AUTH_SMOKE_TENANT_ID }}
       SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID: ${{ secrets.SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID }}
-      SUPABASE_META_SMOKE_EMAIL: ${{ secrets.SUPABASE_META_SMOKE_EMAIL }}
-      SUPABASE_META_SMOKE_PASSWORD: ${{ secrets.SUPABASE_META_SMOKE_PASSWORD }}
-      SUPABASE_META_SMOKE_TENANT_ID: ${{ secrets.SUPABASE_META_SMOKE_TENANT_ID }}
     steps:
-      - name: Check required smoke secrets
-        id: smoke_secrets
+      - name: Check required auth smoke secrets
+        id: auth_secrets
         shell: bash
         run: |
           app_url_ready=1
@@ -52,6 +49,44 @@ jobs:
             echo "auth_ready=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/checkout@v5
+        if: steps.auth_secrets.outputs.auth_ready == 'true'
+
+      - uses: actions/setup-node@v5
+        if: steps.auth_secrets.outputs.auth_ready == 'true'
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci --include=dev
+        if: steps.auth_secrets.outputs.auth_ready == 'true'
+
+      - name: Run Supabase Auth smoke
+        if: steps.auth_secrets.outputs.auth_ready == 'true'
+        run: npm run auth:smoke
+
+  meta-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HERMES_APP_URL: ${{ vars.HERMES_APP_URL || secrets.HERMES_APP_URL }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_META_SMOKE_EMAIL: ${{ secrets.SUPABASE_META_SMOKE_EMAIL }}
+      SUPABASE_META_SMOKE_PASSWORD: ${{ secrets.SUPABASE_META_SMOKE_PASSWORD }}
+      SUPABASE_META_SMOKE_TENANT_ID: ${{ secrets.SUPABASE_META_SMOKE_TENANT_ID }}
+    steps:
+      - name: Check required live Meta smoke secrets
+        id: meta_secrets
+        shell: bash
+        run: |
+          app_url_ready=1
+          if [ -z "${HERMES_APP_URL}" ] && [ -z "${NEXT_PUBLIC_APP_URL}" ]; then
+            echo "::warning::HERMES_APP_URL or NEXT_PUBLIC_APP_URL is not configured."
+            app_url_ready=0
+          fi
+
           missing_meta=0
           if [ "$app_url_ready" -eq 0 ]; then
             missing_meta=1
@@ -69,21 +104,17 @@ jobs:
           fi
 
       - uses: actions/checkout@v5
-        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
+        if: steps.meta_secrets.outputs.meta_ready == 'true'
 
       - uses: actions/setup-node@v5
-        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
+        if: steps.meta_secrets.outputs.meta_ready == 'true'
         with:
           node-version: "24"
           cache: "npm"
 
       - run: npm ci --include=dev
-        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
-
-      - name: Run Supabase Auth smoke
-        if: steps.smoke_secrets.outputs.auth_ready == 'true'
-        run: npm run auth:smoke
+        if: steps.meta_secrets.outputs.meta_ready == 'true'
 
       - name: Run live Meta read-only smoke
-        if: steps.smoke_secrets.outputs.meta_ready == 'true'
+        if: steps.meta_secrets.outputs.meta_ready == 'true'
         run: npm run meta:smoke
