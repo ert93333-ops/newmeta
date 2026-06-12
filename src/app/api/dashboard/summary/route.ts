@@ -1,5 +1,6 @@
 import { handleError, fail, ok } from "@/lib/api/responses";
 import { resolveUserContext } from "@/lib/api/context";
+import { loadAutopilotRecommendations } from "@/lib/operations/autopilot-recommendations";
 import { createSupabaseClient, getBearerAuthorization } from "@/lib/supabase/server";
 
 interface InsightRow {
@@ -47,7 +48,10 @@ export async function GET(request: Request) {
       withDashboardFallback("adsets_cache", warnings, () => countRows(supabase, "adsets_cache", context.tenantId), 0),
       withDashboardFallback("ads_cache", warnings, () => loadAds(supabase, context.tenantId), []),
       withDashboardFallback("insights_snapshots", warnings, () => loadInsights(supabase, context.tenantId), []),
-      withDashboardFallback("autopilot_recommendations", warnings, () => loadRecommendations(request), [])
+      withDashboardFallback("autopilot_recommendations", warnings, async () => {
+        const result = await loadAutopilotRecommendations(supabase, context.tenantId);
+        return result.recommendations;
+      }, [])
     ]);
 
     const adMap = new Map(ads.map((ad) => [ad.id, ad]));
@@ -181,22 +185,6 @@ async function loadInsights(supabase: NonNullable<ReturnType<typeof createSupaba
     throw new Error(`SUPABASE_DASHBOARD_INSIGHTS_FAILED:${error.message}`);
   }
   return (data ?? []) as InsightRow[];
-}
-
-async function loadRecommendations(request: Request): Promise<unknown[]> {
-  const url = new URL(request.url);
-  const response = await fetch(new URL("/api/operations/autopilot/recommendations", url.origin), {
-    headers: {
-      authorization: request.headers.get("authorization") ?? "",
-      "x-tenant-id": request.headers.get("x-tenant-id") ?? ""
-    },
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    return [];
-  }
-  const body = (await response.json()) as { recommendations?: unknown[] };
-  return body.recommendations ?? [];
 }
 
 function hasCreativeMetadata(rawJson: unknown): boolean {
