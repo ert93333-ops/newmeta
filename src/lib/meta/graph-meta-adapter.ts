@@ -14,7 +14,7 @@ import type {
 } from "@/lib/meta/meta-adapter";
 import { assertLiveMetaAdSetInput } from "@/lib/meta/live-draft-validation";
 import { MockMetaAdapter } from "@/lib/meta/mock-meta-adapter";
-import type { MetaAdAccount, MetaInsight } from "@/lib/types";
+import type { MetaAd, MetaAdAccount, MetaAdSet, MetaCampaign, MetaInsight } from "@/lib/types";
 
 const graphExecutor = {
   userId: "00000000-0000-0000-0000-000000000000",
@@ -69,6 +69,30 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
       throw await parseMetaGraphError(response);
     }
     return (await response.json()) as T;
+  }
+
+  protected async graphGetPaged(path: string, params: Record<string, string | number | undefined> = {}): Promise<Array<Record<string, unknown>>> {
+    const rows: Array<Record<string, unknown>> = [];
+    let after: string | undefined;
+
+    for (let page = 0; page < 25; page += 1) {
+      const body = await this.graphGet<{
+        data?: Array<Record<string, unknown>>;
+        paging?: { cursors?: { after?: string } };
+      }>(path, {
+        limit: 100,
+        ...params,
+        after
+      });
+      rows.push(...(body.data ?? []));
+      const next = readString(body.paging?.cursors?.after);
+      if (!next || next === after) {
+        break;
+      }
+      after = next;
+    }
+
+    return rows;
   }
 
   protected async graphPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -131,13 +155,11 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
   }
 
   override async listAdAccounts(): Promise<MetaAdAccount[]> {
-    const body = await this.graphGet<{
-      data?: Array<Record<string, unknown>>;
-    }>("me/adaccounts", {
+    const rows = await this.graphGetPaged("me/adaccounts", {
       fields: "id,name,currency,timezone_name"
     });
 
-    return (body.data ?? [])
+    return rows
       .map((row) => ({
         id: readString(row.id),
         name: readString(row.name) ?? "Unnamed Meta account",
@@ -147,23 +169,77 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
       .filter((account): account is MetaAdAccount => Boolean(account.id));
   }
 
+  override async listCampaigns(adAccountId: string): Promise<MetaCampaign[]> {
+    const rows = await this.graphGetPaged(`${adAccountId}/campaigns`, {
+      fields: "id,name,objective,status"
+    });
+
+    return rows
+      .map((row) => ({
+        id: readString(row.id),
+        name: readString(row.name) ?? "Unnamed campaign",
+        objective: readString(row.objective) ?? "UNKNOWN",
+        status: readMetaStatus(row.status)
+      }))
+      .filter((campaign): campaign is MetaCampaign => Boolean(campaign.id));
+  }
+
+  override async listAdSets(adAccountId: string, campaignId?: string): Promise<MetaAdSet[]> {
+    const rows = await this.graphGetPaged(campaignId ? `${campaignId}/adsets` : `${adAccountId}/adsets`, {
+      fields: "id,campaign_id,name,optimization_goal,status,targeting"
+    });
+
+    return rows.flatMap((row) => {
+      const id = readString(row.id);
+      const resolvedCampaignId = readString(row.campaign_id) ?? campaignId;
+      if (!id || !resolvedCampaignId) {
+        return [];
+      }
+      const adset: MetaAdSet = {
+        id,
+        campaignId: resolvedCampaignId,
+        name: readString(row.name) ?? "Unnamed ad set",
+        optimizationGoal: readString(row.optimization_goal) ?? "UNKNOWN",
+        status: readMetaStatus(row.status),
+        targeting: isRecord(row.targeting) ? row.targeting : undefined
+      };
+      return [adset];
+    });
+  }
+
+  override async listAds(adAccountId: string, adsetId?: string): Promise<MetaAd[]> {
+    const rows = await this.graphGetPaged(adsetId ? `${adsetId}/ads` : `${adAccountId}/ads`, {
+      fields: "id,adset_id,name,status,creative{id}"
+    });
+
+    return rows
+      .map((row) => ({
+        id: readString(row.id),
+        adsetId: readString(row.adset_id) ?? adsetId ?? "",
+        creativeId: readCreativeId(row.creative),
+        name: readString(row.name) ?? "Unnamed ad",
+        status: readMetaStatus(row.status)
+      }))
+      .filter((ad): ad is MetaAd => Boolean(ad.id && ad.adsetId));
+  }
+
   override async getInsights(input: {
     adAccountId: string;
     level?: "account" | "campaign" | "adset" | "ad";
     datePreset?: "today" | "yesterday" | "last_7d" | "last_30d" | "maximum";
     breakdowns?: string[];
   }): Promise<MetaInsight[]> {
-    const body = await this.graphGet<{
-      data?: Array<Record<string, unknown>>;
-    }>(`${input.adAccountId}/insights`, {
+    const rows = await this.graphGetPaged(`${input.adAccountId}/insights`, {
       fields:
-        "ad_id,campaign_id,adset_id,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,outbound_clicks,actions,purchase_roas",
+        "date_start,date_stop,ad_id,campaign_id,adset_id,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,outbound_clicks,actions,purchase_roas",
       level: input.level ?? "ad",
       date_preset: input.datePreset ?? "last_30d",
       breakdowns: input.breakdowns?.join(",")
     });
 
-    return (body.data ?? []).map((row) => ({
+    return rows.map((row) => ({
+      dateStart: readString(row.date_start),
+      dateStop: readString(row.date_stop),
       adId: readString(row.ad_id),
       campaignId: readString(row.campaign_id),
       adsetId: readString(row.adset_id),
@@ -183,6 +259,13 @@ export class MetaGraphApiAdapter extends MockMetaAdapter implements MetaAdapter 
       purchaseRoas: readRoas(row.purchase_roas),
       breakdowns: readBreakdowns(row, input.breakdowns)
     }));
+  }
+
+  override async getCreative(creativeId: string): Promise<unknown> {
+    return this.graphGet<Record<string, unknown>>(creativeId, {
+      fields:
+        "id,name,object_type,object_story_spec,asset_feed_spec,thumbnail_url,image_url,image_hash,video_id,effective_object_story_id"
+    });
   }
 
   override async getPixelDiagnostics(adAccountId: string): Promise<unknown> {
@@ -589,6 +672,25 @@ function readPixelStatus(row: Record<string, unknown>): "active" | "inactive" | 
     return "inactive";
   }
   return "active";
+}
+
+function readMetaStatus(value: unknown): "ACTIVE" | "PAUSED" | "ARCHIVED" | "DELETED" {
+  const status = readString(value)?.toUpperCase();
+  if (status === "ACTIVE" || status === "PAUSED" || status === "ARCHIVED" || status === "DELETED") {
+    return status;
+  }
+  return "PAUSED";
+}
+
+function readCreativeId(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return readString(value.id);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function readString(value: unknown): string | undefined {

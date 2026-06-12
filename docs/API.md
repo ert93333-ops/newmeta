@@ -29,6 +29,7 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `DELETE /api/integrations/meta/:id`
 - `GET /api/integrations/commerce-db/status`
 - `GET /api/meta/ad-accounts`
+- `POST /api/meta/sync/account`
 - `POST /api/meta/sync/insights`
 - `GET /api/meta/signal-diagnostics`
 
@@ -41,6 +42,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 `DELETE /api/integrations/meta/:id` does not immediately remove tokens or integration data. It first verifies that the referenced `meta_connections` row exists for the current tenant. If not, it fails closed with `META_CONNECTION_NOT_FOUND` instead of writing an approval against an arbitrary id. When the row exists, the route creates a tenant-scoped destructive `meta_disconnect_connection` approval request, writes an audit record, and returns typed-confirmation guard metadata with the stored connection status/mode in `beforeJson`. Execution of that approved disconnect now scrubs the stored encrypted token material, clears scopes/expiry, and marks the row `revoked` before the approval is marked `executed`.
 
 `GET /api/meta/ad-accounts` resolves the Meta adapter on the server. If the tenant has a connected live `meta_connections` record, the route decrypts that token server-side and uses `MetaGraphApiAdapter`; otherwise, only non-production runtime may fall back to `MockMetaAdapter`. Production without a live connection returns `META_CONNECTION_REQUIRED`. Stored live connections are also revalidated for the required Meta scope set at runtime; old or incomplete connections now fail closed with `META_REQUIRED_SCOPES_MISSING`.
+
+`POST /api/meta/sync/account` is the launch backfill path after Meta OAuth is connected. It requires `marketer` or higher, resolves the tenant's stored Meta connection server-side, lists the selected or all visible ad accounts, then persists account, campaign, ad set, ad, creative metadata, and insight snapshots into the tenant-scoped cache tables. The route reads existing Meta data only; it does not mutate budgets, statuses, campaigns, ad sets, ads, or creative assets upstream. Request body supports `adAccountIds`, `datePreset`, `levels`, `breakdowns`, and `includeCreatives`. The default levels are `account`, `campaign`, `adset`, and `ad`.
 
 `POST /api/meta/sync/insights` uses the same adapter resolution. In mock mode it can default to `act_mock_001`; live mode requires an explicit `adAccountId` and returns `META_AD_ACCOUNT_REQUIRED` otherwise. The route records the adapter mode inside the saved job input and writes an audit log for the sync request. Stored live connections missing required scopes now fail closed before sync begins.
 

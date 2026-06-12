@@ -105,6 +105,7 @@ export interface MetaAdSet {
   name: string;
   optimizationGoal: string;
   status: "ACTIVE" | "PAUSED" | "ARCHIVED" | "DELETED";
+  targeting?: Record<string, unknown>;
 }
 
 export interface MetaAd {
@@ -116,6 +117,8 @@ export interface MetaAd {
 }
 
 export interface MetaInsight {
+  dateStart?: string;
+  dateStop?: string;
   adId?: string;
   campaignId?: string;
   adsetId?: string;
