@@ -15,10 +15,10 @@ const ROLE_RANK: Record<string, number> = {
 };
 
 const PROVIDERS = [
-  { value: "openai", label: "OpenAI", hint: "이미지 생성, 카피/분석 보조" },
-  { value: "anthropic", label: "Claude / Anthropic", hint: "긴 문맥 분석, 정책 검토" },
-  { value: "higgsfield", label: "Higgsfield", hint: "영상/소재 생성 provider" },
-  { value: "generic_http", label: "Generic HTTPS", hint: "커스텀 생성 API" }
+  { value: "openai", label: "OpenAI", hint: "이미지 생성, 카피/분석 보조", endpointUrl: "https://api.openai.com/v1" },
+  { value: "anthropic", label: "Claude / Anthropic", hint: "긴 문맥 분석, 정책 검토", endpointUrl: "https://api.anthropic.com/v1" },
+  { value: "higgsfield", label: "Higgsfield", hint: "영상/소재 생성 provider", endpointUrl: "https://api.higgsfield.ai/v1" },
+  { value: "generic_http", label: "Generic HTTPS", hint: "커스텀 생성 API", endpointUrl: "" }
 ] as const;
 
 interface TenantMembership {
@@ -47,6 +47,7 @@ interface CredentialStatus {
   provider?: string;
   configured?: boolean;
   endpointConfigured?: boolean;
+  endpointUrl?: string;
   keyPreview?: string;
   updatedAt?: string;
   error?: {
@@ -120,6 +121,12 @@ export function SettingsPanel() {
 
   const selectedProvider = useMemo(() => PROVIDERS.find((item) => item.value === provider) ?? PROVIDERS[0], [provider]);
 
+  useEffect(() => {
+    if (!endpointUrl && selectedProvider.endpointUrl) {
+      setEndpointUrl(selectedProvider.endpointUrl);
+    }
+  }, [endpointUrl, selectedProvider]);
+
   async function initialize(storedTenantId: string) {
     const context = await loadMembershipContext(storedTenantId);
     setMemberships(context.memberships);
@@ -161,6 +168,12 @@ export function SettingsPanel() {
     });
     const body = (await response.json()) as CredentialStatus;
     setCredentialStatus(response.ok ? body : { provider: nextProvider, configured: false, error: body.error });
+    if (body.endpointUrl) {
+      setEndpointUrl(body.endpointUrl);
+    } else if (!body.endpointConfigured) {
+      const nextDefaultUrl = PROVIDERS.find((item) => item.value === nextProvider)?.endpointUrl ?? "";
+      setEndpointUrl(nextDefaultUrl);
+    }
   }
 
   async function savePolicy(event: FormEvent<HTMLFormElement>) {
@@ -307,6 +320,7 @@ export function SettingsPanel() {
               value={provider}
               onChange={(event) => {
                 setProvider(event.target.value);
+                setEndpointUrl(PROVIDERS.find((item) => item.value === event.target.value)?.endpointUrl ?? "");
                 void loadCredentialStatus(event.target.value);
               }}
             >
@@ -324,7 +338,7 @@ export function SettingsPanel() {
           </label>
           <label className="field">
             <span>Provider URL</span>
-            <input onChange={(event) => setEndpointUrl(event.target.value)} placeholder="https://api.provider.com/v1" value={endpointUrl} />
+            <input onChange={(event) => setEndpointUrl(event.target.value)} placeholder={selectedProvider.endpointUrl || "https://api.provider.com/v1"} value={endpointUrl} />
           </label>
           <div className="credential-state">
             <Lock aria-hidden="true" size={16} />

@@ -12,6 +12,9 @@ describe("Settings panel", () => {
     expect(panelSource).toContain("/api/settings/ai-ops-permissions");
     expect(panelSource).toContain("/api/settings/provider-credentials");
     expect(panelSource).toContain("/api/settings/${encodeURIComponent(cost.providerName)}");
+    expect(panelSource).toContain("https://api.openai.com/v1");
+    expect(panelSource).toContain("https://api.anthropic.com/v1");
+    expect(panelSource).toContain("https://api.higgsfield.ai/v1");
     expect(panelSource).toContain('"x-tenant-id"');
     expect(panelSource).toContain("headers.authorization");
     expect(panelSource).toContain("createSupabaseBrowserClient");

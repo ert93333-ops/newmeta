@@ -104,6 +104,7 @@ textarea {
 }
 
 .dashboard-panel,
+.creative-generation-panel,
 .settings-workspace,
 .onboarding-area {
   scroll-margin-top: 18px;
@@ -357,6 +358,7 @@ textarea {
 }
 
 .settings-workspace,
+.creative-generation-panel,
 .onboarding-area,
 .approval-panel {
   margin-top: 22px;
@@ -669,6 +671,89 @@ textarea {
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
+}
+
+.meta-oauth-link.secondary {
+  background: #eef3f8;
+  color: var(--ink);
+}
+
+.creative-request-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+}
+
+.creative-analysis-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.creative-rationale-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rationale-block {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.rationale-block span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rationale-block p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.creative-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.creative-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.creative-mode.selected {
+  border-color: #93b4d6;
+  background: #e8f1fb;
+  color: var(--accent);
+}
+
+.creative-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .checks {
@@ -1076,6 +1161,8 @@ textarea {
   .dashboard-kpis,
   .dashboard-layout,
   .settings-sections,
+  .creative-mode-grid,
+  .creative-rationale-grid,
   .checks,
   .approval-layout,
   .meta-connect-form,
@@ -1097,6 +1184,7 @@ textarea {
 
   .meta-connect-button,
   .meta-oauth-link,
+  .creative-actions,
   .settings-refresh,
   .approve-button,
   .reject-button {

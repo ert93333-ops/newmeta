@@ -33,6 +33,7 @@ export async function GET(request: Request) {
       label: PROVIDER_LABELS[provider] ?? provider,
       configured: Boolean(setting),
       endpointConfigured: Boolean(readSettings(setting?.settingsJson).endpointUrl),
+      endpointUrl: readSettings(setting?.settingsJson).endpointUrl,
       updatedAt: setting?.updatedAt,
       keyPreview: readSettings(setting?.settingsJson).keyPreview
     });
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
       label: PROVIDER_LABELS[provider] ?? provider,
       configured: true,
       endpointConfigured: Boolean(sanitizeEndpoint(body.endpointUrl)),
+      endpointUrl: sanitizeEndpoint(body.endpointUrl),
       updatedAt: setting.updatedAt,
       keyPreview: previewCredential(credentialValue)
     });

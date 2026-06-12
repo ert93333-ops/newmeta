@@ -1,11 +1,13 @@
 import { ApprovalCenterPanel } from "@/app/approval-center-panel";
 import { AuthSessionPanel } from "@/app/auth-session-panel";
+import { CreativeGenerationPanel } from "@/app/creative-generation-panel";
 import { DashboardPanel } from "@/app/dashboard-panel";
 import { MetaConnectionPanel } from "@/app/meta-connection-panel";
 import { SettingsPanel } from "@/app/settings-panel";
 
 const navItems = [
   { href: "dashboard", label: "대시보드" },
+  { href: "creative-generation", label: "소재 생성" },
   { href: "settings", label: "설정" },
   { href: "onboarding", label: "온보딩" },
   { href: "approval-center", label: "승인 센터" }
@@ -33,6 +35,7 @@ export default function Home() {
       </aside>
       <section className="main">
         <DashboardPanel />
+        <CreativeGenerationPanel />
         <SettingsPanel />
 
         <section className="onboarding-area" id="onboarding">
