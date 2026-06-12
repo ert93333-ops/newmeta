@@ -76,6 +76,12 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 
 `POST /api/variants/design` is treated as a paid variant batch operation in local development. The request must include an `approvalRequestId` for an approved same-tenant `ai_paid_generation` approval whose `objectType` is `variant_batch`. On success, the API marks that approval `executed`, writes an audit log, and records a succeeded cost usage entry linked by `relatedJobId = approval.id`. Production fails closed with `PAID_VARIANT_DESIGN_NOT_CONFIGURED` until a real paid variant provider is wired, so deterministic local output is not recorded as paid production output. Missing or mismatched approval returns `PAID_OPERATION_APPROVAL_REQUIRED`; a reused or unapproved request returns `APPROVAL_REQUIRED`.
 
+## Operations
+
+- `GET /api/operations/autopilot/recommendations`
+
+`GET /api/operations/autopilot/recommendations` is read-only automatic-operations triage. It reads the tenant's cached ad-level `insights_snapshots` and `ads_cache` creative metadata, then returns observation, creative-test, landing-diagnostic, fatigue-refresh, or offer-review recommendations. It explicitly reports `budgetMutationBlocked=true` and `activeMutationBlocked=true`; it does not call Meta write APIs, create approvals, mutate budgets, or activate/pause/delete ads.
+
 ## Draft and Approval
 
 - `POST /api/drafts/preflight`
