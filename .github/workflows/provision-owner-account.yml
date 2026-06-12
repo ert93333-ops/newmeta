@@ -1,0 +1,38 @@
+name: Provision Owner Account
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Set true to create or update the Hermes owner account and tenant role."
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: provision-owner-account
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    if: ${{ inputs.confirm == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      HERMES_OWNER_EMAIL: ${{ secrets.HERMES_OWNER_EMAIL }}
+      HERMES_OWNER_PASSWORD: ${{ secrets.HERMES_OWNER_PASSWORD }}
+      HERMES_OWNER_TENANT_NAME: newmeta Hermes
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci --include=dev
+
+      - name: Provision owner account
+        run: node scripts/provision-owner-account.mjs
