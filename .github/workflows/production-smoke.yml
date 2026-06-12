@@ -1,0 +1,89 @@
+name: Production Smoke
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HERMES_APP_URL: ${{ vars.HERMES_APP_URL || secrets.HERMES_APP_URL }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_AUTH_SMOKE_EMAIL: ${{ secrets.SUPABASE_AUTH_SMOKE_EMAIL }}
+      SUPABASE_AUTH_SMOKE_PASSWORD: ${{ secrets.SUPABASE_AUTH_SMOKE_PASSWORD }}
+      SUPABASE_AUTH_SMOKE_TENANT_ID: ${{ secrets.SUPABASE_AUTH_SMOKE_TENANT_ID }}
+      SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID: ${{ secrets.SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID }}
+      SUPABASE_META_SMOKE_EMAIL: ${{ secrets.SUPABASE_META_SMOKE_EMAIL }}
+      SUPABASE_META_SMOKE_PASSWORD: ${{ secrets.SUPABASE_META_SMOKE_PASSWORD }}
+      SUPABASE_META_SMOKE_TENANT_ID: ${{ secrets.SUPABASE_META_SMOKE_TENANT_ID }}
+    steps:
+      - name: Check required smoke secrets
+        id: smoke_secrets
+        shell: bash
+        run: |
+          app_url_ready=1
+          if [ -z "${HERMES_APP_URL}" ] && [ -z "${NEXT_PUBLIC_APP_URL}" ]; then
+            echo "::warning::HERMES_APP_URL or NEXT_PUBLIC_APP_URL is not configured."
+            app_url_ready=0
+          fi
+
+          missing_auth=0
+          if [ "$app_url_ready" -eq 0 ]; then
+            missing_auth=1
+          fi
+          for key in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY SUPABASE_AUTH_SMOKE_EMAIL SUPABASE_AUTH_SMOKE_PASSWORD SUPABASE_AUTH_SMOKE_TENANT_ID; do
+            if [ -z "${!key}" ]; then
+              echo "::warning::$key is not configured; skipping auth smoke."
+              missing_auth=1
+            fi
+          done
+          if [ "$missing_auth" -eq 1 ]; then
+            echo "auth_ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "auth_ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          missing_meta=0
+          if [ "$app_url_ready" -eq 0 ]; then
+            missing_meta=1
+          fi
+          for key in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY SUPABASE_META_SMOKE_EMAIL SUPABASE_META_SMOKE_PASSWORD SUPABASE_META_SMOKE_TENANT_ID; do
+            if [ -z "${!key}" ]; then
+              echo "::warning::$key is not configured; skipping live Meta smoke."
+              missing_meta=1
+            fi
+          done
+          if [ "$missing_meta" -eq 1 ]; then
+            echo "meta_ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "meta_ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
+
+      - uses: actions/setup-node@v5
+        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci --include=dev
+        if: steps.smoke_secrets.outputs.auth_ready == 'true' || steps.smoke_secrets.outputs.meta_ready == 'true'
+
+      - name: Run Supabase Auth smoke
+        if: steps.smoke_secrets.outputs.auth_ready == 'true'
+        run: npm run auth:smoke
+
+      - name: Run live Meta read-only smoke
+        if: steps.smoke_secrets.outputs.meta_ready == 'true'
+        run: npm run meta:smoke
