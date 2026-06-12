@@ -1,0 +1,89 @@
+create index if not exists user_roles_user_id_fk_idx on public.user_roles (user_id);
+create index if not exists meta_connections_created_by_fk_idx on public.meta_connections (created_by);
+create index if not exists ad_accounts_created_by_fk_idx on public.ad_accounts (created_by);
+create index if not exists ad_accounts_connection_id_fk_idx on public.ad_accounts (connection_id);
+
+create index if not exists campaigns_cache_tenant_id_fk_idx on public.campaigns_cache (tenant_id);
+create index if not exists campaigns_cache_created_by_fk_idx on public.campaigns_cache (created_by);
+create index if not exists campaigns_cache_ad_account_id_fk_idx on public.campaigns_cache (ad_account_id);
+create index if not exists adsets_cache_tenant_id_fk_idx on public.adsets_cache (tenant_id);
+create index if not exists adsets_cache_created_by_fk_idx on public.adsets_cache (created_by);
+create index if not exists adsets_cache_ad_account_id_fk_idx on public.adsets_cache (ad_account_id);
+create index if not exists adsets_cache_campaign_id_fk_idx on public.adsets_cache (campaign_id);
+create index if not exists ads_cache_tenant_id_fk_idx on public.ads_cache (tenant_id);
+create index if not exists ads_cache_created_by_fk_idx on public.ads_cache (created_by);
+create index if not exists ads_cache_ad_account_id_fk_idx on public.ads_cache (ad_account_id);
+create index if not exists ads_cache_adset_id_fk_idx on public.ads_cache (adset_id);
+
+create index if not exists insights_snapshots_created_by_fk_idx on public.insights_snapshots (created_by);
+create index if not exists insights_snapshots_ad_account_id_fk_idx on public.insights_snapshots (ad_account_id);
+create index if not exists insights_snapshots_campaign_id_fk_idx on public.insights_snapshots (campaign_id);
+create index if not exists insights_snapshots_adset_id_fk_idx on public.insights_snapshots (adset_id);
+create index if not exists insights_snapshots_ad_id_fk_idx on public.insights_snapshots (ad_id);
+
+create index if not exists creative_assets_created_by_fk_idx on public.creative_assets (created_by);
+create index if not exists creative_jobs_tenant_id_fk_idx on public.creative_jobs (tenant_id);
+create index if not exists creative_jobs_created_by_fk_idx on public.creative_jobs (created_by);
+create index if not exists creative_jobs_asset_id_fk_idx on public.creative_jobs (asset_id);
+create index if not exists creative_analysis_jobs_tenant_id_fk_idx on public.creative_analysis_jobs (tenant_id);
+create index if not exists creative_analysis_jobs_created_by_fk_idx on public.creative_analysis_jobs (created_by);
+create index if not exists creative_analysis_jobs_asset_id_fk_idx on public.creative_analysis_jobs (asset_id);
+create index if not exists creative_features_tenant_id_fk_idx on public.creative_features (tenant_id);
+create index if not exists creative_features_created_by_fk_idx on public.creative_features (created_by);
+create index if not exists creative_features_asset_id_fk_idx on public.creative_features (asset_id);
+create index if not exists creative_component_scores_tenant_id_fk_idx on public.creative_component_scores (tenant_id);
+create index if not exists creative_component_scores_created_by_fk_idx on public.creative_component_scores (created_by);
+create index if not exists creative_component_scores_asset_id_fk_idx on public.creative_component_scores (asset_id);
+create index if not exists video_segments_tenant_id_fk_idx on public.video_segments (tenant_id);
+create index if not exists video_segments_created_by_fk_idx on public.video_segments (created_by);
+create index if not exists video_segments_asset_id_fk_idx on public.video_segments (asset_id);
+
+create index if not exists bottleneck_analysis_jobs_tenant_id_fk_idx on public.bottleneck_analysis_jobs (tenant_id);
+create index if not exists bottleneck_analysis_jobs_created_by_fk_idx on public.bottleneck_analysis_jobs (created_by);
+create index if not exists baj_insight_snapshot_id_fk_idx on public.bottleneck_analysis_jobs (insight_snapshot_id);
+create index if not exists bottleneck_stage_scores_tenant_id_fk_idx on public.bottleneck_stage_scores (tenant_id);
+create index if not exists bottleneck_stage_scores_created_by_fk_idx on public.bottleneck_stage_scores (created_by);
+create index if not exists bss_bottleneck_job_id_fk_idx on public.bottleneck_stage_scores (bottleneck_job_id);
+create index if not exists bottleneck_hypotheses_tenant_id_fk_idx on public.bottleneck_hypotheses (tenant_id);
+create index if not exists bottleneck_hypotheses_created_by_fk_idx on public.bottleneck_hypotheses (created_by);
+create index if not exists bh_bottleneck_job_id_fk_idx on public.bottleneck_hypotheses (bottleneck_job_id);
+
+create index if not exists performance_fusion_reports_tenant_id_fk_idx on public.performance_fusion_reports (tenant_id);
+create index if not exists performance_fusion_reports_created_by_fk_idx on public.performance_fusion_reports (created_by);
+create index if not exists performance_fusion_reports_asset_id_fk_idx on public.performance_fusion_reports (asset_id);
+create index if not exists pfr_bottleneck_job_id_fk_idx on public.performance_fusion_reports (bottleneck_job_id);
+create index if not exists creative_hypotheses_tenant_id_fk_idx on public.creative_hypotheses (tenant_id);
+create index if not exists creative_hypotheses_created_by_fk_idx on public.creative_hypotheses (created_by);
+create index if not exists creative_hypotheses_fusion_report_id_fk_idx on public.creative_hypotheses (fusion_report_id);
+create index if not exists creative_experiments_tenant_id_fk_idx on public.creative_experiments (tenant_id);
+create index if not exists creative_experiments_created_by_fk_idx on public.creative_experiments (created_by);
+create index if not exists creative_experiments_hypothesis_id_fk_idx on public.creative_experiments (hypothesis_id);
+create index if not exists creative_experiments_control_asset_id_fk_idx on public.creative_experiments (control_asset_id);
+create index if not exists creative_learning_patterns_tenant_id_fk_idx on public.creative_learning_patterns (tenant_id);
+create index if not exists creative_learning_patterns_created_by_fk_idx on public.creative_learning_patterns (created_by);
+
+create index if not exists placement_validation_reports_tenant_id_fk_idx on public.placement_validation_reports (tenant_id);
+create index if not exists placement_validation_reports_created_by_fk_idx on public.placement_validation_reports (created_by);
+create index if not exists placement_validation_reports_asset_id_fk_idx on public.placement_validation_reports (asset_id);
+create index if not exists ad_drafts_tenant_id_fk_idx on public.ad_drafts (tenant_id);
+create index if not exists ad_drafts_created_by_fk_idx on public.ad_drafts (created_by);
+create index if not exists ad_drafts_ad_account_id_fk_idx on public.ad_drafts (ad_account_id);
+create index if not exists ad_drafts_asset_id_fk_idx on public.ad_drafts (asset_id);
+
+create index if not exists approval_requests_created_by_fk_idx on public.approval_requests (created_by);
+create index if not exists approval_requests_requested_by_fk_idx on public.approval_requests (requested_by);
+create index if not exists approval_requests_approved_by_fk_idx on public.approval_requests (approved_by);
+create index if not exists approval_requests_second_approved_by_fk_idx on public.approval_requests (second_approved_by);
+create index if not exists audit_logs_created_by_fk_idx on public.audit_logs (created_by);
+create index if not exists audit_logs_user_id_fk_idx on public.audit_logs (user_id);
+create index if not exists audit_logs_approval_request_id_fk_idx on public.audit_logs (approval_request_id);
+
+create index if not exists integration_settings_tenant_id_fk_idx on public.integration_settings (tenant_id);
+create index if not exists integration_settings_created_by_fk_idx on public.integration_settings (created_by);
+create index if not exists cost_usage_logs_created_by_fk_idx on public.cost_usage_logs (created_by);
+create index if not exists cost_usage_logs_related_asset_id_fk_idx on public.cost_usage_logs (related_asset_id);
+create index if not exists benchmark_profiles_tenant_id_fk_idx on public.benchmark_profiles (tenant_id);
+create index if not exists benchmark_profiles_created_by_fk_idx on public.benchmark_profiles (created_by);
+create index if not exists data_deletion_requests_tenant_id_fk_idx on public.data_deletion_requests (tenant_id);
+create index if not exists data_deletion_requests_created_by_fk_idx on public.data_deletion_requests (created_by);
+create index if not exists data_deletion_requests_requested_by_fk_idx on public.data_deletion_requests (requested_by);
