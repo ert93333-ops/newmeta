@@ -54,6 +54,10 @@ interface DashboardSummary {
     adName?: string;
     metaAdId?: string;
   }>;
+  warnings?: Array<{
+    source: string;
+    code: string;
+  }>;
   safety?: {
     budgetChangesExecutable: boolean;
     activationRequiresApproval: boolean;
@@ -122,6 +126,16 @@ export function DashboardPanel() {
         <div className="dashboard-error">
           <AlertTriangle aria-hidden="true" size={18} />
           <span>대시보드를 불러오지 못했습니다: {error}</span>
+        </div>
+      ) : null}
+
+      {summary?.warnings?.length ? (
+        <div className="dashboard-error soft">
+          <AlertTriangle aria-hidden="true" size={18} />
+          <span>
+            일부 데이터 소스를 불러오지 못했습니다:{" "}
+            {summary.warnings.map((warning) => `${warning.source}/${warning.code}`).join(", ")}
+          </span>
         </div>
       ) : null}
 

@@ -27,6 +27,11 @@ interface AdRow {
   raw_json?: unknown;
 }
 
+interface DashboardWarning {
+  source: string;
+  code: string;
+}
+
 export async function GET(request: Request) {
   try {
     const context = await resolveUserContext(request);
@@ -35,13 +40,14 @@ export async function GET(request: Request) {
       return fail("SUPABASE_REQUIRED", "Supabase is required for dashboard summary.", 500);
     }
 
+    const warnings: DashboardWarning[] = [];
     const [accounts, campaigns, adsets, ads, insights, recommendations] = await Promise.all([
-      countRows(supabase, "ad_accounts", context.tenantId),
-      countRows(supabase, "campaigns_cache", context.tenantId),
-      countRows(supabase, "adsets_cache", context.tenantId),
-      loadAds(supabase, context.tenantId),
-      loadInsights(supabase, context.tenantId),
-      loadRecommendations(request)
+      withDashboardFallback("ad_accounts", warnings, () => countRows(supabase, "ad_accounts", context.tenantId), 0),
+      withDashboardFallback("campaigns_cache", warnings, () => countRows(supabase, "campaigns_cache", context.tenantId), 0),
+      withDashboardFallback("adsets_cache", warnings, () => countRows(supabase, "adsets_cache", context.tenantId), 0),
+      withDashboardFallback("ads_cache", warnings, () => loadAds(supabase, context.tenantId), []),
+      withDashboardFallback("insights_snapshots", warnings, () => loadInsights(supabase, context.tenantId), []),
+      withDashboardFallback("autopilot_recommendations", warnings, () => loadRecommendations(request), [])
     ]);
 
     const adMap = new Map(ads.map((ad) => [ad.id, ad]));
@@ -111,6 +117,7 @@ export async function GET(request: Request) {
       },
       topAds,
       recommendations: recommendations.slice(0, 6),
+      warnings,
       safety: {
         budgetChangesExecutable: false,
         activationRequiresApproval: true,
@@ -119,6 +126,23 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     return handleError(error);
+  }
+}
+
+async function withDashboardFallback<T>(
+  source: string,
+  warnings: DashboardWarning[],
+  load: () => Promise<T>,
+  fallback: T
+): Promise<T> {
+  try {
+    return await load();
+  } catch (error) {
+    warnings.push({
+      source,
+      code: error instanceof Error ? error.message.split(":")[0] : "DASHBOARD_SOURCE_FAILED"
+    });
+    return fallback;
   }
 }
 
