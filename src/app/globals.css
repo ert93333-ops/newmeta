@@ -178,6 +178,49 @@ textarea {
   scroll-margin-top: 18px;
 }
 
+.auth-session-panel {
+  scroll-margin-top: 18px;
+}
+
+.auth-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 12px;
+}
+
+.auth-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 10px;
+}
+
+.auth-state {
+  margin-top: 14px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.auth-state.idle,
+.auth-state.loading {
+  background: #fff4df;
+  color: var(--warn);
+}
+
+.auth-state.signed_in {
+  background: #e6f4ee;
+  color: var(--good);
+}
+
+.auth-state.blocked {
+  background: #fee4e2;
+  color: var(--bad);
+}
+
+.auth-memberships {
+  margin-top: 12px;
+}
+
 .meta-connect-form {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto;
@@ -700,6 +743,7 @@ textarea {
 
   .header,
   .panel-heading,
+  .auth-actions,
   .settings-toolbar,
   .settings-actions {
     display: grid;
@@ -708,7 +752,8 @@ textarea {
   .meta-connect-button,
   .meta-oauth-link,
   .settings-refresh,
-  .approve-button {
+  .approve-button,
+  .reject-button {
     width: 100%;
   }
 

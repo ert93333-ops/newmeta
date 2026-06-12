@@ -1,10 +1,12 @@
 import { ApprovalCenterPanel } from "@/app/approval-center-panel";
+import { AuthSessionPanel } from "@/app/auth-session-panel";
 import { MetaConnectionPanel } from "@/app/meta-connection-panel";
 import { SettingsPanel } from "@/app/settings-panel";
 
 const navItems = [
   { href: "dashboard", label: "대시보드" },
-  { href: "meta-connection", label: "메타 연결" },
+  { href: "login", label: "운영 로그인" },
+  { href: "meta-connection", label: "Meta 연결" },
   { href: "creative-analysis", label: "크리에이티브 분석" },
   { href: "bottleneck-diagnosis", label: "병목 진단" },
   { href: "placement-validator", label: "지면 검증" },
@@ -18,33 +20,33 @@ const navItems = [
 const cards = [
   {
     title: "주요 병목",
-    value: "훅",
-    note: "CTR과 첫 3초 주목도를 검토해야 합니다."
+    value: "대기",
+    note: "CTR과 첫 3초 주목률을 기준으로 병목을 찾습니다."
   },
   {
     title: "지면 리스크",
     value: "#1487569",
-    note: "9:16 소재는 초안 생성 전에 검증이 필요합니다."
+    note: "9:16 소재는 초안 생성 전에 지면 적합성을 검증합니다."
   },
   {
     title: "오늘 AI 비용",
     value: "0 KRW",
-    note: "일일 한도는 서버에서 강제됩니다."
+    note: "일일 한도는 서버 정책으로 강제됩니다."
   },
   {
     title: "대기 중 초안",
     value: "0",
-    note: "PAUSED 상태 초안 생성만 허용됩니다."
+    note: "Meta 초안은 항상 PAUSED 상태와 승인 흐름으로 생성됩니다."
   },
   {
-    title: "메타 토큰 방식",
+    title: "Meta 토큰 방식",
     value: "OAuth",
-    note: "고객이 메타 액세스 토큰을 붙여넣지 않습니다."
+    note: "고객 Meta 액세스 토큰은 서버에만 저장됩니다."
   },
   {
     title: "예산 변경",
     value: "차단",
-    note: "추천 문구만 허용되며 실행 경로는 없습니다."
+    note: "예산은 추천 문구만 허용하며 실행 경로는 없습니다."
   }
 ];
 
@@ -63,7 +65,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand">
           <strong>newmeta Hermes</strong>
-          <span>메타 광고 크리에이티브 운영</span>
+          <span>Meta 광고 크리에이티브 운영 콘솔</span>
         </div>
         <nav className="nav" aria-label="주 메뉴">
           {navItems.map((item) => (
@@ -76,9 +78,9 @@ export default function Home() {
       <section className="main" id="dashboard">
         <header className="header">
           <div>
-            <h1>승인 우선 메타 운영</h1>
+            <h1>승인 우선 Meta 운영</h1>
             <p className="muted">
-              크리에이티브 분석, 병목 진단, 지면 검증, PAUSED 초안 생성은 모두 테넌트 단위 보호 장치를 거칩니다.
+              크리에이티브 분석, 병목 진단, 지면 검증, PAUSED 초안 생성을 테넌트 단위로 보호합니다.
             </p>
           </div>
           <span className="status-pill">예산 변경 하드 차단</span>
@@ -95,6 +97,8 @@ export default function Home() {
             </article>
           ))}
         </section>
+
+        <AuthSessionPanel />
 
         <MetaConnectionPanel />
 
