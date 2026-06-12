@@ -46,6 +46,10 @@ services:
         value: live
       - key: HERMES_PAID_GENERATION_PROVIDER
         value: openai
+      - key: HERMES_SUPABASE_AUTH_SECURITY_MODE
+        value: free_compensating_controls
+      - key: HERMES_PUBLIC_SIGNUP_MODE
+        value: disabled
       - key: OPENAI_API_KEY
         sync: false
       - key: HERMES_OPENAI_IMAGE_MODEL

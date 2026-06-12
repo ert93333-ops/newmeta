@@ -22,8 +22,10 @@ function validReleaseEnv(): Record<string, string> {
     HERMES_PAID_GENERATION_PROVIDER: "generic_http",
     HERMES_PAID_GENERATION_API_URL: "https://provider.newmeta.test/hermes/jobs",
     HERMES_PAID_GENERATION_API_KEY: "paid-provider-secret",
+    HERMES_SUPABASE_AUTH_SECURITY_MODE: "free_compensating_controls",
+    HERMES_PUBLIC_SIGNUP_MODE: "disabled",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
-    SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
+    SUPABASE_AUTH_SMOKE_PASSWORD: "HmsSmoke-Strong-2026!Key",
     SUPABASE_AUTH_SMOKE_TENANT_ID: "00000000-0000-0000-0000-000000000001",
     HERMES_RENDER_PIPELINE_MODE: "live"
   };
@@ -46,6 +48,8 @@ const ENV_KEYS = [
   "HERMES_PAID_GENERATION_PROVIDER",
   "HERMES_PAID_GENERATION_API_URL",
   "HERMES_PAID_GENERATION_API_KEY",
+  "HERMES_SUPABASE_AUTH_SECURITY_MODE",
+  "HERMES_PUBLIC_SIGNUP_MODE",
   "OPENAI_API_KEY",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
@@ -90,6 +94,8 @@ describe("ops health", () => {
       tokenKeyRotation: "configured",
       renderPipeline: "configured",
       paidGenerationProvider: "configured",
+      authSecurity: "free_compensating_controls",
+      publicSignup: "disabled",
       workerSecret: "configured"
     });
     expect(JSON.stringify(result)).not.toMatch(/meta-secret-value|smoke-password|sb_secret_test_value/);
@@ -180,6 +186,20 @@ describe("ops health", () => {
 
     expect(result.status).toBe("blocked");
     expect(result.checks.paidGenerationProvider).toBe("missing");
+  });
+
+  it("blocks health when Supabase Free compensating controls are not explicit", () => {
+    const env = {
+      ...validReleaseEnv(),
+      HERMES_SUPABASE_AUTH_SECURITY_MODE: undefined,
+      HERMES_PUBLIC_SIGNUP_MODE: "public"
+    };
+
+    const result = buildOpsHealth(env);
+
+    expect(result.status).toBe("blocked");
+    expect(result.checks.authSecurity).toBe("missing");
+    expect(result.checks.publicSignup).toBe("not_restricted");
   });
 
   it("returns 503 while required release env is missing", async () => {

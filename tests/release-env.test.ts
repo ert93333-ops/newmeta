@@ -21,9 +21,11 @@ function validReleaseEnv(): Record<string, string> {
     HERMES_PAID_GENERATION_PROVIDER: "generic_http",
     HERMES_PAID_GENERATION_API_URL: "https://provider.newmeta.test/hermes/jobs",
     HERMES_PAID_GENERATION_API_KEY: "paid-provider-secret",
+    HERMES_SUPABASE_AUTH_SECURITY_MODE: "free_compensating_controls",
+    HERMES_PUBLIC_SIGNUP_MODE: "disabled",
     HERMES_WORKER_SECRET: "worker-secret-with-at-least-32-characters",
     SUPABASE_AUTH_SMOKE_EMAIL: "smoke-test@app.newmeta.test",
-    SUPABASE_AUTH_SMOKE_PASSWORD: "smoke-password-with-at-least-16",
+    SUPABASE_AUTH_SMOKE_PASSWORD: "HmsSmoke-Strong-2026!Key",
     SUPABASE_AUTH_SMOKE_TENANT_ID: "00000000-0000-0000-0000-000000000001"
   };
 }
@@ -101,6 +103,30 @@ describe("release env gate", () => {
     });
 
     expect(result.issues.some((issue) => issue.message.includes("OPENAI_API_KEY"))).toBe(true);
+  });
+
+  it("requires explicit auth security mode and restricted public signup for release", () => {
+    const missingMode = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_SUPABASE_AUTH_SECURITY_MODE: undefined
+    });
+    const unrestrictedSignup = checkReleaseEnv({
+      ...validReleaseEnv(),
+      HERMES_PUBLIC_SIGNUP_MODE: "public"
+    });
+
+    expect(missingMode.issues.map((issue) => issue.code)).toContain("MISSING_ENV");
+    expect(missingMode.issues.map((issue) => issue.code)).toContain("AUTH_SECURITY_MODE_NOT_CONFIGURED");
+    expect(unrestrictedSignup.issues.map((issue) => issue.code)).toContain("PUBLIC_SIGNUP_NOT_RESTRICTED");
+  });
+
+  it("blocks weak auth smoke passwords in free release mode", () => {
+    const result = checkReleaseEnv({
+      ...validReleaseEnv(),
+      SUPABASE_AUTH_SMOKE_PASSWORD: "short-password"
+    });
+
+    expect(result.issues.map((issue) => issue.code)).toContain("WEAK_AUTH_SMOKE_PASSWORD");
   });
 
   it("requires live approval execution mode for release", () => {

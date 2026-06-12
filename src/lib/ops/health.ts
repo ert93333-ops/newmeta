@@ -18,6 +18,8 @@ export interface OpsHealthResult {
     tokenKeyRotation: "configured" | "missing";
     renderPipeline: "configured" | "not_configured";
     paidGenerationProvider: "configured" | "disabled" | "missing";
+    authSecurity: "pro" | "free_compensating_controls" | "missing";
+    publicSignup: "disabled" | "invite_only" | "not_restricted";
     workerSecret: "configured" | "missing";
   };
 }
@@ -45,6 +47,16 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
         : env.HERMES_PAID_GENERATION_PROVIDER === "disabled"
           ? "disabled"
         : "missing",
+    authSecurity:
+      env.HERMES_SUPABASE_AUTH_SECURITY_MODE === "pro_leaked_password_protection"
+        ? "pro"
+        : env.HERMES_SUPABASE_AUTH_SECURITY_MODE === "free_compensating_controls"
+          ? "free_compensating_controls"
+          : "missing",
+    publicSignup:
+      env.HERMES_PUBLIC_SIGNUP_MODE === "disabled" || env.HERMES_PUBLIC_SIGNUP_MODE === "invite_only"
+        ? env.HERMES_PUBLIC_SIGNUP_MODE
+        : "not_restricted",
     workerSecret: hasValue(env.HERMES_WORKER_SECRET) ? "configured" : "missing"
   } as const;
   const operationallyReady =
@@ -54,6 +66,8 @@ export function buildOpsHealth(env: EnvRecord): OpsHealthResult {
     checks.approvalExecution === "live" &&
     checks.tokenKeyRotation === "configured" &&
     (checks.paidGenerationProvider === "configured" || checks.paidGenerationProvider === "disabled") &&
+    (checks.authSecurity === "pro" || checks.authSecurity === "free_compensating_controls") &&
+    (checks.publicSignup === "disabled" || checks.publicSignup === "invite_only") &&
     checks.workerSecret === "configured" &&
     (!production || checks.renderPipeline === "configured");
 

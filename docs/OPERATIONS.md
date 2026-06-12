@@ -58,6 +58,8 @@ npm run env:release-gates
 
 The gate blocks missing required Supabase/Meta/worker/OAuth-state/approval-execution/render env, missing auth-smoke env, missing token key id, placeholder values, `HERMES_AUTH_MODE=mock`, `HERMES_META_OAUTH_MODE` values other than `live`, `HERMES_APPROVAL_EXECUTION_MODE` values other than `live`, `HERMES_RENDER_PIPELINE_MODE` values other than `live`, `HERMES_PAID_GENERATION_PROVIDER` values other than `openai`, `generic_http`, or `disabled`, localhost app/callback/provider URLs, invalid `TOKEN_ENCRYPTION_KEY`, default `TOKEN_ENCRYPTION_KEY_ID=primary`, weak state/worker secrets, and secret-looking `NEXT_PUBLIC_*` names including public API keys. When `HERMES_PAID_GENERATION_PROVIDER=openai`, `OPENAI_API_KEY` is required. When `HERMES_PAID_GENERATION_PROVIDER=generic_http`, `HERMES_PAID_GENERATION_API_URL` and `HERMES_PAID_GENERATION_API_KEY` are required.
 
+For Supabase Free operation, also set `HERMES_SUPABASE_AUTH_SECURITY_MODE=free_compensating_controls` and `HERMES_PUBLIC_SIGNUP_MODE=disabled` or `invite_only`. This is acceptable for controlled internal use or limited beta because Hermes does not expose customer token entry and keeps public signup closed. Treat Supabase's `auth_leaked_password_protection` advisor warning as a paid-plan upgrade trigger before broad public self-serve signup.
+
 ### Render free web service
 
 The repo includes `render.yaml` for a Render Blueprint web service:

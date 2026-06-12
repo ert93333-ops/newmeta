@@ -1,3 +1,5 @@
+import { validateOperationalPassword } from "@/lib/security/password-policy";
+
 export interface ReleaseEnvIssue {
   code: string;
   message: string;
@@ -25,6 +27,8 @@ const REQUIRED_RELEASE_ENV = [
   "HERMES_APPROVAL_EXECUTION_MODE",
   "HERMES_RENDER_PIPELINE_MODE",
   "HERMES_PAID_GENERATION_PROVIDER",
+  "HERMES_SUPABASE_AUTH_SECURITY_MODE",
+  "HERMES_PUBLIC_SIGNUP_MODE",
   "HERMES_WORKER_SECRET",
   "SUPABASE_AUTH_SMOKE_EMAIL",
   "SUPABASE_AUTH_SMOKE_PASSWORD",
@@ -165,6 +169,25 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
       addIssue(issues, "PLACEHOLDER_ENV", "OPENAI_API_KEY still contains a placeholder value.");
     }
   }
+  const authSecurityMode = value(env, "HERMES_SUPABASE_AUTH_SECURITY_MODE");
+  if (authSecurityMode !== "pro_leaked_password_protection" && authSecurityMode !== "free_compensating_controls") {
+    addIssue(
+      issues,
+      "AUTH_SECURITY_MODE_NOT_CONFIGURED",
+      "HERMES_SUPABASE_AUTH_SECURITY_MODE must be pro_leaked_password_protection or free_compensating_controls for release."
+    );
+  }
+  const publicSignupMode = value(env, "HERMES_PUBLIC_SIGNUP_MODE");
+  if (publicSignupMode !== "disabled" && publicSignupMode !== "invite_only") {
+    addIssue(issues, "PUBLIC_SIGNUP_NOT_RESTRICTED", "HERMES_PUBLIC_SIGNUP_MODE must be disabled or invite_only for release.");
+  }
+  if (authSecurityMode === "free_compensating_controls" && publicSignupMode !== "disabled" && publicSignupMode !== "invite_only") {
+    addIssue(
+      issues,
+      "FREE_AUTH_CONTROLS_INCOMPLETE",
+      "Supabase Free release mode requires public signup to be disabled or invite_only."
+    );
+  }
 
   for (const key of Object.keys(env)) {
     if (key.startsWith("NEXT_PUBLIC_") && PUBLIC_SECRET_NAME_PATTERN.test(key)) {
@@ -191,6 +214,17 @@ export function checkReleaseEnv(env: EnvRecord): ReleaseEnvCheckResult {
   const oauthStateSecret = value(env, "HERMES_OAUTH_STATE_SECRET");
   if (oauthStateSecret && oauthStateSecret.length < 32) {
     addIssue(issues, "WEAK_OAUTH_STATE_SECRET", "HERMES_OAUTH_STATE_SECRET must be at least 32 characters.");
+  }
+  const authSmokePassword = value(env, "SUPABASE_AUTH_SMOKE_PASSWORD");
+  if (authSmokePassword) {
+    const passwordPolicy = validateOperationalPassword(authSmokePassword);
+    if (!passwordPolicy.passed) {
+      addIssue(
+        issues,
+        "WEAK_AUTH_SMOKE_PASSWORD",
+        `SUPABASE_AUTH_SMOKE_PASSWORD must include ${passwordPolicy.issues.join(", ")}.`
+      );
+    }
   }
 
   return {
