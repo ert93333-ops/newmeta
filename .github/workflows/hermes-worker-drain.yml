@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      NODE_ENV: production
       HERMES_PAID_GENERATION_PROVIDER: openai
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       HERMES_WORKER_SECRET: ${{ secrets.HERMES_WORKER_SECRET }}
@@ -47,9 +46,11 @@ jobs:
           node-version: "24"
           cache: "npm"
 
-      - run: npm ci
+      - run: npm ci --include=dev
         if: steps.secrets.outputs.ready == 'true'
 
       - name: Drain one queued Hermes worker job
         if: steps.secrets.outputs.ready == 'true'
+        env:
+          NODE_ENV: production
         run: npm run worker:once
