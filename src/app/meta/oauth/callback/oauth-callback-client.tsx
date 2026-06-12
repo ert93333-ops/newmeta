@@ -14,7 +14,7 @@ export function MetaOAuthCallbackClient() {
   const started = useRef(false);
   const [state, setState] = useState<CallbackState>({
     status: "pending",
-    message: "메타 OAuth callback을 받았습니다."
+    message: "메타 연결 응답을 받았습니다."
   });
 
   useEffect(() => {
@@ -32,14 +32,14 @@ export function MetaOAuthCallbackClient() {
     if (error) {
       setState({
         status: "blocked",
-        message: `메타 OAuth가 실패했습니다: ${error}`
+        message: `메타 연결이 실패했습니다: ${error}`
       });
       return;
     }
     if (!code || !oauthState) {
       setState({
         status: "blocked",
-        message: "메타 OAuth code 또는 state가 없습니다."
+        message: "메타 연결에 필요한 인증 정보가 없습니다."
       });
       return;
     }
