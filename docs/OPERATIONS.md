@@ -109,6 +109,16 @@ npm run auth:smoke
 
 Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_AUTH_SMOKE_EMAIL`, `SUPABASE_AUTH_SMOKE_PASSWORD`, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. Optional: `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID` to verify cross-tenant denial. These same required values are now part of `npm run env:release-gates`, so a release cannot be declared ready before the smoke prerequisites exist. The script verifies bearer-only `/api/me` tenant membership bootstrap, explicit allowed-tenant `/api/me`, unauthenticated rejection, `PATCH /api/settings/budget` returning `BUDGET_MUTATION_HARD_BLOCKED`, and signed Meta connect URL generation. It does not call the Meta callback or exchange/store Meta tokens. The script does not print tokens or passwords; if env is missing, it exits blocked instead of reporting a false pass.
 
+For a real read-only Meta connection smoke test, run:
+
+```bash
+npm run meta:smoke
+```
+
+Required env: `HERMES_APP_URL` or `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_META_SMOKE_EMAIL`, `SUPABASE_META_SMOKE_PASSWORD`, and `SUPABASE_META_SMOKE_TENANT_ID`. The Meta smoke user must belong to a tenant with a stored live Meta OAuth connection. The script signs in through Supabase Auth, calls `GET /api/meta/ad-accounts`, requires the live Meta adapter, verifies an `adAccounts` array, and fails if credential-shaped fields are echoed in the response.
+
+`.github/workflows/production-smoke.yml` runs hourly and can also be triggered manually. It runs `npm run auth:smoke` when the auth smoke secrets are present and `npm run meta:smoke` when the live Meta smoke secrets are present. Missing secrets produce explicit warnings and skip only the unavailable smoke segment.
+
 ## GitHub
 
 CI exists in `.github/workflows/ci.yml` and runs typecheck, unit tests, local Supabase migration validation, and build. The workflow uses Node 24-native GitHub actions so release checks do not depend on the deprecated GitHub Actions Node 20 runtime.
