@@ -82,6 +82,8 @@ Run `npm run supabase:validate` with Docker running to apply migrations to the l
 
 Run `npm run auth:smoke` against a deployed or production-mode app after setting `HERMES_APP_URL`, Supabase publishable env, smoke user credentials, and `SUPABASE_AUTH_SMOKE_TENANT_ID`. It verifies `/api/me` rejects unauthenticated traffic, bootstraps tenant memberships from the signed-in user, accepts the allowed tenant, rejects `PATCH /api/settings/budget` with `BUDGET_MUTATION_HARD_BLOCKED`, prepares a signed Meta connect URL without exchanging Meta tokens, and optionally rejects `SUPABASE_AUTH_SMOKE_DENIED_TENANT_ID`.
 
+Run `npm run meta:smoke` against a deployed app after setting `HERMES_APP_URL`, Supabase publishable env, `SUPABASE_META_SMOKE_EMAIL`, `SUPABASE_META_SMOKE_PASSWORD`, and `SUPABASE_META_SMOKE_TENANT_ID`. It signs in as a tenant member with an existing live Meta OAuth connection, calls `GET /api/meta/ad-accounts`, requires the live adapter, and verifies no credential-shaped fields are echoed. `.github/workflows/production-smoke.yml` runs the auth and live Meta smoke checks hourly when the corresponding GitHub secrets or variables are configured.
+
 Relevant official docs checked during implementation:
 
 - [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
