@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
     "auth:smoke": "node scripts/verify-supabase-auth-smoke.mjs",
+    "meta:smoke": "node scripts/verify-meta-live-smoke.mjs",
     "env:release-gates": "tsx scripts/check-production-env.ts",
     "env:generate-secrets": "tsx scripts/generate-release-secrets.ts",
     "github:release-gates": "node scripts/check-github-release-gates.mjs",
