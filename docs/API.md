@@ -11,6 +11,8 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 - `GET /api/me`
 - `GET /api/tenants/:id`
 - `PATCH /api/settings/*`
+- `GET /api/settings/provider-credentials`
+- `POST /api/settings/provider-credentials`
 - `GET /api/ops/health`
 
 `GET /api/me` returns `memberships` and `activeTenant`. If `x-tenant-id` is provided, it verifies the requested tenant is one of the authenticated user's memberships and returns `TENANT_ACCESS_DENIED` otherwise. Without `x-tenant-id`, it returns the first visible membership as `activeTenant` so browser clients can choose a tenant before calling tenant-scoped APIs.
@@ -18,6 +20,10 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 `GET /api/tenants/:id` returns only membership-scoped tenant metadata for the requested tenant: `id`, `name`, `role`, `isInternal`, and `crossTenantLearningOptIn`. The route resolves identity from the current bearer token, denies tenants outside the caller's memberships with `TENANT_ACCESS_DENIED`, and never falls back to a cross-tenant tenant lookup.
 
 `PATCH /api/settings/*` requires the authenticated tenant context plus at least `marketer` role. It persists the request body to the tenant's `integration_settings` row keyed by the route path, writes an audit log with before/after JSON, and rejects any route path containing `budget` with `BUDGET_MUTATION_HARD_BLOCKED` even when the body itself is non-executable.
+
+`GET /api/settings/provider-credentials?provider=...` returns only whether a tenant provider credential is configured, the configured endpoint URL, and a non-secret key preview. It never returns the raw provider key or encrypted token material.
+
+`POST /api/settings/provider-credentials` requires `admin` role. It accepts a provider id such as `openai`, `anthropic`, `higgsfield`, or `generic_http`, encrypts the submitted provider API key server-side using `TOKEN_ENCRYPTION_KEY`, stores it in `integration_settings` under `provider-credential:<provider>`, writes an audit log with safe metadata only, and returns only configuration status. The route is for AI generation provider credentials; it does not create paid generation jobs or mutate Meta budgets/statuses.
 
 `GET /api/ops/health` is a secret-free operational readiness endpoint. It returns `200` only when release env checks and core operational checks pass; otherwise it returns `503` with issue codes and configured/missing states, never raw secret values. Production health also requires a non-mock `HERMES_RENDER_PIPELINE_MODE` so render readiness cannot be reported green while the production render path is intentionally fail-closed.
 
@@ -79,8 +85,11 @@ Tenant-scoped GET routes also use the shared error boundary, so missing auth ret
 ## Operations
 
 - `GET /api/operations/autopilot/recommendations`
+- `GET /api/dashboard/summary`
 
 `GET /api/operations/autopilot/recommendations` is read-only automatic-operations triage. It reads the tenant's cached ad-level `insights_snapshots` and `ads_cache` creative metadata, then returns observation, creative-test, landing-diagnostic, fatigue-refresh, or offer-review recommendations. It explicitly reports `budgetMutationBlocked=true` and `activeMutationBlocked=true`; it does not call Meta write APIs, create approvals, mutate budgets, or activate/pause/delete ads.
+
+`GET /api/dashboard/summary` is the main operator dashboard data source. It reads tenant-scoped cached Meta account, campaign, ad set, ad, creative metadata, insight snapshot, and read-only autopilot recommendation data. The route aggregates spend, CTR, purchase/cart signals, creative coverage, top ads, and safety flags for the home dashboard. It performs no writes and never calls Meta mutation APIs.
 
 ## Draft and Approval
 

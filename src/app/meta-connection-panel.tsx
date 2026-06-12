@@ -4,6 +4,8 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Link2, RefreshCw, ShieldCheck } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
+const TENANT_STORAGE_KEY = "hermes:tenant-id";
+
 type ConnectStatus = "idle" | "loading" | "ready" | "blocked";
 
 interface ConnectUrlResponse {
@@ -28,17 +30,11 @@ interface TenantMembership {
 interface MeResponse {
   memberships?: TenantMembership[];
   activeTenant?: TenantMembership | null;
-  error?: {
-    code?: string;
-  };
 }
-
-const TENANT_STORAGE_KEY = "hermes:tenant-id";
 
 export function MetaConnectionPanel() {
   const [tenantId, setTenantId] = useState("");
   const [memberships, setMemberships] = useState<TenantMembership[]>([]);
-  const [membershipStatus, setMembershipStatus] = useState<"idle" | "loaded" | "blocked">("idle");
   const [status, setStatus] = useState<ConnectStatus>("idle");
   const [result, setResult] = useState<ConnectUrlResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +42,34 @@ export function MetaConnectionPanel() {
   useEffect(() => {
     const storedTenantId = readTenantId();
     setTenantId(storedTenantId);
-    void loadTenantMemberships(storedTenantId, setTenantId, setMemberships, setMembershipStatus);
+    void loadTenantMemberships(storedTenantId);
   }, []);
 
   const requiredScopes = useMemo(() => result?.requiredScopes ?? [], [result]);
   const optionalScopes = useMemo(() => result?.optionalScopes ?? [], [result]);
+
+  async function loadTenantMemberships(storedTenantId: string) {
+    const bearer = await getSupabaseBearer();
+    if (!bearer) {
+      return;
+    }
+    const response = await fetch("/api/me", {
+      headers: {
+        authorization: `Bearer ${bearer}`
+      }
+    });
+    const body = (await response.json()) as MeResponse;
+    if (!response.ok) {
+      return;
+    }
+    const nextMemberships = body.memberships ?? [];
+    setMemberships(nextMemberships);
+    const preferredTenant = nextMemberships.find((membership) => membership.tenantId === storedTenantId) ?? body.activeTenant ?? nextMemberships[0];
+    if (preferredTenant) {
+      setTenantId(preferredTenant.tenantId);
+      persistTenantId(preferredTenant.tenantId);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +82,6 @@ export function MetaConnectionPanel() {
     }
 
     persistTenantId(normalizedTenantId);
-    setTenantId(normalizedTenantId);
     setStatus("loading");
     setError(null);
     setResult(null);
@@ -99,10 +117,10 @@ export function MetaConnectionPanel() {
         <div>
           <p className="eyebrow">
             <Link2 aria-hidden="true" size={14} />
-            메타 연결
+            Meta 연결
           </p>
-          <h2>OAuth 연결 넘겨주기</h2>
-          <p className="muted">메타 OAuth로 이동하기 전에 테넌트 단위 서명 state를 준비합니다.</p>
+          <h2>Meta OAuth 연결 준비</h2>
+          <p className="muted">고객 토큰은 서버에만 암호화 저장됩니다. 브라우저에는 연결 URL과 권한 상태만 표시합니다.</p>
         </div>
         <span className="tag good">서버 토큰 저장</span>
       </div>
@@ -125,35 +143,25 @@ export function MetaConnectionPanel() {
               ))}
             </select>
           ) : (
-            <input
-              autoComplete="off"
-              inputMode="text"
-              onChange={(event) => setTenantId(event.target.value)}
-              placeholder="테넌트 UUID"
-              value={tenantId}
-            />
+            <input autoComplete="off" onChange={(event) => setTenantId(event.target.value)} placeholder="테넌트 UUID" value={tenantId} />
           )}
         </label>
-        <button
-          className="approve-button meta-connect-button"
-          disabled={status === "loading" || !tenantId.trim()}
-          type="submit"
-        >
+        <button className="approve-button meta-connect-button" disabled={status === "loading" || !tenantId.trim()} type="submit">
           <RefreshCw aria-hidden="true" size={16} />
-          URL 준비
+          연결 URL 준비
         </button>
       </form>
 
       <div className={`meta-connection-state ${status}`} aria-live="polite">
         <ShieldCheck aria-hidden="true" size={16} />
-        <span>{getStatusMessage(status, error, membershipStatus)}</span>
+        <span>{getStatusMessage(status, error)}</span>
       </div>
 
       {result ? (
         <div className="meta-connection-details">
           <div className="meta-detail-row">
             <span>토큰 정책</span>
-            <strong>{result.tokenPolicy ?? "고객은 메타 액세스 토큰을 직접 붙여넣지 않습니다."}</strong>
+            <strong>{result.tokenPolicy ?? "고객 Meta 토큰은 서버에서만 처리합니다."}</strong>
           </div>
           <div className="meta-detail-row">
             <span>서명 state</span>
@@ -183,20 +191,20 @@ function ScopeList({ label, scopes }: { label: string; scopes: string[] }) {
   return (
     <div className="scope-list">
       <span>{label}</span>
-      <ul>
-        {scopes.length > 0 ? scopes.map((scope) => <li key={scope}>{scope}</li>) : <li>사용 불가</li>}
-      </ul>
+      <ul>{scopes.length > 0 ? scopes.map((scope) => <li key={scope}>{scope}</li>) : <li>사용 불가</li>}</ul>
     </div>
   );
 }
 
+async function getSupabaseBearer(): Promise<string | undefined> {
+  const supabase = createSupabaseBrowserClient();
+  const session = await supabase?.auth.getSession();
+  return session?.data.session?.access_token;
+}
+
 function readTenantId(): string {
   try {
-    return (
-      window.sessionStorage.getItem(TENANT_STORAGE_KEY) ??
-      window.localStorage.getItem(TENANT_STORAGE_KEY) ??
-      ""
-    );
+    return window.sessionStorage.getItem(TENANT_STORAGE_KEY) ?? window.localStorage.getItem(TENANT_STORAGE_KEY) ?? "";
   } catch {
     return "";
   }
@@ -207,90 +215,19 @@ function persistTenantId(tenantId: string): void {
     window.sessionStorage.setItem(TENANT_STORAGE_KEY, tenantId);
     window.localStorage.setItem(TENANT_STORAGE_KEY, tenantId);
   } catch {
-    // Storage can be disabled in hardened browsers; the header still carries the tenant for this request.
+    // Storage can be disabled.
   }
 }
 
-async function getSupabaseBearer(): Promise<string | undefined> {
-  const supabase = createSupabaseBrowserClient();
-  if (!supabase) {
-    return undefined;
-  }
-  const session = await supabase.auth.getSession();
-  return session.data.session?.access_token;
-}
-
-async function loadTenantMemberships(
-  storedTenantId: string,
-  setTenantId: (tenantId: string) => void,
-  setMemberships: (memberships: TenantMembership[]) => void,
-  setMembershipStatus: (status: "idle" | "loaded" | "blocked") => void
-): Promise<void> {
-  try {
-    const bearer = await getSupabaseBearer();
-    if (!bearer) {
-      return;
-    }
-
-    const response = await fetch("/api/me", {
-      headers: {
-        authorization: `Bearer ${bearer}`
-      }
-    });
-    const body = (await response.json()) as MeResponse;
-    if (!response.ok) {
-      setMembershipStatus("blocked");
-      return;
-    }
-
-    const nextMemberships = body.memberships ?? [];
-    setMemberships(nextMemberships);
-    setMembershipStatus("loaded");
-
-    const preferredTenant =
-      nextMemberships.find((membership) => membership.tenantId === storedTenantId) ??
-      body.activeTenant ??
-      nextMemberships[0];
-
-    if (preferredTenant && preferredTenant.tenantId !== storedTenantId) {
-      setTenantId(preferredTenant.tenantId);
-      persistTenantId(preferredTenant.tenantId);
-    }
-  } catch {
-    setMembershipStatus("blocked");
-  }
-}
-
-function getStatusMessage(
-  status: ConnectStatus,
-  error: string | null,
-  membershipStatus: "idle" | "loaded" | "blocked"
-): string {
-  if (status === "loading") {
-    return "서명된 OAuth state를 준비하는 중입니다.";
-  }
-  if (status === "ready") {
-    return "메타 OAuth URL이 준비됐습니다.";
-  }
-  if (status === "blocked") {
-    return `연결 URL 생성이 차단됐습니다: ${error ?? "UNKNOWN_ERROR"}.`;
-  }
-  if (membershipStatus === "loaded") {
-    return "Supabase Auth에서 테넌트 멤버십을 불러왔습니다.";
-  }
-  if (membershipStatus === "blocked") {
-    return "테넌트 멤버십 조회가 차단됐습니다.";
-  }
-  return "메타 OAuth URL을 준비할 수 있습니다.";
+function getStatusMessage(status: ConnectStatus, error: string | null): string {
+  if (status === "loading") return "서명된 OAuth state를 준비하는 중입니다.";
+  if (status === "ready") return "Meta OAuth URL이 준비됐습니다.";
+  if (status === "blocked") return `연결 URL 생성이 차단됐습니다: ${error ?? "UNKNOWN_ERROR"}.`;
+  return "Meta OAuth URL을 준비할 수 있습니다.";
 }
 
 function formatExpiry(value: string | undefined): string {
-  if (!value) {
-    return "사용 불가";
-  }
+  if (!value) return "사용 불가";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toISOString();
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }

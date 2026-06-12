@@ -1,53 +1,9 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Save, SlidersHorizontal } from "lucide-react";
+import type { ReactNode } from "react";
+import { KeyRound, Lock, RefreshCw, Save, Settings2, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-
-type SettingsStatus = "idle" | "loading" | "ready" | "blocked" | "saving" | "saved";
-
-type TenantMembership = {
-  tenantId: string;
-  name: string;
-  role: string;
-};
-
-type MeResponse = {
-  memberships?: TenantMembership[];
-  activeTenant?: TenantMembership | null;
-};
-
-type IntegrationSettingsRecord = {
-  id?: string;
-  provider: string;
-  tenantId: string;
-  settingsJson?: Record<string, unknown> | null;
-  updatedAt?: string;
-};
-
-type SettingsResponse = {
-  provider?: string;
-  configured?: boolean;
-  setting?: IntegrationSettingsRecord | null;
-  error?: {
-    code?: string;
-  };
-};
-
-type CostSettingsFormState = {
-  providerName: string;
-  planName: string;
-  monthlyPlanPriceKrw: string;
-  monthlyCredits: string;
-  creditUnitCostKrw: string;
-  imageGenerationCreditCost: string;
-  videoGenerationCreditCost: string;
-  analysisCreditCost: string;
-  dailyCostCapKrw: string;
-  monthlyCostCapKrw: string;
-  hardDailyCapKrw: string;
-  referenceDailyAdBudgetKrw: string;
-};
 
 const TENANT_STORAGE_KEY = "hermes:tenant-id";
 const ROLE_RANK: Record<string, number> = {
@@ -58,30 +14,103 @@ const ROLE_RANK: Record<string, number> = {
   viewer: 1
 };
 
-const DEFAULT_FORM: CostSettingsFormState = {
-  providerName: "mock-ai",
-  planName: "",
-  monthlyPlanPriceKrw: "",
-  monthlyCredits: "",
-  creditUnitCostKrw: "100",
+const PROVIDERS = [
+  { value: "openai", label: "OpenAI", hint: "이미지 생성, 카피/분석 보조" },
+  { value: "anthropic", label: "Claude / Anthropic", hint: "긴 문맥 분석, 정책 검토" },
+  { value: "higgsfield", label: "Higgsfield", hint: "영상/소재 생성 provider" },
+  { value: "generic_http", label: "Generic HTTPS", hint: "커스텀 생성 API" }
+] as const;
+
+interface TenantMembership {
+  tenantId: string;
+  name: string;
+  role: string;
+}
+
+interface MeResponse {
+  memberships?: TenantMembership[];
+  activeTenant?: TenantMembership | null;
+}
+
+interface SettingsResponse {
+  configured?: boolean;
+  setting?: {
+    settingsJson?: Record<string, unknown> | null;
+    updatedAt?: string;
+  } | null;
+  error?: {
+    code?: string;
+  };
+}
+
+interface CredentialStatus {
+  provider?: string;
+  configured?: boolean;
+  endpointConfigured?: boolean;
+  keyPreview?: string;
+  updatedAt?: string;
+  error?: {
+    code?: string;
+  };
+}
+
+type OpsPolicyForm = {
+  adLaunchMode: "disabled" | "approval_required";
+  statusChangeMode: "approval_required" | "admin_approval";
+  spendEditMode: "disabled" | "recommendation_only";
+  creativeCreateMode: "approval_required" | "marketer_allowed";
+  destructiveMode: "double_approval";
+  maxPausedDraftsPerDay: string;
+  maxPaidGenerationsPerDay: string;
+  requireHumanReviewForNewCreative: boolean;
+  requirePolicyCheckBeforeDraft: boolean;
+};
+
+type CostForm = {
+  providerName: string;
+  dailyCostCapKrw: string;
+  hardDailyCapKrw: string;
+  monthlyCostCapKrw: string;
+  imageGenerationCreditCost: string;
+  videoGenerationCreditCost: string;
+  analysisCreditCost: string;
+};
+
+const DEFAULT_POLICY: OpsPolicyForm = {
+  adLaunchMode: "approval_required",
+  statusChangeMode: "approval_required",
+  spendEditMode: "recommendation_only",
+  creativeCreateMode: "approval_required",
+  destructiveMode: "double_approval",
+  maxPausedDraftsPerDay: "10",
+  maxPaidGenerationsPerDay: "20",
+  requireHumanReviewForNewCreative: true,
+  requirePolicyCheckBeforeDraft: true
+};
+
+const DEFAULT_COST: CostForm = {
+  providerName: "openai",
+  dailyCostCapKrw: "5000",
+  hardDailyCapKrw: "7500",
+  monthlyCostCapKrw: "100000",
   imageGenerationCreditCost: "5",
   videoGenerationCreditCost: "30",
-  analysisCreditCost: "1",
-  dailyCostCapKrw: "5000",
-  monthlyCostCapKrw: "",
-  hardDailyCapKrw: "7500",
-  referenceDailyAdBudgetKrw: "50000"
+  analysisCreditCost: "1"
 };
 
 export function SettingsPanel() {
-  const [form, setForm] = useState<CostSettingsFormState>(DEFAULT_FORM);
-  const [status, setStatus] = useState<SettingsStatus>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [memberships, setMemberships] = useState<TenantMembership[]>([]);
   const [tenantId, setTenantId] = useState("");
-  const [configured, setConfigured] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [activeRole, setActiveRole] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<TenantMembership[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<OpsPolicyForm>(DEFAULT_POLICY);
+  const [cost, setCost] = useState<CostForm>(DEFAULT_COST);
+  const [provider, setProvider] = useState<string>(PROVIDERS[0].value);
+  const [credentialValue, setCredentialValue] = useState("");
+  const [endpointUrl, setEndpointUrl] = useState("");
+  const [credentialStatus, setCredentialStatus] = useState<CredentialStatus | null>(null);
+  const [status, setStatus] = useState("설정을 불러오는 중입니다.");
+  const canWritePolicy = role ? (ROLE_RANK[role] ?? 0) >= ROLE_RANK.marketer : true;
+  const canWriteCredential = role ? (ROLE_RANK[role] ?? 0) >= ROLE_RANK.admin : true;
 
   useEffect(() => {
     const storedTenantId = readTenantId();
@@ -89,309 +118,347 @@ export function SettingsPanel() {
     void initialize(storedTenantId);
   }, []);
 
-  const canSave = activeRole ? (ROLE_RANK[activeRole] ?? 0) >= ROLE_RANK.marketer : true;
-  const statusTone = status === "blocked" ? "blocked" : status === "saved" || status === "ready" ? "ready" : "pending";
-  const formSummary = useMemo(
-    () => [
-      { label: "일일 한도", value: form.dailyCostCapKrw || "미설정" },
-      { label: "하드 한도", value: form.hardDailyCapKrw || "미설정" },
-      { label: "이미지 비용", value: form.imageGenerationCreditCost || "미설정" },
-      { label: "비디오 비용", value: form.videoGenerationCreditCost || "미설정" }
-    ],
-    [form]
-  );
+  const selectedProvider = useMemo(() => PROVIDERS.find((item) => item.value === provider) ?? PROVIDERS[0], [provider]);
 
   async function initialize(storedTenantId: string) {
-    const nextContext = await loadMembershipContext(storedTenantId);
-    setMemberships(nextContext.memberships);
-    setActiveRole(nextContext.role ?? null);
-    if (nextContext.tenantId && nextContext.tenantId !== storedTenantId) {
-      persistTenantId(nextContext.tenantId);
-      setTenantId(nextContext.tenantId);
+    const context = await loadMembershipContext(storedTenantId);
+    setMemberships(context.memberships);
+    setRole(context.role ?? null);
+    if (context.tenantId) {
+      setTenantId(context.tenantId);
+      persistTenantId(context.tenantId);
     }
-    await loadSettings(nextContext.providerName ?? form.providerName, nextContext.tenantId ?? storedTenantId);
+    await Promise.all([
+      loadPolicy(context.tenantId ?? storedTenantId),
+      loadCost(context.tenantId ?? storedTenantId),
+      loadCredentialStatus(provider, context.tenantId ?? storedTenantId)
+    ]);
   }
 
-  async function loadSettings(providerName: string, explicitTenantId?: string) {
-    const normalizedProvider = providerName.trim();
-    if (!normalizedProvider) {
-      setStatus("blocked");
-      setError("COST_PROVIDER_REQUIRED");
-      return;
-    }
-
-    setStatus("loading");
-    setError(null);
-    const headers = await createTenantHeaders(explicitTenantId);
-    const response = await fetch(`/api/settings/${encodeURIComponent(normalizedProvider)}`, {
-      method: "GET",
-      headers
+  async function loadPolicy(explicitTenantId?: string) {
+    const response = await fetch("/api/settings/ai-ops-permissions", {
+      headers: await createTenantHeaders(explicitTenantId)
     });
     const body = (await response.json()) as SettingsResponse;
-
-    if (!response.ok) {
-      setStatus("blocked");
-      setError(body.error?.code ?? `HTTP_${response.status}`);
-      return;
+    if (response.ok && body.setting?.settingsJson) {
+      setPolicy((current) => ({ ...current, ...normalizePolicy(body.setting?.settingsJson) }));
     }
-
-    setConfigured(Boolean(body.configured));
-    setUpdatedAt(body.setting?.updatedAt ?? null);
-    setForm((current) => mergeFormState(current, normalizedProvider, body.setting?.settingsJson));
-    setStatus("ready");
   }
 
-  async function handleLoad(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    await loadSettings(form.providerName, tenantId);
-  }
-
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canSave) {
-      setStatus("blocked");
-      setError("ROLE_ACCESS_DENIED");
-      return;
-    }
-
-    const providerName = form.providerName.trim();
-    if (!providerName) {
-      setStatus("blocked");
-      setError("COST_PROVIDER_REQUIRED");
-      return;
-    }
-
-    setStatus("saving");
-    setError(null);
-    const headers = {
-      ...(await createTenantHeaders()),
-      "Content-Type": "application/json"
-    };
-    const response = await fetch(`/api/settings/${encodeURIComponent(providerName)}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify(toSettingsPayload(form))
+  async function loadCost(explicitTenantId?: string) {
+    const response = await fetch(`/api/settings/${encodeURIComponent(DEFAULT_COST.providerName)}`, {
+      headers: await createTenantHeaders(explicitTenantId)
     });
-    const body = (await response.json()) as SettingsResponse & {
-      setting?: IntegrationSettingsRecord | null;
-    };
+    const body = (await response.json()) as SettingsResponse;
+    if (response.ok && body.setting?.settingsJson) {
+      setCost((current) => ({ ...current, ...normalizeCost(body.setting?.settingsJson) }));
+    }
+  }
 
-    if (!response.ok) {
-      setStatus("blocked");
-      setError(body.error?.code ?? `HTTP_${response.status}`);
+  async function loadCredentialStatus(nextProvider = provider, explicitTenantId?: string) {
+    const response = await fetch(`/api/settings/provider-credentials?provider=${encodeURIComponent(nextProvider)}`, {
+      headers: await createTenantHeaders(explicitTenantId)
+    });
+    const body = (await response.json()) as CredentialStatus;
+    setCredentialStatus(response.ok ? body : { provider: nextProvider, configured: false, error: body.error });
+  }
+
+  async function savePolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canWritePolicy) {
+      setStatus("권한이 부족합니다. marketer 이상만 운영 정책을 저장할 수 있습니다.");
       return;
     }
+    const response = await fetch("/api/settings/ai-ops-permissions", {
+      method: "PATCH",
+      headers: {
+        ...(await createTenantHeaders()),
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(toPolicyPayload(policy))
+    });
+    setStatus(response.ok ? "AI 광고 운영 권한 정책을 저장했습니다." : "운영 권한 정책 저장에 실패했습니다.");
+  }
 
-    setConfigured(true);
-    setUpdatedAt(body.setting?.updatedAt ?? null);
-    setStatus("saved");
+  async function saveCost(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canWritePolicy) {
+      setStatus("권한이 부족합니다. marketer 이상만 비용 정책을 저장할 수 있습니다.");
+      return;
+    }
+    const response = await fetch(`/api/settings/${encodeURIComponent(cost.providerName)}`, {
+      method: "PATCH",
+      headers: {
+        ...(await createTenantHeaders()),
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(toCostPayload(cost))
+    });
+    setStatus(response.ok ? "생성 provider 비용 정책을 저장했습니다." : "비용 정책 저장에 실패했습니다.");
+  }
+
+  async function saveCredential(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canWriteCredential) {
+      setStatus("권한이 부족합니다. admin 이상만 provider API 키를 저장할 수 있습니다.");
+      return;
+    }
+    const response = await fetch("/api/settings/provider-credentials", {
+      method: "POST",
+      headers: {
+        ...(await createTenantHeaders()),
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        provider,
+        credentialValue,
+        endpointUrl,
+        label: selectedProvider.label
+      })
+    });
+    const body = (await response.json()) as CredentialStatus;
+    if (response.ok) {
+      setCredentialStatus(body);
+      setCredentialValue("");
+      setStatus(`${selectedProvider.label} API 키를 서버 암호화 저장소에 저장했습니다.`);
+      return;
+    }
+    setStatus(body.error?.code ?? "API 키 저장에 실패했습니다.");
   }
 
   return (
-    <section className="panel settings-panel" id="settings">
-      <div className="panel-heading">
+    <section className="settings-workspace" id="settings">
+      <div className="settings-hero">
         <div>
-          <p className="eyebrow">
-            <SlidersHorizontal aria-hidden="true" size={14} />
-            설정
-          </p>
-          <h2>서버 소유 비용 가드 설정</h2>
-          <p className="muted">프로바이더 가격과 한도는 테넌트별로 저장되며 비용 추정 API에서 사용됩니다.</p>
+          <h2>설정</h2>
+          <p>온보딩 이후에는 여기에서 Meta 연결, AI 광고 운영 권한, 생성 provider, 비용 제한을 관리합니다.</p>
         </div>
-        <span className={`tag ${configured ? "good" : "warn"}`}>{configured ? "설정됨" : "설정 필요"}</span>
+        <div className="settings-context">
+          <span>현재 테넌트</span>
+          <strong>{memberships.find((item) => item.tenantId === tenantId)?.name ?? (tenantId || "선택 필요")}</strong>
+          <small>{role ?? "권한 확인 필요"}</small>
+        </div>
       </div>
 
-      <div className="settings-layout">
-        <form className="settings-form" onSubmit={handleSave}>
-          <div className="settings-toolbar">
-            <label className="field">
-              <span>프로바이더 키</span>
-              <input
-                autoComplete="off"
-                onChange={(event) => setForm((current) => ({ ...current, providerName: event.target.value }))}
-                placeholder="mock-ai"
-                value={form.providerName}
-              />
-            </label>
-            <button className="reject-button settings-refresh" onClick={() => void handleLoad()} type="button">
-              <RefreshCw aria-hidden="true" size={16} />
-              불러오기
-            </button>
+      <div className="settings-sections">
+        <form className="settings-card" onSubmit={savePolicy}>
+          <div className="section-title-row compact">
+            <h3>
+              <ShieldCheck aria-hidden="true" size={18} />
+              AI 광고 운영 권한
+            </h3>
+            <span className="tag good">예산 실행 없음</span>
           </div>
-
           <div className="settings-grid">
+            <FieldSelect label="광고 개시" value={policy.adLaunchMode} onChange={(value) => setPolicy((current) => ({ ...current, adLaunchMode: value as OpsPolicyForm["adLaunchMode"] }))}>
+              <option value="approval_required">승인 후 가능</option>
+              <option value="disabled">비활성화</option>
+            </FieldSelect>
+            <FieldSelect label="상태 변경" value={policy.statusChangeMode} onChange={(value) => setPolicy((current) => ({ ...current, statusChangeMode: value as OpsPolicyForm["statusChangeMode"] }))}>
+              <option value="approval_required">승인 후 가능</option>
+              <option value="admin_approval">관리자 승인 필요</option>
+            </FieldSelect>
+            <FieldSelect label="예산수정" value={policy.spendEditMode} onChange={(value) => setPolicy((current) => ({ ...current, spendEditMode: value as OpsPolicyForm["spendEditMode"] }))}>
+              <option value="recommendation_only">추천만 허용</option>
+              <option value="disabled">완전 비활성화</option>
+            </FieldSelect>
+            <FieldSelect label="소재 생성" value={policy.creativeCreateMode} onChange={(value) => setPolicy((current) => ({ ...current, creativeCreateMode: value as OpsPolicyForm["creativeCreateMode"] }))}>
+              <option value="approval_required">승인 후 생성</option>
+              <option value="marketer_allowed">마케터 이상 허용</option>
+            </FieldSelect>
             <label className="field">
-              <span>요금제 이름</span>
-              <input
-                autoComplete="off"
-                onChange={(event) => setForm((current) => ({ ...current, planName: event.target.value }))}
-                placeholder="Starter"
-                value={form.planName}
-              />
+              <span>하루 PAUSED 초안 한도</span>
+              <input inputMode="numeric" value={policy.maxPausedDraftsPerDay} onChange={(event) => setPolicy((current) => ({ ...current, maxPausedDraftsPerDay: event.target.value }))} />
             </label>
             <label className="field">
-              <span>크레딧 단가 (KRW)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, creditUnitCostKrw: event.target.value }))}
-                value={form.creditUnitCostKrw}
-              />
-            </label>
-            <label className="field">
-              <span>월 요금제 가격 (KRW)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, monthlyPlanPriceKrw: event.target.value }))}
-                value={form.monthlyPlanPriceKrw}
-              />
-            </label>
-            <label className="field">
-              <span>월 크레딧</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, monthlyCredits: event.target.value }))}
-                value={form.monthlyCredits}
-              />
-            </label>
-            <label className="field">
-              <span>이미지 생성 크레딧</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, imageGenerationCreditCost: event.target.value }))}
-                value={form.imageGenerationCreditCost}
-              />
-            </label>
-            <label className="field">
-              <span>비디오 생성 크레딧</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, videoGenerationCreditCost: event.target.value }))}
-                value={form.videoGenerationCreditCost}
-              />
-            </label>
-            <label className="field">
-              <span>분석 크레딧</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, analysisCreditCost: event.target.value }))}
-                value={form.analysisCreditCost}
-              />
-            </label>
-            <label className="field">
-              <span>일일 한도 (KRW)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, dailyCostCapKrw: event.target.value }))}
-                value={form.dailyCostCapKrw}
-              />
-            </label>
-            <label className="field">
-              <span>일일 하드 한도 (KRW)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, hardDailyCapKrw: event.target.value }))}
-                value={form.hardDailyCapKrw}
-              />
-            </label>
-            <label className="field">
-              <span>월 한도 (KRW)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, monthlyCostCapKrw: event.target.value }))}
-                value={form.monthlyCostCapKrw}
-              />
-            </label>
-            <label className="field">
-              <span>참고 광고 예산 (KRW/일)</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) => setForm((current) => ({ ...current, referenceDailyAdBudgetKrw: event.target.value }))}
-                value={form.referenceDailyAdBudgetKrw}
-              />
+              <span>하루 유료 생성 한도</span>
+              <input inputMode="numeric" value={policy.maxPaidGenerationsPerDay} onChange={(event) => setPolicy((current) => ({ ...current, maxPaidGenerationsPerDay: event.target.value }))} />
             </label>
           </div>
-
-          <div className={`guard-state ${statusTone}`} role="status">
-            <span>{getSettingsStatusMessage(status, error, activeRole)}</span>
+          <div className="toggle-list">
+            <label>
+              <input checked={policy.requireHumanReviewForNewCreative} onChange={(event) => setPolicy((current) => ({ ...current, requireHumanReviewForNewCreative: event.target.checked }))} type="checkbox" />
+              신규 소재는 사람 검토 필수
+            </label>
+            <label>
+              <input checked={policy.requirePolicyCheckBeforeDraft} onChange={(event) => setPolicy((current) => ({ ...current, requirePolicyCheckBeforeDraft: event.target.checked }))} type="checkbox" />
+              초안 생성 전 정책/placement 검사 필수
+            </label>
           </div>
-
-          <div className="settings-actions">
-            <button className="approve-button" disabled={status === "saving" || status === "loading" || !canSave} type="submit">
-              <Save aria-hidden="true" size={16} />
-              설정 저장
-            </button>
-          </div>
+          <button className="approve-button" disabled={!canWritePolicy} type="submit">
+            <Save aria-hidden="true" size={16} />
+            운영 권한 저장
+          </button>
         </form>
 
-        <div className="settings-summary">
-          <div className="settings-summary-head">
-            <strong>서버 상태</strong>
-            <small>{updatedAt ? `업데이트 ${formatDate(updatedAt)}` : "아직 저장된 행 없음"}</small>
+        <form className="settings-card" onSubmit={saveCredential}>
+          <div className="section-title-row compact">
+            <h3>
+              <KeyRound aria-hidden="true" size={18} />
+              Provider API 키
+            </h3>
+            <span className={`tag ${credentialStatus?.configured ? "good" : "warn"}`}>
+              {credentialStatus?.configured ? "저장됨" : "미설정"}
+            </span>
           </div>
-          <div className="checks settings-checks">
-            {formSummary.map((item) => (
-              <div className="check-row" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
+          <label className="field">
+            <span>Provider 선택</span>
+            <select
+              value={provider}
+              onChange={(event) => {
+                setProvider(event.target.value);
+                void loadCredentialStatus(event.target.value);
+              }}
+            >
+              {PROVIDERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">{selectedProvider.hint}</p>
+          <label className="field">
+            <span>API 키</span>
+            <input autoComplete="off" onChange={(event) => setCredentialValue(event.target.value)} placeholder="키는 저장 후 다시 표시되지 않습니다." type="password" value={credentialValue} />
+          </label>
+          <label className="field">
+            <span>Provider URL</span>
+            <input onChange={(event) => setEndpointUrl(event.target.value)} placeholder="https://api.provider.com/v1" value={endpointUrl} />
+          </label>
+          <div className="credential-state">
+            <Lock aria-hidden="true" size={16} />
+            <span>{credentialStatus?.configured ? `저장된 키: ${credentialStatus.keyPreview ?? "마스킹됨"}` : "아직 저장된 키가 없습니다."}</span>
           </div>
-          <div className="settings-note">
-            <span>테넌트</span>
-            <strong>{tenantId || memberships[0]?.tenantId || "mock-default"}</strong>
-            <span>역할</span>
-            <strong>{activeRole ?? "mock-owner"}</strong>
-            <span>추정 API</span>
-            <strong>{configured ? "프로바이더 행 확인 가능" : "저장 전까지 차단"}</strong>
+          <button className="approve-button" disabled={!credentialValue || !canWriteCredential} type="submit">
+            <Save aria-hidden="true" size={16} />
+            API 키 암호화 저장
+          </button>
+        </form>
+
+        <form className="settings-card" onSubmit={saveCost}>
+          <div className="section-title-row compact">
+            <h3>
+              <SlidersHorizontal aria-hidden="true" size={18} />
+              생성 비용 제한
+            </h3>
+            <span className="tag good">서버 정책</span>
           </div>
+          <div className="settings-grid">
+            <label className="field">
+              <span>비용 provider</span>
+              <select value={cost.providerName} onChange={(event) => setCost((current) => ({ ...current, providerName: event.target.value }))}>
+                {PROVIDERS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <NumberField label="일일 비용 한도" value={cost.dailyCostCapKrw} onChange={(value) => setCost((current) => ({ ...current, dailyCostCapKrw: value }))} />
+            <NumberField label="일일 하드 한도" value={cost.hardDailyCapKrw} onChange={(value) => setCost((current) => ({ ...current, hardDailyCapKrw: value }))} />
+            <NumberField label="월간 비용 한도" value={cost.monthlyCostCapKrw} onChange={(value) => setCost((current) => ({ ...current, monthlyCostCapKrw: value }))} />
+            <NumberField label="이미지 생성 단가" value={cost.imageGenerationCreditCost} onChange={(value) => setCost((current) => ({ ...current, imageGenerationCreditCost: value }))} />
+            <NumberField label="영상 생성 단가" value={cost.videoGenerationCreditCost} onChange={(value) => setCost((current) => ({ ...current, videoGenerationCreditCost: value }))} />
+          </div>
+          <button className="approve-button" disabled={!canWritePolicy} type="submit">
+            <Save aria-hidden="true" size={16} />
+            비용 정책 저장
+          </button>
+        </form>
+
+        <div className="settings-card settings-status-card">
+          <div className="section-title-row compact">
+            <h3>
+              <Settings2 aria-hidden="true" size={18} />
+              설정 상태
+            </h3>
+            <button className="reject-button slim" onClick={() => void initialize(tenantId)} type="button">
+              <RefreshCw aria-hidden="true" size={14} />
+              다시 불러오기
+            </button>
+          </div>
+          <div className="safety-list">
+            <div className="safety-row">
+              <span>운영 정책 저장 권한</span>
+              <strong>{canWritePolicy ? "가능" : "차단"}</strong>
+            </div>
+            <div className="safety-row">
+              <span>API 키 저장 권한</span>
+              <strong>{canWriteCredential ? "가능" : "admin 필요"}</strong>
+            </div>
+            <div className="safety-row">
+              <span>예산 변경 실행 경로</span>
+              <strong className="good-text">없음</strong>
+            </div>
+          </div>
+          <p className="settings-message">{status}</p>
         </div>
       </div>
     </section>
   );
 }
 
-function mergeFormState(
-  current: CostSettingsFormState,
-  providerName: string,
-  settingsJson: Record<string, unknown> | null | undefined
-): CostSettingsFormState {
-  if (!settingsJson) {
-    return {
-      ...DEFAULT_FORM,
-      providerName
-    };
-  }
-
-  return {
-    providerName,
-    planName: readStringValue(settingsJson.planName),
-    monthlyPlanPriceKrw: readNumberValue(settingsJson.monthlyPlanPriceKrw),
-    monthlyCredits: readNumberValue(settingsJson.monthlyCredits),
-    creditUnitCostKrw: readNumberValue(settingsJson.creditUnitCostKrw),
-    imageGenerationCreditCost: readNumberValue(settingsJson.imageGenerationCreditCost),
-    videoGenerationCreditCost: readNumberValue(settingsJson.videoGenerationCreditCost),
-    analysisCreditCost: readNumberValue(settingsJson.analysisCreditCost),
-    dailyCostCapKrw: readNumberValue(settingsJson.dailyCostCapKrw),
-    monthlyCostCapKrw: readNumberValue(settingsJson.monthlyCostCapKrw),
-    hardDailyCapKrw: readNumberValue(settingsJson.hardDailyCapKrw),
-    referenceDailyAdBudgetKrw: readNumberValue(settingsJson.referenceDailyAdBudgetKrw)
-  };
+function FieldSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
+    </label>
+  );
 }
 
-function toSettingsPayload(form: CostSettingsFormState): Record<string, unknown> {
+function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+async function createTenantHeaders(explicitTenantId?: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  const tenantId = explicitTenantId ?? readTenantId();
+  if (tenantId) {
+    headers["x-tenant-id"] = tenantId;
+  }
+  const supabase = createSupabaseBrowserClient();
+  const session = await supabase?.auth.getSession();
+  if (session?.data.session?.access_token) {
+    headers.authorization = `Bearer ${session.data.session.access_token}`;
+  }
+  return headers;
+}
+
+async function loadMembershipContext(storedTenantId: string): Promise<{
+  tenantId?: string;
+  role?: string;
+  memberships: TenantMembership[];
+}> {
+  const supabase = createSupabaseBrowserClient();
+  const session = await supabase?.auth.getSession();
+  const bearer = session?.data.session?.access_token;
+  if (!bearer) {
+    return { tenantId: storedTenantId || undefined, memberships: [] };
+  }
+  const response = await fetch("/api/me", {
+    headers: {
+      authorization: `Bearer ${bearer}`
+    }
+  });
+  const body = (await response.json()) as MeResponse;
+  if (!response.ok) {
+    return { tenantId: storedTenantId || undefined, memberships: [] };
+  }
+  const memberships = body.memberships ?? [];
+  const selected = memberships.find((item) => item.tenantId === storedTenantId) ?? body.activeTenant ?? memberships[0];
   return {
-    providerName: form.providerName.trim(),
-    planName: readOptionalString(form.planName),
-    monthlyPlanPriceKrw: readOptionalNumber(form.monthlyPlanPriceKrw),
-    monthlyCredits: readOptionalNumber(form.monthlyCredits),
-    creditUnitCostKrw: readOptionalNumber(form.creditUnitCostKrw),
-    imageGenerationCreditCost: readOptionalNumber(form.imageGenerationCreditCost),
-    videoGenerationCreditCost: readOptionalNumber(form.videoGenerationCreditCost),
-    analysisCreditCost: readOptionalNumber(form.analysisCreditCost),
-    dailyCostCapKrw: readOptionalNumber(form.dailyCostCapKrw),
-    monthlyCostCapKrw: readOptionalNumber(form.monthlyCostCapKrw),
-    hardDailyCapKrw: readOptionalNumber(form.hardDailyCapKrw),
-    referenceDailyAdBudgetKrw: readOptionalNumber(form.referenceDailyAdBudgetKrw)
+    tenantId: selected?.tenantId,
+    role: selected?.role,
+    memberships
   };
 }
 
@@ -408,133 +475,75 @@ function persistTenantId(tenantId: string): void {
     window.sessionStorage.setItem(TENANT_STORAGE_KEY, tenantId);
     window.localStorage.setItem(TENANT_STORAGE_KEY, tenantId);
   } catch {
-    // Storage can be disabled; requests still use mock/default tenant behavior.
+    // Storage can be unavailable; the active request still uses headers.
   }
 }
 
-async function createTenantHeaders(explicitTenantId?: string): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {};
-  const tenantId = explicitTenantId ?? readTenantId();
-  if (tenantId) {
-    headers["x-tenant-id"] = tenantId;
-  }
-  const bearer = await getSupabaseBearer();
-  if (bearer) {
-    headers.authorization = `Bearer ${bearer}`;
-  }
-  return headers;
+function normalizePolicy(value: Record<string, unknown> | null | undefined): Partial<OpsPolicyForm> {
+  if (!value) return {};
+  return {
+    adLaunchMode: readString(value.adLaunchMode, DEFAULT_POLICY.adLaunchMode) as OpsPolicyForm["adLaunchMode"],
+    statusChangeMode: readString(value.statusChangeMode, DEFAULT_POLICY.statusChangeMode) as OpsPolicyForm["statusChangeMode"],
+    spendEditMode: readString(value.spendEditMode, DEFAULT_POLICY.spendEditMode) as OpsPolicyForm["spendEditMode"],
+    creativeCreateMode: readString(value.creativeCreateMode, DEFAULT_POLICY.creativeCreateMode) as OpsPolicyForm["creativeCreateMode"],
+    destructiveMode: "double_approval",
+    maxPausedDraftsPerDay: readNumberString(value.maxPausedDraftsPerDay, DEFAULT_POLICY.maxPausedDraftsPerDay),
+    maxPaidGenerationsPerDay: readNumberString(value.maxPaidGenerationsPerDay, DEFAULT_POLICY.maxPaidGenerationsPerDay),
+    requireHumanReviewForNewCreative: value.requireHumanReviewForNewCreative !== false,
+    requirePolicyCheckBeforeDraft: value.requirePolicyCheckBeforeDraft !== false
+  };
 }
 
-async function getSupabaseBearer(): Promise<string | undefined> {
-  const supabase = createSupabaseBrowserClient();
-  if (!supabase) {
-    return undefined;
-  }
-  const session = await supabase.auth.getSession();
-  return session.data.session?.access_token;
+function normalizeCost(value: Record<string, unknown> | null | undefined): Partial<CostForm> {
+  if (!value) return {};
+  return {
+    providerName: readString(value.providerName, DEFAULT_COST.providerName),
+    dailyCostCapKrw: readNumberString(value.dailyCostCapKrw, DEFAULT_COST.dailyCostCapKrw),
+    hardDailyCapKrw: readNumberString(value.hardDailyCapKrw, DEFAULT_COST.hardDailyCapKrw),
+    monthlyCostCapKrw: readNumberString(value.monthlyCostCapKrw, DEFAULT_COST.monthlyCostCapKrw),
+    imageGenerationCreditCost: readNumberString(value.imageGenerationCreditCost, DEFAULT_COST.imageGenerationCreditCost),
+    videoGenerationCreditCost: readNumberString(value.videoGenerationCreditCost, DEFAULT_COST.videoGenerationCreditCost),
+    analysisCreditCost: readNumberString(value.analysisCreditCost, DEFAULT_COST.analysisCreditCost)
+  };
 }
 
-async function loadMembershipContext(storedTenantId: string): Promise<{
-  tenantId?: string;
-  role?: string;
-  memberships: TenantMembership[];
-  providerName?: string;
-}> {
-  const bearer = await getSupabaseBearer();
-  if (!bearer) {
-    return {
-      tenantId: storedTenantId || undefined,
-      memberships: []
-    };
-  }
-
-  try {
-    const response = await fetch("/api/me", {
-      headers: {
-        authorization: `Bearer ${bearer}`
-      }
-    });
-    const body = (await response.json()) as MeResponse;
-    if (!response.ok) {
-      return {
-        tenantId: storedTenantId || undefined,
-        memberships: []
-      };
-    }
-
-    const memberships = body.memberships ?? [];
-    const preferredTenant =
-      memberships.find((membership) => membership.tenantId === storedTenantId) ??
-      body.activeTenant ??
-      memberships[0];
-
-    return {
-      tenantId: preferredTenant?.tenantId,
-      role: preferredTenant?.role,
-      memberships
-    };
-  } catch {
-    return {
-      tenantId: storedTenantId || undefined,
-      memberships: []
-    };
-  }
+function toPolicyPayload(form: OpsPolicyForm): Record<string, unknown> {
+  return {
+    adLaunchMode: form.adLaunchMode,
+    statusChangeMode: form.statusChangeMode,
+    spendEditMode: form.spendEditMode,
+    creativeCreateMode: form.creativeCreateMode,
+    destructiveMode: form.destructiveMode,
+    maxPausedDraftsPerDay: readOptionalNumber(form.maxPausedDraftsPerDay),
+    maxPaidGenerationsPerDay: readOptionalNumber(form.maxPaidGenerationsPerDay),
+    requireHumanReviewForNewCreative: form.requireHumanReviewForNewCreative,
+    requirePolicyCheckBeforeDraft: form.requirePolicyCheckBeforeDraft
+  };
 }
 
-function getSettingsStatusMessage(status: SettingsStatus, error: string | null, activeRole: string | null): string {
-  if (status === "loading") {
-    return "서버 비용 설정을 불러오는 중입니다.";
-  }
-  if (status === "saving") {
-    return "테넌트 비용 설정을 저장하는 중입니다.";
-  }
-  if (status === "saved") {
-    return "테넌트 비용 설정을 저장했습니다.";
-  }
-  if (status === "ready") {
-    return "서버 비용 설정을 불러왔습니다.";
-  }
-  if (status === "blocked") {
-    return error ?? "SETTINGS_BLOCKED";
-  }
-  if (activeRole) {
-    return `현재 테넌트 역할: ${activeRole}.`;
-  }
-  return "프로바이더 설정을 불러올 수 있습니다.";
+function toCostPayload(form: CostForm): Record<string, unknown> {
+  return {
+    providerName: form.providerName,
+    dailyCostCapKrw: readOptionalNumber(form.dailyCostCapKrw),
+    hardDailyCapKrw: readOptionalNumber(form.hardDailyCapKrw),
+    monthlyCostCapKrw: readOptionalNumber(form.monthlyCostCapKrw),
+    imageGenerationCreditCost: readOptionalNumber(form.imageGenerationCreditCost),
+    videoGenerationCreditCost: readOptionalNumber(form.videoGenerationCreditCost),
+    analysisCreditCost: readOptionalNumber(form.analysisCreditCost)
+  };
 }
 
-function readOptionalString(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+function readString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value ? value : fallback;
+}
+
+function readNumberString(value: unknown, fallback: string): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value) return value;
+  return fallback;
 }
 
 function readOptionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = Number(trimmed);
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function readStringValue(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function readNumberValue(value: unknown): string {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-  return "";
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toISOString();
 }

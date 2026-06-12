@@ -27,7 +27,7 @@ export function AuthSessionPanel() {
   const [email, setEmail] = useState("ert93333@gmail.com");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<AuthStatus>("idle");
-  const [message, setMessage] = useState("운영 계정으로 로그인하면 테넌트와 권한이 자동으로 연결됩니다.");
+  const [message, setMessage] = useState("운영 계정으로 로그인하면 테넌트 권한을 자동으로 불러옵니다.");
   const [memberships, setMemberships] = useState<TenantMembership[]>([]);
 
   useEffect(() => {
@@ -41,13 +41,12 @@ export function AuthSessionPanel() {
       setMessage("Supabase 브라우저 설정이 없습니다.");
       return;
     }
-
     const session = await supabase.auth.getSession();
     if (!session.data.session?.access_token) {
       setStatus("idle");
+      setMessage("로그인이 필요합니다.");
       return;
     }
-
     await loadMemberships(session.data.session.access_token);
   }
 
@@ -55,25 +54,21 @@ export function AuthSessionPanel() {
     event.preventDefault();
     setStatus("loading");
     setMessage("로그인 중입니다.");
-
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
       setStatus("blocked");
       setMessage("Supabase 브라우저 설정이 없습니다.");
       return;
     }
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password
     });
-
     if (error || !data.session?.access_token) {
       setStatus("blocked");
       setMessage(error?.message ?? "로그인 세션을 만들지 못했습니다.");
       return;
     }
-
     await loadMemberships(data.session.access_token);
   }
 
@@ -84,7 +79,7 @@ export function AuthSessionPanel() {
       window.sessionStorage.removeItem(TENANT_STORAGE_KEY);
       window.localStorage.removeItem(TENANT_STORAGE_KEY);
     } catch {
-      // Hardened browsers can block storage access.
+      // Storage can be unavailable.
     }
     setMemberships([]);
     setPassword("");
@@ -99,19 +94,16 @@ export function AuthSessionPanel() {
       }
     });
     const body = (await response.json()) as MeResponse;
-
     if (!response.ok) {
       setStatus("blocked");
       setMessage(body.error?.code ?? "테넌트 권한을 불러오지 못했습니다.");
       return;
     }
-
     const nextMemberships = body.memberships ?? [];
     const activeTenant = body.activeTenant ?? nextMemberships[0];
     if (activeTenant) {
       persistTenantId(activeTenant.tenantId);
     }
-
     setMemberships(nextMemberships);
     setStatus("signed_in");
     setMessage(activeTenant ? `${activeTenant.name} 테넌트에 ${activeTenant.role} 권한으로 연결됐습니다.` : "로그인됐지만 테넌트가 없습니다.");
@@ -126,7 +118,7 @@ export function AuthSessionPanel() {
             운영 로그인
           </p>
           <h2>Hermes 계정 연결</h2>
-          <p className="muted">Supabase Free 운영 모드는 공개 가입 없이 등록된 사용자만 접근합니다.</p>
+          <p className="muted">Supabase Auth 계정으로 로그인해서 운영 테넌트와 권한을 선택합니다.</p>
         </div>
         <span className={`tag ${status === "signed_in" ? "good" : status === "blocked" ? "bad" : "warn"}`}>
           {status === "signed_in" ? "로그인됨" : status === "loading" ? "확인 중" : status === "blocked" ? "차단" : "대기"}
@@ -140,13 +132,7 @@ export function AuthSessionPanel() {
         </label>
         <label className="field">
           <span>비밀번호</span>
-          <input
-            autoComplete="current-password"
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="로컬 보안 파일의 PASSWORD"
-            type="password"
-            value={password}
-          />
+          <input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} placeholder="운영 계정 비밀번호" type="password" value={password} />
         </label>
         <div className="auth-actions">
           <button className="approve-button" disabled={status === "loading" || !email.trim() || !password} type="submit">
@@ -187,6 +173,6 @@ function persistTenantId(tenantId: string): void {
     window.sessionStorage.setItem(TENANT_STORAGE_KEY, tenantId);
     window.localStorage.setItem(TENANT_STORAGE_KEY, tenantId);
   } catch {
-    // The current request is still authenticated even if storage is unavailable.
+    // The request can still carry tenant headers without storage.
   }
 }
