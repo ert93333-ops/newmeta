@@ -124,6 +124,11 @@ export function CreativeGenerationPanel() {
       return;
     }
     setApprovalId(body.approval?.id ?? null);
+    if (body.approval?.id) {
+      window.dispatchEvent(new CustomEvent("hermes:approval-created", { detail: { approvalId: body.approval.id } }));
+      window.location.hash = "approval-center";
+      document.getElementById("approval-center")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     setStatus(
       body.approval?.id
         ? `승인 요청 생성됨. 예상 비용 ${formatKrw(body.estimatedCostKrw)}`

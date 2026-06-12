@@ -106,6 +106,21 @@ export function ApprovalCenterPanel() {
     };
   }, [loadApprovals]);
 
+  useEffect(() => {
+    async function handleApprovalCreated(event: Event) {
+      const approvalId = readApprovalCreatedId(event);
+      await loadApprovals();
+      if (approvalId) {
+        setSelectedId(approvalId);
+      }
+    }
+
+    window.addEventListener("hermes:approval-created", handleApprovalCreated);
+    return () => {
+      window.removeEventListener("hermes:approval-created", handleApprovalCreated);
+    };
+  }, [loadApprovals]);
+
   const selected = useMemo(
     () => approvals.find((item) => item.approval.id === selectedId) ?? approvals[0],
     [approvals, selectedId]
@@ -319,6 +334,14 @@ function readTenantId(): string {
   } catch {
     return "";
   }
+}
+
+function readApprovalCreatedId(event: Event): string | undefined {
+  if (!("detail" in event) || !event.detail || typeof event.detail !== "object") {
+    return undefined;
+  }
+  const detail = event.detail as { approvalId?: unknown };
+  return typeof detail.approvalId === "string" ? detail.approvalId : undefined;
 }
 
 async function createTenantHeaders(): Promise<Record<string, string>> {

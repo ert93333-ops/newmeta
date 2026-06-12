@@ -17,6 +17,9 @@ describe("Creative generation panel", () => {
     expect(panelSource).toContain("/api/dashboard/summary");
     expect(panelSource).toContain("approvalRequest");
     expect(panelSource).toContain("approvalReason");
+    expect(panelSource).toContain("hermes:approval-created");
+    expect(panelSource).toContain('window.location.hash = "approval-center"');
+    expect(panelSource).toContain('document.getElementById("approval-center")?.scrollIntoView');
     expect(panelSource).toContain("image_generation");
     expect(panelSource).toContain("video_generation");
     expect(panelSource).toContain('"x-tenant-id"');

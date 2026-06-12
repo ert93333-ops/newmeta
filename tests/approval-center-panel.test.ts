@@ -14,6 +14,12 @@ describe("Approval center panel", () => {
     expect(panelSource).toContain("hermes:tenant-id");
   });
 
+  it("refreshes and selects new approvals created from other app panels", () => {
+    expect(panelSource).toContain("hermes:approval-created");
+    expect(panelSource).toContain("readApprovalCreatedId");
+    expect(panelSource).toContain("setSelectedId(approvalId)");
+  });
+
   it("renders server guard metadata instead of recomputing or mocking approval policy", () => {
     expect(panelSource).toContain("item.approval.id");
     expect(panelSource).toContain("guard.requiredText");
