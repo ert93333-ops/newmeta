@@ -43,6 +43,44 @@ type ApprovalListResponse = {
   };
 };
 
+type GeneratedAssetSummary = {
+  id: string;
+  assetType?: string;
+  sourceUrl?: string;
+  width?: number;
+  height?: number;
+  mimeType?: string;
+  metadataJson?: Record<string, unknown>;
+};
+
+type GenerationJobSummary = {
+  id: string;
+  status?: string;
+  type?: string;
+  result?: Record<string, unknown>;
+  input?: Record<string, unknown>;
+};
+
+type DraftSummary = {
+  id: string;
+  assetId?: string;
+  approvalRequestId?: string;
+  metaAdId?: string;
+  metaStatus: string;
+  createdAt?: string;
+  payloadJson?: Record<string, unknown>;
+};
+
+type JobResponse = {
+  job?: GenerationJobSummary;
+  error?: ApprovalListResponse["error"];
+};
+
+type DraftListResponse = {
+  drafts?: DraftSummary[];
+  error?: ApprovalListResponse["error"];
+};
+
 type LoadStatus = "loading" | "loaded" | "empty" | "blocked";
 type DecisionStatus = "idle" | "submitting" | "succeeded" | "blocked";
 type ReadinessTone = "ready" | "blocked" | "pending";
@@ -54,6 +92,7 @@ type ReadinessStatus = {
 };
 
 const TENANT_STORAGE_KEY = "hermes:tenant-id";
+const GENERATION_JOB_STORAGE_KEY = "hermes:generation-job-ids";
 
 export function ApprovalCenterPanel() {
   const [approvals, setApprovals] = useState<ApprovalListItem[]>([]);
@@ -66,6 +105,21 @@ export function ApprovalCenterPanel() {
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [executionStatus, setExecutionStatus] = useState<DecisionStatus>("idle");
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [generationJobs, setGenerationJobs] = useState<GenerationJobSummary[]>([]);
+  const [jobStatus, setJobStatus] = useState<DecisionStatus>("idle");
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [draftStatus, setDraftStatus] = useState<DecisionStatus>("idle");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftForm, setDraftForm] = useState({
+    adAccountId: "",
+    pageId: "",
+    linkUrl: "",
+    primaryText: "",
+    headline: "",
+    description: "",
+    callToActionType: "SHOP_NOW"
+  });
 
   const loadApprovals = useCallback(async (isMounted: () => boolean = () => true) => {
     setLoadStatus("loading");
@@ -125,6 +179,59 @@ export function ApprovalCenterPanel() {
       window.removeEventListener("hermes:approval-created", handleApprovalCreated);
     };
   }, [loadApprovals]);
+
+  const loadGenerationJobs = useCallback(async (jobIds = readStoredGenerationJobIds()) => {
+    if (jobIds.length === 0) {
+      setGenerationJobs([]);
+      return;
+    }
+    setJobStatus("submitting");
+    setJobError(null);
+    const headers = await createTenantHeaders();
+    const loaded: GenerationJobSummary[] = [];
+    for (const jobId of jobIds.slice(0, 8)) {
+      const response = await fetch(`/api/jobs/${jobId}`, { headers });
+      const body = (await response.json()) as JobResponse;
+      if (response.ok && body.job) {
+        loaded.push(body.job);
+      } else if (response.status !== 404) {
+        setJobError(formatApiError(body.error, response.status));
+      }
+    }
+    setGenerationJobs(loaded);
+    setJobStatus("succeeded");
+  }, []);
+
+  const loadDrafts = useCallback(async () => {
+    const response = await fetch("/api/drafts", { headers: await createTenantHeaders() });
+    const body = (await response.json()) as DraftListResponse;
+    if (!response.ok) {
+      setDraftError(formatApiError(body.error, response.status));
+      return;
+    }
+    setDrafts(body.drafts ?? []);
+  }, []);
+
+  useEffect(() => {
+    void loadGenerationJobs();
+    void loadDrafts();
+  }, [loadDrafts, loadGenerationJobs]);
+
+  useEffect(() => {
+    function handleGenerationJobQueued(event: Event) {
+      const jobId = readGenerationJobQueuedId(event);
+      if (!jobId) {
+        return;
+      }
+      const nextIds = storeGenerationJobId(jobId);
+      void loadGenerationJobs(nextIds);
+    }
+
+    window.addEventListener("hermes:generation-job-queued", handleGenerationJobQueued);
+    return () => {
+      window.removeEventListener("hermes:generation-job-queued", handleGenerationJobQueued);
+    };
+  }, [loadGenerationJobs]);
 
   const selected = useMemo(
     () => approvals.find((item) => item.approval.id === selectedId) ?? approvals[0],
@@ -212,6 +319,99 @@ export function ApprovalCenterPanel() {
 
     setExecutionStatus("succeeded");
     window.dispatchEvent(new CustomEvent("hermes:generation-job-queued", { detail: { jobId: body.job?.id } }));
+    await loadApprovals();
+  }
+
+  async function requestPausedDraft(asset: GeneratedAssetSummary) {
+    setDraftStatus("submitting");
+    setDraftError(null);
+    const response = await fetch("/api/drafts/create-paused", {
+      method: "POST",
+      headers: {
+        ...(await createTenantHeaders()),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        assetId: asset.id,
+        adAccountId: draftForm.adAccountId,
+        pageId: draftForm.pageId,
+        linkUrl: draftForm.linkUrl,
+        manifest: {
+          asset: {
+            id: asset.id,
+            type: asset.assetType === "video" ? "video" : "image",
+            width: asset.width ?? 1080,
+            height: asset.height ?? 1350,
+            mimeType: asset.mimeType
+          },
+          textBoxes: [],
+          primaryText: draftForm.primaryText,
+          headline: draftForm.headline,
+          description: draftForm.description,
+          linkUrl: draftForm.linkUrl,
+          placements: ["facebook_feed", "instagram_feed", "instagram_stories"]
+        },
+        payload: {
+          creativeName: `Hermes 생성 소재 ${asset.id}`,
+          adName: `Hermes PAUSED 초안 ${asset.id}`,
+          pageId: draftForm.pageId,
+          linkUrl: draftForm.linkUrl,
+          message: draftForm.primaryText,
+          headline: draftForm.headline,
+          description: draftForm.description,
+          callToActionType: draftForm.callToActionType,
+          objective: "OUTCOME_SALES"
+        },
+        reason: "생성된 AI 소재를 검수 후 PAUSED Meta 광고 초안으로 등록하기 위한 승인 요청입니다."
+      })
+    });
+    const body = (await response.json()) as { approval?: ApprovalSummary; error?: ApprovalListResponse["error"] };
+    if (!response.ok) {
+      setDraftStatus("blocked");
+      setDraftError(formatApiError(body.error, response.status));
+      return;
+    }
+    setDraftStatus("succeeded");
+    if (body.approval?.id) {
+      window.dispatchEvent(new CustomEvent("hermes:approval-created", { detail: { approvalId: body.approval.id } }));
+    }
+    await loadApprovals();
+    await loadDrafts();
+  }
+
+  async function requestPublishApproval(draft: DraftSummary) {
+    if (!draft.metaAdId) {
+      setDraftStatus("blocked");
+      setDraftError("Meta 광고 ID가 있는 PAUSED 초안만 개시 승인 요청을 만들 수 있습니다.");
+      return;
+    }
+    setDraftStatus("submitting");
+    setDraftError(null);
+    const response = await fetch("/api/approvals", {
+      method: "POST",
+      headers: {
+        ...(await createTenantHeaders()),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "meta_activate_ad",
+        objectType: "ad",
+        objectId: draft.metaAdId,
+        beforeJson: { status: draft.metaStatus, draftId: draft.id },
+        afterJson: { status: "ACTIVE", draftId: draft.id, metaAdId: draft.metaAdId },
+        reason: "검수 완료된 PAUSED 초안을 실제 광고로 개시하기 위한 승인 요청입니다. 예산 변경은 포함하지 않습니다."
+      })
+    });
+    const body = (await response.json()) as { approval?: ApprovalSummary; error?: ApprovalListResponse["error"] };
+    if (!response.ok) {
+      setDraftStatus("blocked");
+      setDraftError(formatApiError(body.error, response.status));
+      return;
+    }
+    setDraftStatus("succeeded");
+    if (body.approval?.id) {
+      window.dispatchEvent(new CustomEvent("hermes:approval-created", { detail: { approvalId: body.approval.id } }));
+    }
     await loadApprovals();
   }
 
@@ -323,10 +523,12 @@ export function ApprovalCenterPanel() {
               <span>만료</span>
               <strong>{formatDate(selected.guard.expiresAt ?? selected.approval.expiresAt)}</strong>
               <span>사유</span>
-              <strong>{selected.approval.reason ?? "사용 불가"}</strong>
+              <strong>{formatApprovalReasonBrief(selected.approval.reason)}</strong>
               <span>2차 승인</span>
               <strong>{selected.approval.secondApprovedBy ? "완료" : selected.guard.requiresSecondApproval ? "필수" : "필요 없음"}</strong>
             </div>
+
+            <ApprovalReasonSummary reason={selected.approval.reason} afterJson={selected.approval.afterJson} />
 
             {readiness ? (
               <div className={`readiness-state ${readiness.tone}`} role="status">
@@ -383,7 +585,185 @@ export function ApprovalCenterPanel() {
           </div>
         )}
       </div>
+
+      <div className="generation-results-panel">
+        <div className="section-title-row compact">
+          <h3>생성 결과와 초안</h3>
+          <div className="approval-actions compact">
+            <button className="reject-button slim" onClick={() => void loadGenerationJobs()} type="button">
+              생성 결과 새로고침
+            </button>
+            <button className="reject-button slim" onClick={() => void loadDrafts()} type="button">
+              초안 새로고침
+            </button>
+          </div>
+        </div>
+
+        <div className="draft-input-grid">
+          <label className="field">
+            <span>Meta 광고 계정 ID</span>
+            <input
+              onChange={(event) => setDraftForm((current) => ({ ...current, adAccountId: event.target.value }))}
+              placeholder="act_..."
+              value={draftForm.adAccountId}
+            />
+          </label>
+          <label className="field">
+            <span>페이지 ID</span>
+            <input
+              onChange={(event) => setDraftForm((current) => ({ ...current, pageId: event.target.value }))}
+              placeholder="Meta Page ID"
+              value={draftForm.pageId}
+            />
+          </label>
+          <label className="field">
+            <span>랜딩 URL</span>
+            <input
+              onChange={(event) => setDraftForm((current) => ({ ...current, linkUrl: event.target.value }))}
+              placeholder="https://..."
+              type="url"
+              value={draftForm.linkUrl}
+            />
+          </label>
+          <label className="field">
+            <span>CTA</span>
+            <input
+              onChange={(event) => setDraftForm((current) => ({ ...current, callToActionType: event.target.value }))}
+              value={draftForm.callToActionType}
+            />
+          </label>
+        </div>
+        <div className="draft-input-grid">
+          <label className="field">
+            <span>본문</span>
+            <textarea
+              onChange={(event) => setDraftForm((current) => ({ ...current, primaryText: event.target.value }))}
+              placeholder="광고 본문"
+              value={draftForm.primaryText}
+            />
+          </label>
+          <label className="field">
+            <span>헤드라인</span>
+            <textarea
+              onChange={(event) => setDraftForm((current) => ({ ...current, headline: event.target.value }))}
+              placeholder="광고 헤드라인"
+              value={draftForm.headline}
+            />
+          </label>
+          <label className="field">
+            <span>설명</span>
+            <textarea
+              onChange={(event) => setDraftForm((current) => ({ ...current, description: event.target.value }))}
+              placeholder="광고 설명"
+              value={draftForm.description}
+            />
+          </label>
+        </div>
+
+        <div className="generated-asset-grid">
+          {generationJobs.length === 0 ? (
+            <div className="approval-empty" role="status">
+              <span>아직 이 브라우저에서 추적 중인 생성 작업이 없습니다.</span>
+            </div>
+          ) : null}
+          {generationJobs.map((job) => (
+            <article className="generated-job-card" key={job.id}>
+              <div>
+                <strong>{formatJobTitle(job)}</strong>
+                <small>{formatJobStatus(job.status)}</small>
+              </div>
+              <p>{formatJobSummary(job)}</p>
+              <div className="generated-asset-list">
+                {extractGeneratedAssets(job).map((asset) => (
+                  <div className="generated-asset-card" key={asset.id}>
+                    {asset.sourceUrl && asset.assetType !== "video" ? (
+                      <img alt="생성된 광고 소재 미리보기" src={asset.sourceUrl} />
+                    ) : (
+                      <div className="generated-asset-placeholder">{asset.assetType ?? "asset"}</div>
+                    )}
+                    <div>
+                      <strong>{formatGeneratedAssetLabel(asset)}</strong>
+                      <small>{asset.width ?? "?"} x {asset.height ?? "?"}</small>
+                      <button
+                        className="approve-button secondary"
+                        disabled={!canRequestDraft(draftForm) || draftStatus === "submitting"}
+                        onClick={() => void requestPausedDraft(asset)}
+                        type="button"
+                      >
+                        PAUSED 초안 승인 요청
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="generated-asset-grid">
+          {drafts.map((draft) => (
+            <article className="generated-job-card" key={draft.id}>
+              <div>
+                <strong>PAUSED 초안 {draft.metaAdId ?? draft.id}</strong>
+                <small>{draft.metaStatus}</small>
+              </div>
+              <p>검수 완료 후 개시하려면 여기서 ACTIVE 전환 승인 요청을 만들고 승인 센터에서 실행합니다. 예산 변경은 포함하지 않습니다.</p>
+              <button
+                className="approve-button"
+                disabled={draftStatus === "submitting" || draft.metaStatus !== "PAUSED" || !draft.metaAdId}
+                onClick={() => void requestPublishApproval(draft)}
+                type="button"
+              >
+                개시 승인 요청
+              </button>
+            </article>
+          ))}
+        </div>
+
+        <p className="settings-message">
+          {draftStatus !== "idle" ? getDecisionMessage(draftStatus, draftError, draftStatus) : null}
+          {jobStatus === "blocked" ? jobError : null}
+        </p>
+      </div>
     </section>
+  );
+}
+
+function ApprovalReasonSummary({
+  reason,
+  afterJson
+}: {
+  reason?: string;
+  afterJson?: Record<string, unknown>;
+}) {
+  const summary = summarizeApprovalReason(reason, afterJson);
+  return (
+    <div className="approval-reason-summary">
+      <div>
+        <span>왜 만들까요</span>
+        <strong>{summary.why}</strong>
+      </div>
+      <div>
+        <span>무엇을 유지하나요</span>
+        <strong>{summary.keep}</strong>
+      </div>
+      <div>
+        <span>무엇만 바꾸나요</span>
+        <strong>{summary.change}</strong>
+      </div>
+      <div>
+        <span>검수 기준</span>
+        <strong>{summary.qa}</strong>
+      </div>
+      <div>
+        <span>다음 단계</span>
+        <strong>{summary.next}</strong>
+      </div>
+      <div>
+        <span>자동화 경계</span>
+        <strong>{summary.boundary}</strong>
+      </div>
+    </div>
   );
 }
 
@@ -403,8 +783,90 @@ function readApprovalCreatedId(event: Event): string | undefined {
   return typeof detail.approvalId === "string" ? detail.approvalId : undefined;
 }
 
+function readGenerationJobQueuedId(event: Event): string | undefined {
+  if (!("detail" in event) || !event.detail || typeof event.detail !== "object") {
+    return undefined;
+  }
+  const detail = event.detail as { jobId?: unknown };
+  return typeof detail.jobId === "string" && detail.jobId.length > 0 ? detail.jobId : undefined;
+}
+
+function readStoredGenerationJobIds(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(GENERATION_JOB_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string").slice(0, 8) : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeGenerationJobId(jobId: string): string[] {
+  const nextIds = [jobId, ...readStoredGenerationJobIds().filter((value) => value !== jobId)].slice(0, 8);
+  try {
+    window.localStorage.setItem(GENERATION_JOB_STORAGE_KEY, JSON.stringify(nextIds));
+  } catch {
+    // Browser storage is optional; the current in-memory state still updates.
+  }
+  return nextIds;
+}
+
 function canQueueGeneration(item: ApprovalListItem): boolean {
   return item.approval.action === "ai_paid_generation" && item.approval.status === "approved";
+}
+
+function canRequestDraft(form: { adAccountId: string; pageId: string; linkUrl: string }): boolean {
+  return form.adAccountId.trim().length > 0 && form.pageId.trim().length > 0 && form.linkUrl.trim().length > 0;
+}
+
+function extractGeneratedAssets(job: GenerationJobSummary): GeneratedAssetSummary[] {
+  const resultAssets = readArray(readRecord(job.result)?.generatedAssets);
+  return resultAssets
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => ({
+      id: readStringField(item, "id") ?? readStringField(item, "assetId") ?? "generated-asset",
+      assetType: readStringField(item, "assetType"),
+      sourceUrl: readStringField(item, "sourceUrl"),
+      width: readNumberField(item, "width"),
+      height: readNumberField(item, "height"),
+      mimeType: readStringField(item, "mimeType"),
+      metadataJson: readRecord(item.metadataJson)
+    }));
+}
+
+function formatGeneratedAssetLabel(asset: GeneratedAssetSummary): string {
+  if (asset.assetType === "video") {
+    return "생성 영상 소재";
+  }
+  return "생성 이미지 소재";
+}
+
+function formatJobTitle(job: GenerationJobSummary): string {
+  if (job.type === "video_generation") {
+    return "영상 생성 작업";
+  }
+  return "이미지 생성 작업";
+}
+
+function formatJobStatus(status: string | undefined): string {
+  const labels: Record<string, string> = {
+    queued: "대기 중",
+    running: "생성 중",
+    succeeded: "완료",
+    failed: "실패"
+  };
+  return labels[status ?? ""] ?? status ?? "상태 확인 중";
+}
+
+function formatJobSummary(job: GenerationJobSummary): string {
+  const assets = extractGeneratedAssets(job);
+  if (assets.length > 0) {
+    return `${assets.length}개의 생성 소재가 저장됐습니다. 필요한 항목을 선택해 PAUSED 초안 승인 요청을 만들 수 있습니다.`;
+  }
+  if (job.status === "queued" || job.status === "running") {
+    return "worker가 provider 생성 결과를 저장하면 이 영역에 미리보기와 초안 등록 버튼이 표시됩니다.";
+  }
+  return "아직 저장된 생성 소재가 없습니다. worker 실행 상태와 provider 설정을 확인하세요.";
 }
 
 function formatApprovalTitle(item: ApprovalListItem): string {
@@ -445,6 +907,10 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function readStringField(value: unknown, key: string): string | undefined {
   const record = readRecord(value);
   const raw = record?.[key];
@@ -470,6 +936,63 @@ function readNumberField(value: unknown, key: string): number | undefined {
 
 function trimLabel(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function formatApprovalReasonBrief(reason: string | undefined): string {
+  const summary = summarizeApprovalReason(reason);
+  return `${summary.why} / ${summary.change}`;
+}
+
+function summarizeApprovalReason(reason: string | undefined, afterJson?: Record<string, unknown>) {
+  const text = reason ?? "";
+  const generationContext = readRecord(afterJson?.generationContext);
+  const prompt = readStringField(generationContext, "prompt");
+  const best = matchReason(text, /성과 근거:\s*([^\n]+)/);
+  const keep = matchReason(text, /유지:\s*([^\n]+)/);
+  const improve = matchReason(text, /개선:\s*([^\n]+)/);
+  const direction = matchReason(text, /생성 방향:\s*([^\n]+)/);
+  const product = matchReason(text, /상품 추출:\s*([^\n]+)/);
+  const abTest = matchReason(text, /A\/B 테스트 계획:\s*([^\n]+)/);
+
+  return {
+    why: simplifyReason(best) ?? "기존 성과 데이터를 근거로 새 소재 후보를 만들기 위한 요청입니다.",
+    keep: simplifyReason(keep) ?? "검증된 오퍼, 랜딩 URL, 타겟 맥락은 그대로 유지합니다.",
+    change: simplifyReason(direction ?? improve) ?? "소재 각도 한 가지만 바꾼 통제 변형을 만듭니다.",
+    qa: simplifyReason(product) ?? "생성 결과는 안전영역, 가격 정확성, 금지 문구, placement 호환성 검수 후 초안으로만 등록합니다.",
+    next:
+      simplifyReason(abTest) ??
+      "생성된 소재를 확인한 뒤 PAUSED 초안 승인 요청을 만들고, 개시는 별도 승인으로 진행합니다.",
+    boundary:
+      prompt && prompt.length > 0
+        ? `예산 변경 없음, 자동 ACTIVE 전환 없음, 승인 후 실행. 프롬프트: ${trimLabel(prompt, 90)}`
+        : "예산 변경 없음, 자동 ACTIVE 전환 없음, 모든 Meta write는 승인 후 실행."
+  };
+}
+
+function matchReason(text: string, pattern: RegExp): string | undefined {
+  const matched = text.match(pattern)?.[1]?.trim();
+  return matched && matched.length > 0 ? matched : undefined;
+}
+
+function simplifyReason(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value
+    .replaceAll("No high-risk bottleneck condition is currently detected.", "현재 고위험 병목은 감지되지 않았습니다.")
+    .replaceAll("Continue observation and prepare only controlled variants from stronger signals.", "관찰을 유지하고, 강한 신호에서만 통제 변형을 준비합니다.")
+    .replaceAll("Generate one upload-ready creative from the recommended brief.", "추천 브리프로 업로드 가능한 소재 1개를 만듭니다.")
+    .replaceAll("Run safe area, price accuracy, forbidden text, and placement compatibility checks.", "안전영역, 가격, 금지 문구, placement 호환성을 검사합니다.")
+    .replaceAll("Create a PAUSED Meta draft with the validated asset and existing campaign/ad set context.", "검수된 소재를 기존 캠페인/광고세트 맥락의 PAUSED 초안으로 등록합니다.")
+    .replaceAll("Route the draft through Approval Center before any publish or status change.", "게시나 상태 변경 전 승인센터를 거칩니다.")
+    .replaceAll("Monitor Meta insights and keep budget changes recommendation-only.", "성과는 모니터링하고 예산 변경은 추천만 합니다.")
+    .replaceAll("No budget mutation API is available.", "예산 변경 API는 없습니다.")
+    .replaceAll("No ACTIVE transition runs without explicit approval.", "명시 승인 없이는 ACTIVE 전환하지 않습니다.")
+    .replaceAll("No destructive action runs without the required approval policy.", "삭제/파괴적 작업은 필수 승인 없이는 실행하지 않습니다.")
+    .replaceAll("All Meta write execution must go through the single-writer Action Orchestrator.", "Meta 쓰기 작업은 단일 실행 경로만 사용합니다.")
+    .replaceAll("Generate asset only after paid AI approval; register Meta ads only as PAUSED drafts; ACTIVE requires separate approval.", "유료 AI 승인 후에만 생성하고, Meta 등록은 PAUSED 초안만 가능하며, ACTIVE는 별도 승인이 필요합니다.")
+    .replace(/\s*->\s*/g, " → ")
+    .trim();
 }
 
 function formatApiError(error: ApprovalListResponse["error"] | undefined, status: number): string {

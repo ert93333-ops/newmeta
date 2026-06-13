@@ -52,6 +52,25 @@ describe("Approval center panel", () => {
     expect(panelSource).not.toContain("/api/approvals/${selected.approval.id}/execute");
   });
 
+  it("shows generated assets, paused draft requests, and publish approval requests together", () => {
+    expect(panelSource).toContain("generation-results-panel");
+    expect(panelSource).toContain("/api/jobs/${jobId}");
+    expect(panelSource).toContain("/api/drafts/create-paused");
+    expect(panelSource).toContain("/api/drafts");
+    expect(panelSource).toContain("PAUSED 초안 승인 요청");
+    expect(panelSource).toContain("개시 승인 요청");
+    expect(panelSource).toContain('action: "meta_activate_ad"');
+  });
+
+  it("summarizes long approval reasons into operator-readable decision cards", () => {
+    expect(panelSource).toContain("ApprovalReasonSummary");
+    expect(panelSource).toContain("왜 만들까요");
+    expect(panelSource).toContain("무엇을 유지하나요");
+    expect(panelSource).toContain("무엇만 바꾸나요");
+    expect(panelSource).toContain("summarizeApprovalReason");
+    expect(panelSource).toContain("현재 고위험 병목은 감지되지 않았습니다.");
+  });
+
   it("labels paid generation approvals by media type and human-readable context", () => {
     expect(panelSource).toContain("formatApprovalTitle");
     expect(panelSource).toContain("이미지 소재 생성 승인");

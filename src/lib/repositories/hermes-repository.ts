@@ -268,6 +268,7 @@ export interface HermesRepository {
   saveIntegrationSettings(request: Request, settings: IntegrationSettingsRecord): Promise<IntegrationSettingsRecord>;
   saveAdDraft(request: Request, draft: AdDraftRecord): Promise<AdDraftRecord>;
   getAdDraft(request: Request, context: UserContext, id: string): Promise<AdDraftRecord | null>;
+  listAdDrafts(request: Request, context: UserContext, limit?: number): Promise<AdDraftRecord[]>;
   saveDataDeletionRequest(
     request: Request,
     deletionRequest: DataDeletionRequestRecord
@@ -610,6 +611,13 @@ export class MemoryHermesRepository implements HermesRepository {
       return null;
     }
     return draft;
+  }
+
+  async listAdDrafts(_request: Request, context: UserContext, limit = 20): Promise<AdDraftRecord[]> {
+    return Array.from(getMemoryStore().adDrafts.values())
+      .filter((draft) => draft.tenantId === context.tenantId)
+      .sort((left, right) => Date.parse(right.createdAt ?? "") - Date.parse(left.createdAt ?? ""))
+      .slice(0, limit);
   }
 
   async saveDataDeletionRequest(
@@ -1334,6 +1342,20 @@ export class SupabaseHermesRepository implements HermesRepository {
       .maybeSingle();
     if (error) throw new Error(`SUPABASE_AD_DRAFT_SELECT_FAILED:${error.message}`);
     return data ? fromAdDraftRow(data as AdDraftRow) : null;
+  }
+
+  async listAdDrafts(request: Request, context: UserContext, limit = 20): Promise<AdDraftRecord[]> {
+    const supabase = createRequestClient(request);
+    if (!supabase) return this.fallback.listAdDrafts(request, context, limit);
+
+    const { data, error } = await supabase
+      .from("ad_drafts")
+      .select("*")
+      .eq("tenant_id", context.tenantId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`SUPABASE_AD_DRAFT_LIST_FAILED:${error.message}`);
+    return (data ?? []).map((row) => fromAdDraftRow(row as AdDraftRow));
   }
 
   async saveDataDeletionRequest(

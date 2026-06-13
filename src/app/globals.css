@@ -1148,6 +1148,108 @@ textarea {
   gap: 10px;
 }
 
+.approval-actions.compact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.approval-reason-summary,
+.generation-results-panel,
+.generated-job-card,
+.generated-asset-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.approval-reason-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+}
+
+.approval-reason-summary div {
+  display: grid;
+  gap: 6px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.approval-reason-summary span,
+.generated-job-card small,
+.generated-asset-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.approval-reason-summary strong {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.generation-results-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.draft-input-grid,
+.generated-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.generated-job-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.generated-job-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.generated-asset-list {
+  display: grid;
+  gap: 10px;
+}
+
+.generated-asset-card {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  padding: 10px;
+}
+
+.generated-asset-card img,
+.generated-asset-placeholder {
+  width: 96px;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--panel-soft);
+}
+
+.generated-asset-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.generated-asset-card div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
 .approve-button {
   justify-content: center;
   border: 0;
@@ -1201,6 +1303,9 @@ textarea {
   .creative-reference-grid,
   .creative-rationale-grid,
   .creative-ops-plan,
+  .draft-input-grid,
+  .generated-asset-grid,
+  .approval-reason-summary,
   .checks,
   .approval-layout,
   .meta-connect-form,

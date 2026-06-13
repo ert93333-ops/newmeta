@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { approveRequest, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { POST as createPausedDraft } from "@/app/api/drafts/create-paused/route";
+import { GET as listPausedDrafts } from "@/app/api/drafts/route";
 import { MemoryHermesRepository } from "@/lib/repositories/hermes-repository";
 import { encryptToken } from "@/lib/security/token-crypto";
 import type { CreativeManifest, UserContext } from "@/lib/types";
@@ -310,6 +311,44 @@ describe("create paused draft route", () => {
     expect(storedDraft?.approvalRequestId).toBe(approval.id);
     expect(storedDraft?.metaCampaignId).toMatch(/^cmp_/);
     expect(storedApproval?.status).toBe("executed");
+  });
+
+  it("lists persisted paused drafts for the current tenant", async () => {
+    setMockEnv();
+    const repository = new MemoryHermesRepository();
+    await repository.saveAdDraft(request({}), {
+      id: "draft-list-visible",
+      tenantId,
+      createdBy: requester.userId,
+      adAccountId: "act_list",
+      assetId: "asset-list",
+      metaAdId: "ad_list_visible",
+      draftType: "ad",
+      metaStatus: "PAUSED",
+      preflightJson: {},
+      payloadJson: {
+        headline: "Visible draft"
+      }
+    });
+    await repository.saveAdDraft(request({}), {
+      id: "draft-list-hidden",
+      tenantId: "00000000-0000-0000-0000-000000000099",
+      createdBy: requester.userId,
+      adAccountId: "act_other",
+      assetId: "asset-hidden",
+      metaAdId: "ad_list_hidden",
+      draftType: "ad",
+      metaStatus: "PAUSED",
+      preflightJson: {},
+      payloadJson: {}
+    });
+
+    const response = await listPausedDrafts(request({}));
+    const body = (await response.json()) as { drafts?: Array<{ id: string; metaAdId?: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.drafts?.map((draft) => draft.id)).toContain("draft-list-visible");
+    expect(body.drafts?.map((draft) => draft.id)).not.toContain("draft-list-hidden");
   });
 
   it("does not allow the same paused-draft approval to be reused", async () => {
