@@ -59,6 +59,8 @@ type GenerationJobSummary = {
   type?: string;
   result?: Record<string, unknown>;
   input?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type DraftSummary = {
@@ -91,6 +93,20 @@ type ReadinessStatus = {
   reason: string;
 };
 
+type DraftFormState = {
+  adAccountId: string;
+  pageId: string;
+  linkUrl: string;
+  primaryText: string;
+  headline: string;
+  description: string;
+  callToActionType: string;
+};
+
+type DraftSuggestion = DraftFormState & {
+  summary: string;
+};
+
 const TENANT_STORAGE_KEY = "hermes:tenant-id";
 const GENERATION_JOB_STORAGE_KEY = "hermes:generation-job-ids";
 
@@ -111,7 +127,7 @@ export function ApprovalCenterPanel() {
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [draftStatus, setDraftStatus] = useState<DecisionStatus>("idle");
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [draftForm, setDraftForm] = useState({
+  const [draftForm, setDraftForm] = useState<DraftFormState>({
     adAccountId: "",
     pageId: "",
     linkUrl: "",
@@ -247,6 +263,25 @@ export function ApprovalCenterPanel() {
   const canReject = selected ? selected.approval.status === "pending" || selected.approval.status === "approved" : false;
   const canSubmitApproval = canApprove && isMatched && decisionStatus !== "submitting";
   const readiness = selected ? getReadinessStatus(selected) : null;
+  const hasActiveGenerationJob = generationJobs.some(isActiveGenerationJob);
+  const draftSuggestion = useMemo(
+    () => buildDraftSuggestion({ jobs: generationJobs, drafts, approvals }),
+    [approvals, drafts, generationJobs]
+  );
+
+  useEffect(() => {
+    setDraftForm((current) => mergeDraftSuggestion(current, draftSuggestion));
+  }, [draftSuggestion]);
+
+  useEffect(() => {
+    if (!hasActiveGenerationJob) {
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      void loadGenerationJobs();
+    }, 5_000);
+    return () => window.clearInterval(interval);
+  }, [hasActiveGenerationJob, loadGenerationJobs]);
 
   async function submitDecision(decision: "approve" | "reject") {
     if (!selected || decisionStatus === "submitting") {
@@ -659,6 +694,10 @@ export function ApprovalCenterPanel() {
             />
           </label>
         </div>
+        <div className="draft-autofill-note">
+          <strong>AI 추천 초안값</strong>
+          <span>{draftSuggestion.summary}</span>
+        </div>
 
         <div className="generated-asset-grid">
           {generationJobs.length === 0 ? (
@@ -672,6 +711,7 @@ export function ApprovalCenterPanel() {
                 <strong>{formatJobTitle(job)}</strong>
                 <small>{formatJobStatus(job.status)}</small>
               </div>
+              {isActiveGenerationJob(job) ? <GenerationProgress job={job} /> : null}
               <p>{formatJobSummary(job)}</p>
               <div className="generated-asset-list">
                 {extractGeneratedAssets(job).map((asset) => (
@@ -767,6 +807,23 @@ function ApprovalReasonSummary({
   );
 }
 
+function GenerationProgress({ job }: { job: GenerationJobSummary }) {
+  return (
+    <div className="generation-progress" role="status" aria-live="polite">
+      <div className="generation-progress-ring" aria-hidden="true">
+        <span />
+      </div>
+      <div>
+        <strong>{job.status === "queued" ? "대기열에서 생성 준비 중" : "AI provider에서 소재 생성 중"}</strong>
+        <small>
+          {job.id} · 자동 새로고침 중
+          {job.updatedAt || job.createdAt ? ` · 최근 확인 ${formatRelativeTime(job.updatedAt ?? job.createdAt)}` : ""}
+        </small>
+      </div>
+    </div>
+  );
+}
+
 function readTenantId(): string {
   try {
     return window.sessionStorage.getItem(TENANT_STORAGE_KEY) ?? window.localStorage.getItem(TENANT_STORAGE_KEY) ?? "";
@@ -816,6 +873,87 @@ function canQueueGeneration(item: ApprovalListItem): boolean {
 
 function canRequestDraft(form: { adAccountId: string; pageId: string; linkUrl: string }): boolean {
   return form.adAccountId.trim().length > 0 && form.pageId.trim().length > 0 && form.linkUrl.trim().length > 0;
+}
+
+function isActiveGenerationJob(job: GenerationJobSummary): boolean {
+  return job.status === "queued" || job.status === "running";
+}
+
+function buildDraftSuggestion(input: {
+  jobs: GenerationJobSummary[];
+  drafts: DraftSummary[];
+  approvals: ApprovalListItem[];
+}): DraftSuggestion {
+  const latestJob = input.jobs[0];
+  const latestDraft = input.drafts[0];
+  const latestApproval = input.approvals.find((item) => item.approval.action === "ai_paid_generation");
+  const jobContext = readRecord(latestJob?.input?.generationContext);
+  const productReference = readRecord(jobContext?.productReference ?? latestJob?.input?.productReference);
+  const productFacts = readRecord(productReference?.productFacts);
+  const prompt =
+    readStringField(jobContext, "prompt") ??
+    readStringField(latestJob?.input, "prompt") ??
+    readStringField(latestApproval?.approval.afterJson, "prompt");
+  const draftPayload = readRecord(latestDraft?.payloadJson);
+  const source = readRecord(productReference?.sources);
+  const productName =
+    readStringField(productFacts, "name") ??
+    readStringField(productFacts, "title") ??
+    readProductNameFromPrompt(prompt) ??
+    "추천 상품";
+  const description =
+    readStringField(productFacts, "description") ??
+    readStringField(draftPayload, "description") ??
+    "성과가 확인된 소재 맥락을 유지한 새 변형입니다.";
+  const linkUrl =
+    readStringField(draftPayload, "linkUrl") ??
+    readStringField(source, "canonicalUrl") ??
+    readStringField(source, "homepageUrl");
+  const adAccountId =
+    readStringField(draftPayload, "adAccountId") ??
+    readStringField(latestDraft, "adAccountId") ??
+    readStringField(latestJob?.input?.requestedInput, "adAccountId");
+  const pageId =
+    readStringField(draftPayload, "pageId") ??
+    readStringField(latestJob?.input?.requestedInput, "pageId") ??
+    readStringField(productReference, "pageId");
+
+  return {
+    adAccountId: adAccountId ?? "",
+    pageId: pageId ?? "",
+    linkUrl: linkUrl ?? "",
+    primaryText: trimLabel(`${productName}의 검증된 반응을 바탕으로 핵심 장점만 더 선명하게 보여드립니다. 지금 확인해보세요.`, 125),
+    headline: trimLabel(`${productName} 추천 혜택`, 40),
+    description: trimLabel(description, 90),
+    callToActionType: "SHOP_NOW",
+    summary: [
+      "본문/헤드라인/설명/CTA는 생성 컨텍스트와 상품 정보 기준으로 자동 채움",
+      adAccountId ? "광고 계정 ID 감지됨" : "광고 계정 ID는 실제 Meta 값 필요",
+      pageId ? "페이지 ID 감지됨" : "페이지 ID는 실제 Meta Page 값 필요",
+      linkUrl ? "랜딩 URL 감지됨" : "랜딩 URL은 상품 상세 URL 필요"
+    ].join(" · ")
+  };
+}
+
+function mergeDraftSuggestion(current: DraftFormState, suggestion: DraftSuggestion): DraftFormState {
+  return {
+    adAccountId: current.adAccountId.trim() ? current.adAccountId : suggestion.adAccountId,
+    pageId: current.pageId.trim() ? current.pageId : suggestion.pageId,
+    linkUrl: current.linkUrl.trim() ? current.linkUrl : suggestion.linkUrl,
+    primaryText: current.primaryText.trim() ? current.primaryText : suggestion.primaryText,
+    headline: current.headline.trim() ? current.headline : suggestion.headline,
+    description: current.description.trim() ? current.description : suggestion.description,
+    callToActionType: current.callToActionType.trim() ? current.callToActionType : suggestion.callToActionType
+  };
+}
+
+function readProductNameFromPrompt(prompt: string | undefined): string | undefined {
+  if (!prompt) {
+    return undefined;
+  }
+  const match = prompt.match(/based on\s+([^.]+)|기반으로\s+([^.]+)|상품[:\s]+([^.]+)/i);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  return value ? trimLabel(value.trim(), 35) : undefined;
 }
 
 function extractGeneratedAssets(job: GenerationJobSummary): GeneratedAssetSummary[] {
@@ -1071,6 +1209,25 @@ function formatDate(value: string | undefined): string {
     return value;
   }
   return date.toISOString();
+}
+
+function formatRelativeTime(value: string | undefined): string {
+  if (!value) {
+    return "방금 전";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) {
+    return `${seconds}초 전`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}분 전`;
+  }
+  return date.toLocaleString("ko-KR");
 }
 
 function getLoadMessage(status: LoadStatus, error: string | null): string {

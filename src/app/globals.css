@@ -1339,6 +1339,86 @@ textarea {
   line-height: 1.5;
 }
 
+.draft-autofill-note,
+.generation-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 12px;
+}
+
+.draft-autofill-note {
+  justify-content: space-between;
+}
+
+.draft-autofill-note span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.generation-progress {
+  position: relative;
+  overflow: hidden;
+}
+
+.generation-progress::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: generation-progress-sweep 1.4s linear infinite;
+}
+
+.generation-progress-ring {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.generation-progress-ring span {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #93c5fd;
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: generation-spin 0.85s linear infinite;
+}
+
+.generation-progress div:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.generation-progress small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@keyframes generation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes generation-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .generated-asset-list {
   display: grid;
   gap: 10px;
@@ -1450,6 +1530,14 @@ textarea {
   .settings-toolbar,
   .settings-actions {
     display: grid;
+  }
+
+  .draft-autofill-note {
+    display: grid;
+  }
+
+  .draft-autofill-note span {
+    text-align: left;
   }
 
   .meta-connect-button,

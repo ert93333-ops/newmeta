@@ -57,9 +57,20 @@ describe("Approval center panel", () => {
     expect(panelSource).toContain("/api/jobs/${jobId}");
     expect(panelSource).toContain("/api/drafts/create-paused");
     expect(panelSource).toContain("/api/drafts");
+    expect(panelSource).toContain("GenerationProgress");
+    expect(panelSource).toContain("isActiveGenerationJob");
+    expect(panelSource).toContain("window.setInterval");
     expect(panelSource).toContain("PAUSED 초안 승인 요청");
     expect(panelSource).toContain("개시 승인 요청");
     expect(panelSource).toContain('action: "meta_activate_ad"');
+  });
+
+  it("auto-fills draft copy from generation context without overwriting operator input", () => {
+    expect(panelSource).toContain("buildDraftSuggestion");
+    expect(panelSource).toContain("mergeDraftSuggestion");
+    expect(panelSource).toContain("AI 추천 초안값");
+    expect(panelSource).toContain("본문/헤드라인/설명/CTA는 생성 컨텍스트와 상품 정보 기준으로 자동 채움");
+    expect(panelSource).toContain("current.primaryText.trim() ? current.primaryText : suggestion.primaryText");
   });
 
   it("summarizes long approval reasons into operator-readable decision cards", () => {
