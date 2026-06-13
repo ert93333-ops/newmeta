@@ -32,11 +32,12 @@ describe("Creative generation panel", () => {
   });
 
   it("shows existing creative performance rationale before approval", () => {
-    expect(panelSource).toContain("추천 기반 소재 방향");
-    expect(panelSource).toContain("가장 좋은 신호");
+    expect(panelSource).toContain("추천 방향 확인");
+    expect(panelSource).toContain("성과 기준");
     expect(panelSource).toContain("유지할 요소");
     expect(panelSource).toContain("개선할 요소");
     expect(panelSource).toContain("생성 방향");
+    expect(panelSource).toContain("운영 및 테스트 세부 기준");
     expect(panelSource).toContain("buildCreativeRationale");
   });
 
@@ -46,7 +47,8 @@ describe("Creative generation panel", () => {
     expect(panelSource).toContain("등록 흐름");
     expect(panelSource).toContain("A/B 테스트");
     expect(panelSource).toContain("자동화 경계");
-    expect(panelSource).toContain("추천안으로 승인 요청");
+    expect(panelSource).toContain("추천안으로 생성 승인 요청");
+    expect(panelSource).toContain("추천안으로 바로 생성 가능");
     expect(panelSource).toContain("placeholder={rationale.recommendedPrompt}");
     expect(panelSource).toContain("prompt.trim() || rationale.recommendedPrompt");
     expect(panelSource).toContain("등록 메커니즘");
@@ -59,6 +61,8 @@ describe("Creative generation panel", () => {
     expect(panelSource).toContain("/api/product-references/extract");
     expect(panelSource).toContain("상품 정보 추출");
     expect(panelSource).toContain("productExtraction");
+    expect(panelSource).toContain("formatProductReferenceError");
+    expect(panelSource).toContain("PRODUCT_REFERENCE_CONTENT_TOO_LARGE");
     expect(panelSource).toContain("ProductReferenceExtraction");
     expect(panelSource).toContain("buildProductReference");
     expect(panelSource).toContain("상품만 주 피사체로 추출");

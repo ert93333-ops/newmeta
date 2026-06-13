@@ -113,6 +113,7 @@ interface ProductReferenceExtractResponse {
   extraction?: ProductReferenceExtraction;
   error?: {
     code?: string;
+    message?: string;
   };
 }
 
@@ -177,7 +178,7 @@ export function CreativeGenerationPanel() {
     });
     const body = (await response.json()) as ProductReferenceExtractResponse;
     if (!response.ok || !body.extraction) {
-      setExtractionStatus(body.error?.code ?? `HTTP_${response.status}`);
+      setExtractionStatus(formatProductReferenceError(body.error?.code, body.error?.message, response.status));
       return;
     }
     setProductExtraction(body.extraction);
@@ -242,134 +243,170 @@ export function CreativeGenerationPanel() {
         <div>
           <h2>광고 소재 생성</h2>
           <p>
-            Hermes가 추천 브리프나 상품 참고 자료를 바탕으로 소재 생성 승인 요청을 만들고, 등록과 A/B 테스트는 PAUSED
-            초안 및 승인 흐름 안에서 관리합니다.
+            추천안, 상품 이미지, 홈페이지 정보를 묶어 생성 승인 요청까지 한 번에 준비합니다. 실제 생성과 Meta 등록은
+            승인 흐름 안에서만 진행됩니다.
           </p>
         </div>
-        <div className="settings-context">
-          <span>제공자 URL</span>
-          <strong>{selectedProvider.endpointUrl || "사용자 지정 URL 필요"}</strong>
-          <small>키는 서버 설정에 암호화되어 저장됩니다.</small>
+        <div className="creative-provider-chip">
+          <span>선택 제공자</span>
+          <strong>{selectedProvider.label}</strong>
+          <small>{selectedProvider.endpointUrl || "사용자 지정 URL 필요"}</small>
         </div>
       </div>
 
       <form className="creative-request-card" onSubmit={submitGenerationRequest}>
-        <div className="creative-analysis-card">
-          <div className="section-title-row compact">
-            <h3>
-              <BarChart3 aria-hidden="true" size={18} />
-              추천 기반 소재 방향
-            </h3>
+        <section className="creative-step">
+          <div className="creative-step-head">
+            <span>1</span>
+            <div>
+              <h3>
+                <BarChart3 aria-hidden="true" size={18} />
+                추천 방향 확인
+              </h3>
+              <p>성과 신호를 기준으로 오늘 생성할 소재의 방향만 먼저 정리합니다.</p>
+            </div>
+          </div>
+          <div className="creative-brief-strip">
+            <RationaleBlock title="성과 기준" text={rationale.bestSignal} />
+            <RationaleBlock title="생성 방향" text={rationale.generationDirection} />
+          </div>
+          <details className="creative-detail-panel">
+            <summary>운영 및 테스트 세부 기준</summary>
+            <div className="creative-detail-grid">
+              <RationaleBlock title="유지할 요소" text={rationale.positiveReason} />
+              <RationaleBlock title="개선할 요소" text={rationale.negativeReason} />
+              <RationaleBlock title="추천 프롬프트" text={requestPrompt} />
+              <RationaleBlock title="상품 추출" text={rationale.productExtractionPlan} />
+              <RationaleBlock title="등록 흐름" text={rationale.operationPlan} />
+              <RationaleBlock title="A/B 테스트" text={rationale.abTestPlan} />
+              <RationaleBlock title="자동화 경계" text={rationale.automationBoundary} />
+            </div>
+          </details>
+          <div className="creative-status-row">
+            <p className="muted">{analysisStatus}</p>
             <button className="reject-button slim" onClick={() => void loadCreativeContext()} type="button">
               <RefreshCw aria-hidden="true" size={14} />
               새로고침
             </button>
           </div>
-          <div className="creative-rationale-grid">
-            <RationaleBlock title="가장 좋은 신호" text={rationale.bestSignal} />
-            <RationaleBlock title="유지할 요소" text={rationale.positiveReason} />
-            <RationaleBlock title="개선할 요소" text={rationale.negativeReason} />
-            <RationaleBlock title="생성 방향" text={rationale.generationDirection} />
+        </section>
+
+        <section className="creative-step">
+          <div className="creative-step-head">
+            <span>2</span>
+            <div>
+              <h3>
+                <Search aria-hidden="true" size={18} />
+                상품 참고 자료
+              </h3>
+              <p>이미지나 홈페이지 링크가 있으면 상품만 분리해 변형 소재에 반영합니다.</p>
+            </div>
           </div>
-          <div className="creative-ops-plan">
-            <RationaleBlock title="추천 프롬프트" text={requestPrompt} />
-            <RationaleBlock title="상품 추출" text={rationale.productExtractionPlan} />
-            <RationaleBlock title="등록 흐름" text={rationale.operationPlan} />
-            <RationaleBlock title="A/B 테스트" text={rationale.abTestPlan} />
-            <RationaleBlock title="자동화 경계" text={rationale.automationBoundary} />
+          <div className="creative-reference-grid">
+            <label className="field">
+              <span>참고 상품 이미지 URL</span>
+              <input
+                onChange={(event) => setProductImageUrl(event.target.value)}
+                placeholder="https://example.com/product-image.jpg"
+                type="url"
+                value={productImageUrl}
+              />
+            </label>
+            <label className="field">
+              <span>상품 홈페이지 URL</span>
+              <input
+                onChange={(event) => setHomepageUrl(event.target.value)}
+                placeholder="https://example.com/product"
+                type="url"
+                value={homepageUrl}
+              />
+            </label>
           </div>
-          <p className="muted">{analysisStatus}</p>
-        </div>
+          <div className="creative-reference-actions">
+            <button
+              className="reject-button slim"
+              disabled={!normalizeOptionalUrl(productImageUrl) && !normalizeOptionalUrl(homepageUrl)}
+              onClick={() => void extractProductReferences()}
+              type="button"
+            >
+              <Search aria-hidden="true" size={14} />
+              상품 정보 추출
+            </button>
+            <span>{extractionStatus}</span>
+          </div>
+        </section>
 
-        <div className="creative-mode-grid">
-          <button
-            className={`creative-mode ${operationType === "image_generation" ? "selected" : ""}`}
-            onClick={() => setOperationType("image_generation")}
-            type="button"
-          >
-            <ImagePlus aria-hidden="true" size={18} />
-            <span>이미지 소재</span>
-          </button>
-          <button
-            className={`creative-mode ${operationType === "video_generation" ? "selected" : ""}`}
-            onClick={() => setOperationType("video_generation")}
-            type="button"
-          >
-            <Video aria-hidden="true" size={18} />
-            <span>영상 소재</span>
-          </button>
-        </div>
+        <section className="creative-step">
+          <div className="creative-step-head">
+            <span>3</span>
+            <div>
+              <h3>
+                <WandSparkles aria-hidden="true" size={18} />
+                생성 설정
+              </h3>
+              <p>프롬프트를 비워두면 추천안으로 바로 승인 요청을 만듭니다.</p>
+            </div>
+          </div>
+          <div className="creative-mode-grid">
+            <button
+              className={`creative-mode ${operationType === "image_generation" ? "selected" : ""}`}
+              onClick={() => setOperationType("image_generation")}
+              type="button"
+            >
+              <ImagePlus aria-hidden="true" size={18} />
+              <span>이미지 소재</span>
+            </button>
+            <button
+              className={`creative-mode ${operationType === "video_generation" ? "selected" : ""}`}
+              onClick={() => setOperationType("video_generation")}
+              type="button"
+            >
+              <Video aria-hidden="true" size={18} />
+              <span>영상 소재</span>
+            </button>
+          </div>
 
-        <div className="settings-grid">
+          <div className="settings-grid">
+            <label className="field">
+              <span>생성 제공자</span>
+              <select value={providerName} onChange={(event) => setProviderName(event.target.value as ProviderName)}>
+                {PROVIDERS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>생성 개수</span>
+              <input
+                max="6"
+                min="1"
+                onChange={(event) => setVariantCount(readVariantCount(event.target.value))}
+                type="number"
+                value={variantCount}
+              />
+            </label>
+          </div>
+
           <label className="field">
-            <span>생성 제공자</span>
-            <select value={providerName} onChange={(event) => setProviderName(event.target.value as ProviderName)}>
-              {PROVIDERS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>생성 개수</span>
-            <input
-              max="6"
-              min="1"
-              onChange={(event) => setVariantCount(readVariantCount(event.target.value))}
-              type="number"
-              value={variantCount}
+            <span>직접 입력 프롬프트</span>
+            <textarea
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder={rationale.recommendedPrompt}
+              value={prompt}
             />
           </label>
-        </div>
+        </section>
 
-        <div className="creative-reference-grid">
-          <label className="field">
-            <span>참고 상품 이미지 URL</span>
-            <input
-              onChange={(event) => setProductImageUrl(event.target.value)}
-              placeholder="https://example.com/product-image.jpg"
-              type="url"
-              value={productImageUrl}
-            />
-          </label>
-          <label className="field">
-            <span>상품 홈페이지 URL</span>
-            <input
-              onChange={(event) => setHomepageUrl(event.target.value)}
-              placeholder="https://example.com/product"
-              type="url"
-              value={homepageUrl}
-            />
-          </label>
-        </div>
-
-        <div className="creative-reference-actions">
-          <button
-            className="reject-button slim"
-            disabled={!normalizeOptionalUrl(productImageUrl) && !normalizeOptionalUrl(homepageUrl)}
-            onClick={() => void extractProductReferences()}
-            type="button"
-          >
-            <Search aria-hidden="true" size={14} />
-            상품 정보 추출
-          </button>
-          <span>{extractionStatus}</span>
-        </div>
-
-        <label className="field">
-          <span>선택 입력 프롬프트</span>
-          <textarea
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={rationale.recommendedPrompt}
-            value={prompt}
-          />
-        </label>
-
-        <div className="creative-actions">
+        <div className="creative-submit-bar">
+          <div>
+            <strong>{prompt.trim() ? "직접 입력한 프롬프트로 준비됨" : "추천안으로 바로 생성 가능"}</strong>
+            <span>{status}</span>
+          </div>
           <button className="approve-button" disabled={!requestPrompt.trim()} type="submit">
             <WandSparkles aria-hidden="true" size={16} />
-            {prompt.trim() ? "생성 승인 요청" : "추천안으로 승인 요청"}
+            {prompt.trim() ? "입력 프롬프트로 승인 요청" : "추천안으로 생성 승인 요청"}
           </button>
           {approvalId ? (
             <a className="meta-oauth-link secondary" href="#approval-center">
@@ -378,7 +415,6 @@ export function CreativeGenerationPanel() {
             </a>
           ) : null}
         </div>
-        <p className="settings-message">{status}</p>
       </form>
     </section>
   );
@@ -602,6 +638,23 @@ function normalizeOptionalUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function formatProductReferenceError(code: string | undefined, message: string | undefined, status: number): string {
+  const fallback = message ?? `HTTP_${status}`;
+  const labels: Record<string, string> = {
+    PRODUCT_REFERENCE_CONTENT_TOO_LARGE:
+      "상품 페이지가 너무 커서 전체를 읽을 수 없습니다. 상품 이미지 URL을 함께 넣거나 상품 상세 URL을 더 직접적인 주소로 바꿔주세요.",
+    PRODUCT_REFERENCE_CONTENT_TYPE_UNSUPPORTED:
+      "상품 홈페이지가 HTML 페이지로 응답하지 않습니다. 브라우저에서 열리는 상품 상세 페이지 URL을 넣어주세요.",
+    PRODUCT_REFERENCE_FETCH_FAILED:
+      "상품 홈페이지를 불러오지 못했습니다. 공개 접근 가능한 상품 상세 URL인지 확인해주세요.",
+    PRODUCT_REFERENCE_PAYLOAD_INVALID:
+      "상품 이미지 URL 또는 상품 홈페이지 URL을 http/https 주소로 입력해주세요.",
+    AUTH_REQUIRED: "로그인이 필요합니다.",
+    SUPABASE_AUTH_REQUIRED: "로그인이 필요합니다."
+  };
+  return code ? (labels[code] ?? `${code}: ${fallback}`) : fallback;
 }
 
 function readVariantCount(value: string): number {

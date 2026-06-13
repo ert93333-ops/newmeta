@@ -8,7 +8,7 @@ import {
   type ProductReferenceInput
 } from "@/lib/product-references/extractor";
 
-const MAX_HOMEPAGE_BYTES = 250_000;
+const MAX_HOMEPAGE_EXTRACT_BYTES = 500_000;
 const FETCH_TIMEOUT_MS = 5_000;
 
 interface ProductReferenceRequest {
@@ -92,10 +92,6 @@ async function fetchHomepageHtml(homepageUrl: string): Promise<string> {
     if (contentType && !contentType.toLowerCase().includes("text/html")) {
       throw new Error("PRODUCT_REFERENCE_CONTENT_TYPE_UNSUPPORTED");
     }
-    const contentLength = Number(response.headers.get("content-length") ?? "0");
-    if (contentLength > MAX_HOMEPAGE_BYTES) {
-      throw new Error("PRODUCT_REFERENCE_CONTENT_TOO_LARGE");
-    }
     return await readLimitedText(response);
   } finally {
     clearTimeout(timeout);
@@ -116,10 +112,17 @@ async function readLimitedText(response: Response): Promise<string> {
     if (done) {
       return text + decoder.decode();
     }
-    bytes += value.byteLength;
-    if (bytes > MAX_HOMEPAGE_BYTES) {
-      throw new Error("PRODUCT_REFERENCE_CONTENT_TOO_LARGE");
+    const remainingBytes = MAX_HOMEPAGE_EXTRACT_BYTES - bytes;
+    if (remainingBytes <= 0) {
+      await reader.cancel();
+      return text + decoder.decode();
     }
+    if (value.byteLength > remainingBytes) {
+      text += decoder.decode(value.slice(0, remainingBytes));
+      await reader.cancel();
+      return text;
+    }
+    bytes += value.byteLength;
     text += decoder.decode(value, { stream: true });
   }
 }

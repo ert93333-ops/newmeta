@@ -146,4 +146,43 @@ describe("product reference extraction route", () => {
     expect(extraction.rawHtml).toBeUndefined();
     expect(JSON.stringify(body)).not.toContain("<title>");
   });
+
+  it("extracts from oversized homepages by reading only the capped prefix", async () => {
+    setMockEnv();
+    const largeTail = "x".repeat(600_000);
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        `<!doctype html>
+        <title>Large Product Page</title>
+        <meta name="description" content="Metadata near the top should still be usable." />
+        ${largeTail}`,
+        {
+          status: 200,
+          headers: {
+            "content-type": "text/html",
+            "content-length": "700000"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const response = await extractProductReferenceRoute(
+      request({
+        homepageUrl: "https://shop.example.com/large-product"
+      })
+    );
+    const body = await json(response);
+    const extraction = body.extraction as {
+      productFacts?: Record<string, unknown>;
+      rawHtml?: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(extraction.productFacts).toMatchObject({
+      title: "Large Product Page",
+      description: "Metadata near the top should still be usable."
+    });
+    expect(extraction.rawHtml).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain(largeTail);
+  });
 });
