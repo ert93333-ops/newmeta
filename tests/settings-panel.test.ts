@@ -12,6 +12,8 @@ describe("Settings panel", () => {
     expect(panelSource).toContain("/api/settings/ai-ops-permissions");
     expect(panelSource).toContain("/api/settings/provider-credentials");
     expect(panelSource).toContain("/api/settings/${encodeURIComponent(cost.providerName)}");
+    expect(panelSource).toContain("referenceDailyAdBudgetKrw");
+    expect(panelSource).toContain("일 광고 예산 기준");
     expect(panelSource).toContain("https://api.openai.com/v1");
     expect(panelSource).toContain("https://api.anthropic.com/v1");
     expect(panelSource).toContain("https://api.higgsfield.ai/v1");
@@ -36,6 +38,7 @@ describe("Settings panel", () => {
     expect(panelSource).not.toContain("console.");
     expect(panelSource).not.toContain('sessionStorage.setItem("access_token"');
     expect(panelSource).not.toMatch(/daily_budget|lifetime_budget|BUDGET_MUTATION/);
+    expect(panelSource).toContain("추천/AI 비용 한도 계산 전용");
     expect(panelSource).not.toContain("/api/meta/");
     expect(pageSource).toContain("SettingsPanel");
   });

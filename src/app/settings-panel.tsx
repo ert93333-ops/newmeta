@@ -69,6 +69,7 @@ type OpsPolicyForm = {
 
 type CostForm = {
   providerName: string;
+  referenceDailyAdBudgetKrw: string;
   dailyCostCapKrw: string;
   hardDailyCapKrw: string;
   monthlyCostCapKrw: string;
@@ -91,6 +92,7 @@ const DEFAULT_POLICY: OpsPolicyForm = {
 
 const DEFAULT_COST: CostForm = {
   providerName: "openai",
+  referenceDailyAdBudgetKrw: "50000",
   dailyCostCapKrw: "5000",
   hardDailyCapKrw: "7500",
   monthlyCostCapKrw: "100000",
@@ -370,6 +372,7 @@ export function SettingsPanel() {
               </select>
             </label>
             <NumberField label="일일 비용 한도" value={cost.dailyCostCapKrw} onChange={(value) => setCost((current) => ({ ...current, dailyCostCapKrw: value }))} />
+            <NumberField label="일 광고 예산 기준" value={cost.referenceDailyAdBudgetKrw} onChange={(value) => setCost((current) => ({ ...current, referenceDailyAdBudgetKrw: value }))} />
             <NumberField label="일일 하드 한도" value={cost.hardDailyCapKrw} onChange={(value) => setCost((current) => ({ ...current, hardDailyCapKrw: value }))} />
             <NumberField label="월간 비용 한도" value={cost.monthlyCostCapKrw} onChange={(value) => setCost((current) => ({ ...current, monthlyCostCapKrw: value }))} />
             <NumberField label="이미지 생성 단가" value={cost.imageGenerationCreditCost} onChange={(value) => setCost((current) => ({ ...current, imageGenerationCreditCost: value }))} />
@@ -404,6 +407,10 @@ export function SettingsPanel() {
             <div className="safety-row">
               <span>예산 변경 실행 경로</span>
               <strong className="good-text">없음</strong>
+            </div>
+            <div className="safety-row">
+              <span>일 광고 예산 설정</span>
+              <strong>추천/AI 비용 한도 계산 전용</strong>
             </div>
           </div>
           <p className="settings-message">{status}</p>
@@ -512,6 +519,7 @@ function normalizeCost(value: Record<string, unknown> | null | undefined): Parti
   if (!value) return {};
   return {
     providerName: readString(value.providerName, DEFAULT_COST.providerName),
+    referenceDailyAdBudgetKrw: readNumberString(value.referenceDailyAdBudgetKrw, DEFAULT_COST.referenceDailyAdBudgetKrw),
     dailyCostCapKrw: readNumberString(value.dailyCostCapKrw, DEFAULT_COST.dailyCostCapKrw),
     hardDailyCapKrw: readNumberString(value.hardDailyCapKrw, DEFAULT_COST.hardDailyCapKrw),
     monthlyCostCapKrw: readNumberString(value.monthlyCostCapKrw, DEFAULT_COST.monthlyCostCapKrw),
@@ -538,6 +546,7 @@ function toPolicyPayload(form: OpsPolicyForm): Record<string, unknown> {
 function toCostPayload(form: CostForm): Record<string, unknown> {
   return {
     providerName: form.providerName,
+    referenceDailyAdBudgetKrw: readOptionalNumber(form.referenceDailyAdBudgetKrw),
     dailyCostCapKrw: readOptionalNumber(form.dailyCostCapKrw),
     hardDailyCapKrw: readOptionalNumber(form.hardDailyCapKrw),
     monthlyCostCapKrw: readOptionalNumber(form.monthlyCostCapKrw),

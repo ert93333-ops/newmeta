@@ -14,13 +14,15 @@ Settings:
 - image/video/analysis credit costs
 - daily and monthly caps
 - exchange rate
-- reference daily ad budget
+- reference daily ad budget for recommendation and AI cost-guard math only
 
 Default policy for a 50,000원/day ad budget:
 
 - default AI cap: 5,000원/day
 - hard cap: 7,500원/day
 - effective cap: `min(user cap, hard cap, reference ad budget * 10%)`
+
+The UI field `referenceDailyAdBudgetKrw` is not a Meta budget mutation setting. It is a local policy number used to size AI generation spend limits and budget recommendation text only.
 
 Approval required:
 
