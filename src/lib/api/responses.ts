@@ -232,8 +232,25 @@ export function handleError(error: unknown): NextResponse {
     if (error.message === "PAID_VARIANT_DESIGN_NOT_CONFIGURED") {
       return fail(error.message, "Paid variant design execution is not configured.", 501);
     }
+    if (error.message === "PRODUCT_REFERENCE_CONTENT_TYPE_UNSUPPORTED") {
+      return fail(error.message, "Product homepage must return HTML content.", 415);
+    }
+    if (error.message === "PRODUCT_REFERENCE_CONTENT_TOO_LARGE") {
+      return fail(error.message, "Product homepage HTML is too large to extract safely.", 413);
+    }
+    if (error.message.startsWith("PRODUCT_REFERENCE_FETCH_FAILED:")) {
+      return fail("PRODUCT_REFERENCE_FETCH_FAILED", "Product homepage could not be fetched.", 502, {
+        status: error.message.split(":").at(-1)
+      });
+    }
     if (error.message === "APPROVAL_REQUEST_ID_REQUIRED") {
       return fail(error.message, "Approval request id is required.", 400);
+    }
+    if (error.message === "SELF_APPROVAL_NOT_ALLOWED") {
+      return fail(error.message, "본인이 요청한 고위험 승인 요청은 직접 승인할 수 없습니다.", 403);
+    }
+    if (error.message === "APPROVAL_NOT_PENDING") {
+      return fail(error.message, "승인 요청이 더 이상 대기 상태가 아닙니다.", 409);
     }
     if (error.message === "APPROVAL_ACTION_UNSUPPORTED") {
       return fail(error.message, "Approval action is not supported.", 400);

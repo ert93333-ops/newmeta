@@ -9,6 +9,7 @@ export interface ApprovalPolicy {
   minimumRequesterRole: "owner" | "admin" | "marketer" | "analyst" | "viewer";
   executorRole: "owner" | "admin" | "marketer" | "analyst" | "viewer";
   requiresSecondApproval: boolean;
+  allowSelfApproval?: boolean;
 }
 
 export interface ApprovalConfirmationOptions {
@@ -149,7 +150,8 @@ const POLICIES: Record<ApprovalAction, ApprovalPolicy> = {
     riskLevel: "draft",
     minimumRequesterRole: "marketer",
     executorRole: "marketer",
-    requiresSecondApproval: false
+    requiresSecondApproval: false,
+    allowSelfApproval: true
   }
 };
 
@@ -267,7 +269,7 @@ export function approveRequest(
     throw new Error("APPROVAL_NOT_PENDING");
   }
   assertApprovalNotExpired(request);
-  if (request.requestedBy === approver.userId) {
+  if (!policy.allowSelfApproval && request.requestedBy === approver.userId) {
     throw new Error("SELF_APPROVAL_NOT_ALLOWED");
   }
 

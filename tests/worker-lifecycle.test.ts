@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { processClaimedCreativeJob, readWorkerRuntimeEnv, runWorkerOnce } from "../worker/hermes-worker";
+import { persistGeneratedAssets, processClaimedCreativeJob, readWorkerRuntimeEnv, runWorkerOnce } from "../worker/hermes-worker";
 
 function fakeClientFor(job: Record<string, unknown> | undefined, terminalStatus: "succeeded" | "queued" | "failed") {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
@@ -276,6 +276,83 @@ describe("Hermes worker lifecycle", () => {
       "00000000-0000-0000-0000-000000000777",
       "succeeded"
     ]);
+  });
+
+  it("persists generated provider asset URLs as creative assets before completing paid jobs", async () => {
+    const { client, queries } = fakeClientFor(
+      {
+        id: "00000000-0000-0000-0000-000000000555",
+        tenant_id: "00000000-0000-0000-0000-000000000001",
+        created_by: "00000000-0000-0000-0000-000000000010",
+        job_type: "image_generation",
+        input_json: {
+          operation: "ai_paid_generation",
+          operationType: "image_generation",
+          approvalRequestId: "00000000-0000-0000-0000-000000000999",
+          generationContext: {
+            productReference: {
+              generationInstruction: "Extract the product only as the hero subject."
+            }
+          },
+          costUsageRelatedJobId: "00000000-0000-0000-0000-000000000999",
+          cost: {
+            provider: "mock-ai",
+            model: "mock-generation",
+            operationType: "image_generation",
+            estimatedCredits: 5,
+            estimatedCostKrw: 500,
+            relatedJobId: "00000000-0000-0000-0000-000000000999"
+          }
+        }
+      },
+      "succeeded"
+    );
+
+    const result = await persistGeneratedAssets(
+      client,
+      {
+        id: "00000000-0000-0000-0000-000000000555",
+        tenant_id: "00000000-0000-0000-0000-000000000001",
+        created_by: "00000000-0000-0000-0000-000000000010",
+        job_type: "image_generation",
+        input_json: {
+          operation: "ai_paid_generation",
+          approvalRequestId: "00000000-0000-0000-0000-000000000999",
+          generationContext: {
+            productReference: {
+              generationInstruction: "Extract the product only as the hero subject."
+            }
+          }
+        }
+      },
+      {
+        provider: "generic_http",
+        providerResult: {
+          assetUrl: "https://cdn.example.com/generated-a.png"
+        }
+      },
+      "succeeded"
+    );
+
+    const assetInsert = queries.find((query) => query.sql.includes("insert into public.creative_assets"));
+
+    expect(assetInsert?.params?.[0]).toEqual(expect.any(String));
+    expect(assetInsert?.params?.[3]).toBe("image");
+    expect(assetInsert?.params?.[4]).toBe("https://cdn.example.com/generated-a.png");
+    expect(result.generatedAssets).toEqual([
+      expect.objectContaining({
+        assetType: "image",
+        sourceUrl: "https://cdn.example.com/generated-a.png",
+        metadataJson: expect.objectContaining({
+          registrationMode: "paused_draft_after_qa",
+          draftRoute: "/api/drafts/create-paused"
+        })
+      })
+    ]);
+    expect(result.draftRegistration).toMatchObject({
+      route: "/api/drafts/create-paused",
+      requiresDraftApproval: true
+    });
   });
 
   it("routes worker failures through the private retry/fail DB function", async () => {

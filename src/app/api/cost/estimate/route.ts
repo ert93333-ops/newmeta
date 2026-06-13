@@ -1,6 +1,7 @@
 import { approvalGuardDetails, createApprovalRequest } from "@/lib/approval/approval-policy";
 import { estimateOperationCredits, guardCost } from "@/lib/guards/cost-guard";
 import { handleError, ok, parseWriteJson } from "@/lib/api/responses";
+import { normalizePaidGenerationContext } from "@/lib/generation/generation-context";
 import type { CostEstimateInput } from "@/lib/types";
 import { resolveUserContext } from "@/lib/api/context";
 import { costUsageFromEstimate, getRepository } from "@/lib/repositories/hermes-repository";
@@ -11,6 +12,7 @@ interface CostEstimateRequest extends CostEstimateInput {
     create?: unknown;
     objectId?: unknown;
     reason?: unknown;
+    generationContext?: unknown;
   };
 }
 
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       monthActualCostKrw: usageSummary.monthActualCostKrw
     };
     const decision = guardCost(guardedInput);
+    const generationContext = normalizePaidGenerationContext(input.approvalRequest?.generationContext);
 
     if (decision.status !== "approval_required" || input.approvalRequest?.create !== true) {
       await repository.saveCostUsage(request, costUsageFromEstimate(guardedInput, context, decision.estimatedCostKrw));
@@ -57,7 +60,8 @@ export async function POST(request: Request) {
         effectiveDailyCapKrw: decision.effectiveDailyCapKrw,
         providerName: guardedInput.settings.providerName,
         status: decision.status,
-        usageSummary
+        usageSummary,
+        generationContext
       },
       reason: readOptionalString(input.approvalRequest.reason) ?? `Paid AI operation approval for ${input.operationType}.`
     });

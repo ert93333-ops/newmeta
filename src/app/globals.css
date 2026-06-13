@@ -100,6 +100,7 @@ textarea {
 }
 
 .main {
+  min-width: 0;
   padding: 28px;
 }
 
@@ -226,6 +227,7 @@ textarea {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+  min-width: 0;
   margin-bottom: 14px;
 }
 
@@ -238,8 +240,10 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin: 0;
   font-size: 17px;
+  overflow-wrap: anywhere;
 }
 
 .section-title-row p {
@@ -702,9 +706,16 @@ textarea {
   gap: 10px;
 }
 
+.creative-ops-plan {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .rationale-block {
   display: grid;
   gap: 6px;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -722,12 +733,32 @@ textarea {
   color: var(--ink);
   font-size: 13px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .creative-mode-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.creative-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.creative-reference-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.creative-reference-actions span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .creative-mode {
@@ -1152,6 +1183,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .main {
+    padding: 20px 14px;
+  }
+
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
@@ -1161,8 +1196,11 @@ textarea {
   .dashboard-kpis,
   .dashboard-layout,
   .settings-sections,
+  .auth-form,
   .creative-mode-grid,
+  .creative-reference-grid,
   .creative-rationale-grid,
+  .creative-ops-plan,
   .checks,
   .approval-layout,
   .meta-connect-form,
@@ -1175,6 +1213,7 @@ textarea {
   .header,
   .dashboard-header,
   .settings-hero,
+  .section-title-row,
   .panel-heading,
   .auth-actions,
   .settings-toolbar,
@@ -1192,6 +1231,11 @@ textarea {
   }
 
   .meta-detail-row {
+    display: grid;
+  }
+
+  .creative-reference-actions {
+    align-items: stretch;
     display: grid;
   }
 

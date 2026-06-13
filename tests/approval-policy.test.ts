@@ -104,6 +104,18 @@ describe("approval policy", () => {
     expect(() => approveRequest(approval, { ...requester, role: "owner" })).toThrow("SELF_APPROVAL_NOT_ALLOWED");
   });
 
+  it("allows explicit self approval for draft paid AI generation requests", () => {
+    const approval = createApprovalRequest({
+      context: requester,
+      action: "ai_paid_generation",
+      objectType: "image_generation",
+      objectId: "image-generation-1"
+    });
+    const approved = approveRequest(approval, requester);
+    expect(approved.status).toBe("approved");
+    expect(approved.approvedBy).toBe(requester.userId);
+  });
+
   it("requires typed confirmation for publish approvals", () => {
     const approval = createApprovalRequest({
       context: requester,

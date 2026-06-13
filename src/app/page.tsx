@@ -8,9 +8,9 @@ import { SettingsPanel } from "@/app/settings-panel";
 const navItems = [
   { href: "dashboard", label: "대시보드" },
   { href: "creative-generation", label: "소재 생성" },
+  { href: "approval-center", label: "승인 센터" },
   { href: "settings", label: "설정" },
-  { href: "onboarding", label: "온보딩" },
-  { href: "approval-center", label: "승인 센터" }
+  { href: "onboarding", label: "온보딩" }
 ];
 
 export default function Home() {
@@ -36,6 +36,7 @@ export default function Home() {
       <section className="main">
         <DashboardPanel />
         <CreativeGenerationPanel />
+        <ApprovalCenterPanel />
         <SettingsPanel />
 
         <section className="onboarding-area" id="onboarding">
@@ -48,8 +49,6 @@ export default function Home() {
           <AuthSessionPanel />
           <MetaConnectionPanel />
         </section>
-
-        <ApprovalCenterPanel />
       </section>
     </main>
   );

@@ -116,7 +116,25 @@ function approvedPaidGenerationApproval(
         providerName: "mock-ai",
         model: "mock-generation",
         estimatedCredits: operationType === "video_generation" ? 30 : 5,
-        estimatedCostKrw: operationType === "video_generation" ? 3000 : 500
+        estimatedCostKrw: operationType === "video_generation" ? 3000 : 500,
+        generationContext: {
+          prompt: "Generate from approved product-only context.",
+          variantCount: 2,
+          productReference: {
+            generationInstruction: "Extract the product only as the hero subject.",
+            candidateImages: ["https://cdn.example.com/ref.png"]
+          },
+          experimentPlan: {
+            mode: "controlled_ab_test",
+            changedVariable: "hook",
+            control: "current best ad",
+            primaryMetric: "CTR",
+            secondaryMetrics: ["CTR"],
+            minimumData: "impressions >= 1500",
+            stopCondition: "No early winner",
+            registrationMode: "paused_draft_after_qa"
+          }
+        }
       }
     }),
     approver
@@ -275,6 +293,28 @@ describe("render jobs route", () => {
         prompt: "Generate one approved image creative.",
         requestedInput: {
           aspectRatio: "4:5"
+        },
+        generationContext: {
+          prompt: "Generate from approved product-only context.",
+          variantCount: 2,
+          productReference: {
+            generationInstruction: "Extract the product only as the hero subject.",
+            candidateImages: ["https://cdn.example.com/ref.png"]
+          },
+          draftRegistration: {
+            mode: "paused_draft_after_qa",
+            requiresDraftApproval: true,
+            route: "/api/drafts/create-paused"
+          }
+        },
+        productReference: {
+          generationInstruction: "Extract the product only as the hero subject.",
+          candidateImages: ["https://cdn.example.com/ref.png"]
+        },
+        draftRegistration: {
+          mode: "paused_draft_after_qa",
+          requiresDraftApproval: true,
+          route: "/api/drafts/create-paused"
         },
         costUsageRelatedJobId: approval.id,
         cost: {

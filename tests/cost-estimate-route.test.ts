@@ -128,7 +128,26 @@ describe("cost estimate route approval request flow", () => {
         approvalRequest: {
           create: true,
           objectId: "creative-control-1",
-          reason: "Generate approved A/B variants."
+          reason: "Generate approved A/B variants.",
+          generationContext: {
+            prompt: "Generate a controlled product image variant.",
+            variantCount: 3,
+            productReference: {
+              generationInstruction: "Extract the product only as the hero subject.",
+              candidateImages: ["https://cdn.example.com/product.png"],
+              extractionPolicy: {
+                mode: "product_only",
+                rawHtmlStored: false,
+                javascriptExecuted: false,
+                generatedClaimsAllowed: false
+              }
+            },
+            experimentPlan: {
+              changedVariable: "hook",
+              control: "current best ad",
+              primaryMetric: "CTR"
+            }
+          }
         }
       })
     );
@@ -149,7 +168,31 @@ describe("cost estimate route approval request flow", () => {
       afterJson: {
         operationType: "variant_batch",
         estimatedCostKrw: 500,
-        providerName: "mock-ai"
+        providerName: "mock-ai",
+        generationContext: {
+          prompt: "Generate a controlled product image variant.",
+          variantCount: 3,
+          productReference: {
+            generationInstruction: "Extract the product only as the hero subject.",
+            candidateImages: ["https://cdn.example.com/product.png"],
+            extractionPolicy: {
+              rawHtmlStored: false,
+              javascriptExecuted: false,
+              generatedClaimsAllowed: false
+            }
+          },
+          experimentPlan: {
+            mode: "controlled_ab_test",
+            changedVariable: "hook",
+            control: "current best ad",
+            primaryMetric: "CTR"
+          },
+          draftRegistration: {
+            mode: "paused_draft_after_qa",
+            requiresDraftApproval: true,
+            route: "/api/drafts/create-paused"
+          }
+        }
       }
     });
     expect(body.guard).toMatchObject({

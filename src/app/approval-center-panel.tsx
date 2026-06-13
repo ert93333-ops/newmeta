@@ -17,6 +17,8 @@ type ApprovalSummary = {
   createdAt?: string;
   expiresAt?: string;
   secondApprovedBy?: string;
+  afterJson?: Record<string, unknown>;
+  executionResultJson?: Record<string, unknown>;
 };
 
 type ApprovalGuardSummary = {
@@ -37,6 +39,7 @@ type ApprovalListResponse = {
   error?: {
     code?: string;
     message?: string;
+    details?: unknown;
   };
 };
 
@@ -61,6 +64,8 @@ export function ApprovalCenterPanel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [decisionStatus, setDecisionStatus] = useState<DecisionStatus>("idle");
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [executionStatus, setExecutionStatus] = useState<DecisionStatus>("idle");
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   const loadApprovals = useCallback(async (isMounted: () => boolean = () => true) => {
     setLoadStatus("loading");
@@ -77,7 +82,7 @@ export function ApprovalCenterPanel() {
         setApprovals([]);
         setSelectedId("");
         setLoadStatus("blocked");
-        setLoadError(body.error?.code ?? `HTTP_${response.status}`);
+        setLoadError(formatApiError(body.error, response.status));
         return;
       }
 
@@ -160,13 +165,53 @@ export function ApprovalCenterPanel() {
 
     if (!response.ok) {
       setDecisionStatus("blocked");
-      setDecisionError(body.error?.code ?? `HTTP_${response.status}`);
+      setDecisionError(formatApiError(body.error, response.status));
       return;
     }
 
     setDecisionStatus("succeeded");
     setTypedConfirmation("");
     setRejectionReason("");
+    await loadApprovals();
+  }
+
+  async function queueApprovedGeneration(item: ApprovalListItem) {
+    if (executionStatus === "submitting") {
+      return;
+    }
+    setExecutionStatus("submitting");
+    setExecutionError(null);
+
+    const afterJson = item.approval.afterJson ?? {};
+    const generationContext = readRecord(afterJson.generationContext);
+    const operationType = readStringField(afterJson, "operationType") ?? item.approval.objectType;
+    const prompt = readStringField(generationContext, "prompt") ?? readStringField(afterJson, "prompt");
+    const response = await fetch("/api/render/jobs", {
+      method: "POST",
+      headers: {
+        ...(await createTenantHeaders()),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        operationType,
+        approvalRequestId: item.approval.id,
+        prompt,
+        generationContext,
+        input: {
+          source: "approval_center",
+          approvalObjectId: item.approval.objectId
+        }
+      })
+    });
+    const body = (await response.json()) as { error?: ApprovalListResponse["error"]; job?: { id?: string } };
+    if (!response.ok) {
+      setExecutionStatus("blocked");
+      setExecutionError(formatApiError(body.error, response.status));
+      return;
+    }
+
+    setExecutionStatus("succeeded");
+    window.dispatchEvent(new CustomEvent("hermes:generation-job-queued", { detail: { jobId: body.job?.id } }));
     await loadApprovals();
   }
 
@@ -214,9 +259,9 @@ export function ApprovalCenterPanel() {
               type="button"
             >
               <span>
-                <strong>{formatAction(approval.action)}</strong>
+                <strong>{formatApprovalTitle({ approval, guard })}</strong>
                 <small>
-                  {formatObject(approval.objectType, approval.objectId)} - {formatApprovalStatus(approval.status)}
+                  {formatApprovalSubtitle({ approval, guard })} - {formatApprovalStatus(approval.status)}
                 </small>
               </span>
               <span className={`risk-chip ${guard.riskLevel}`}>{guard.riskLevel}</span>
@@ -235,9 +280,9 @@ export function ApprovalCenterPanel() {
             <div className="approval-form-head">
               <ShieldAlert aria-hidden="true" size={20} />
               <div>
-                <strong>{selected.approval.action}</strong>
+                <strong>{formatApprovalTitle(selected)}</strong>
                 <small>
-                  요청자: {selected.approval.requestedBy ?? selected.approval.createdBy ?? "알 수 없음"}
+                  {formatApprovalSubtitle(selected)} - 요청자: {selected.approval.requestedBy ?? selected.approval.createdBy ?? "알 수 없음"}
                   {selected.guard.requiresSecondApproval ? " - 2차 승인 필요" : ""}
                 </small>
               </div>
@@ -306,6 +351,17 @@ export function ApprovalCenterPanel() {
                 <CheckCircle2 aria-hidden="true" size={18} />
                 승인
               </button>
+              {canQueueGeneration(selected) ? (
+                <button
+                  className="approve-button secondary"
+                  disabled={executionStatus === "submitting"}
+                  onClick={() => void queueApprovedGeneration(selected)}
+                  type="button"
+                >
+                  <Loader2 aria-hidden="true" size={18} />
+                  생성 작업 시작
+                </button>
+              ) : null}
               <button
                 className="reject-button"
                 disabled={!canReject || decisionStatus === "submitting"}
@@ -316,6 +372,9 @@ export function ApprovalCenterPanel() {
                 거절
               </button>
             </div>
+            {executionStatus !== "idle" ? (
+              <p className="settings-message">{getDecisionMessage(executionStatus, executionError, executionStatus)}</p>
+            ) : null}
           </form>
         ) : (
           <div className="approval-form approval-form-empty">
@@ -342,6 +401,99 @@ function readApprovalCreatedId(event: Event): string | undefined {
   }
   const detail = event.detail as { approvalId?: unknown };
   return typeof detail.approvalId === "string" ? detail.approvalId : undefined;
+}
+
+function canQueueGeneration(item: ApprovalListItem): boolean {
+  return item.approval.action === "ai_paid_generation" && item.approval.status === "approved";
+}
+
+function formatApprovalTitle(item: ApprovalListItem): string {
+  const operationType = readStringField(item.approval.afterJson, "operationType") ?? item.approval.objectType;
+  if (item.approval.action === "ai_paid_generation") {
+    if (operationType === "image_generation") {
+      return "이미지 소재 생성 승인";
+    }
+    if (operationType === "video_generation") {
+      return "영상 소재 생성 승인";
+    }
+    if (operationType === "variant_batch") {
+      return "소재 변형 생성 승인";
+    }
+    return "AI 소재 생성 승인";
+  }
+  return formatAction(item.approval.action);
+}
+
+function formatApprovalSubtitle(item: ApprovalListItem): string {
+  if (item.approval.action !== "ai_paid_generation") {
+    return formatObject(item.approval.objectType, item.approval.objectId);
+  }
+  const afterJson = item.approval.afterJson ?? {};
+  const generationContext = readRecord(afterJson.generationContext);
+  const prompt = readStringField(generationContext, "prompt") ?? readStringField(afterJson, "prompt");
+  const provider = readStringField(afterJson, "providerName");
+  const cost = readNumberField(afterJson, "estimatedCostKrw");
+  const parts = [
+    provider ? `제공자 ${provider}` : undefined,
+    cost !== undefined ? `예상 ${Math.round(cost).toLocaleString("ko-KR")}원` : undefined,
+    prompt ? trimLabel(prompt, 44) : undefined
+  ].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" - ") : item.approval.objectId ?? item.approval.objectType;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function readStringField(value: unknown, key: string): string | undefined {
+  const record = readRecord(value);
+  const raw = record?.[key];
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readNumberField(value: unknown, key: string): number | undefined {
+  const record = readRecord(value);
+  const raw = record?.[key];
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function trimLabel(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function formatApiError(error: ApprovalListResponse["error"] | undefined, status: number): string {
+  if (typeof error?.message === "string" && error.message.trim().length > 0) {
+    return error.message;
+  }
+  const code = error?.code ?? `HTTP_${status}`;
+  const labels: Record<string, string> = {
+    REQUEST_FAILED: "요청을 처리하지 못했습니다. 다시 시도하고 계속 실패하면 설정과 서버 로그를 확인해야 합니다.",
+    SELF_APPROVAL_NOT_ALLOWED: "본인이 요청한 고위험 승인 요청은 직접 승인할 수 없습니다.",
+    APPROVAL_NOT_PENDING: "이미 처리된 승인 요청입니다. 목록을 새로고침한 뒤 다시 확인하세요.",
+    APPROVAL_NOT_FOUND: "승인 요청을 찾을 수 없습니다. 목록을 새로고침하세요.",
+    APPROVAL_EXPIRED: "승인 요청이 만료되었습니다. 소재 생성에서 다시 요청하세요.",
+    TYPED_CONFIRMATION_REQUIRED: "입력 확인 문구가 필요하거나 일치하지 않습니다.",
+    SUPABASE_AUTH_REQUIRED: "로그인 세션이 필요합니다. 다시 로그인하세요.",
+    AUTH_REQUIRED: "로그인 세션이 필요합니다. 다시 로그인하세요.",
+    TENANT_ACCESS_DENIED: "현재 계정으로 이 테넌트 승인 요청에 접근할 수 없습니다.",
+    PAID_OPERATION_APPROVAL_REQUIRED: "승인된 유료 생성 요청이 필요합니다.",
+    APPROVAL_REQUIRED: "승인 요청이 아직 실행 가능한 상태가 아닙니다.",
+    PAID_GENERATION_WORKER_NOT_CONFIGURED: "유료 생성 provider 또는 worker 설정이 아직 완료되지 않았습니다.",
+    PAID_IMAGE_GENERATION_NOT_CONFIGURED: "이미지 생성 provider 설정이 아직 완료되지 않았습니다.",
+    PAID_VIDEO_GENERATION_NOT_CONFIGURED: "영상 생성 provider 설정이 아직 완료되지 않았습니다."
+  };
+  return labels[code] ?? code;
 }
 
 async function createTenantHeaders(): Promise<Record<string, string>> {

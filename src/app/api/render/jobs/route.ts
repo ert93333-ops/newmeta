@@ -3,6 +3,7 @@ import { assertExecutableApproval, markExecuted } from "@/lib/approval/approval-
 import { isProductionRuntime, resolveUserContext } from "@/lib/api/context";
 import { checkForbiddenFinalText, checkPriceAccuracy, checkSafeArea } from "@/lib/creative/checkers";
 import { fail, handleError, ok, parseWriteJson } from "@/lib/api/responses";
+import { buildGenerationInputFromApproval, normalizePaidGenerationContext } from "@/lib/generation/generation-context";
 import { assertPaidOperationApproval, PaidOperationApprovalRequiredError } from "@/lib/guards/cost-guard";
 import { isPaidGenerationOperationConfigured } from "@/lib/generation/paid-generation-provider";
 import {
@@ -19,6 +20,7 @@ interface RenderJobRequest extends Partial<CreativeManifest> {
   approvalRequestId?: unknown;
   prompt?: unknown;
   input?: unknown;
+  generationContext?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -77,6 +79,10 @@ async function queuePaidGenerationJob(
   assertExecutableApproval(approval, context);
 
   const jobId = randomUUID();
+  const approvalGenerationContext = buildGenerationInputFromApproval(approval.afterJson);
+  const requestGenerationContext = normalizePaidGenerationContext(body.generationContext);
+  const generationContext = requestGenerationContext ?? approvalGenerationContext;
+  const prompt = readOptionalString(body.prompt) ?? generationContext?.prompt;
   const executed = markExecuted(approval, {
     operation: "ai_paid_generation",
     operationType,
@@ -98,8 +104,12 @@ async function queuePaidGenerationJob(
       operation: "ai_paid_generation",
       operationType,
       approvalRequestId: persisted.id,
-      prompt: readOptionalString(body.prompt),
+      prompt,
       requestedInput: body.input ?? {},
+      generationContext,
+      productReference: generationContext?.productReference,
+      experimentPlan: generationContext?.experimentPlan,
+      draftRegistration: generationContext?.draftRegistration,
       costUsageRelatedJobId: persisted.id,
       cost: {
         provider: runningCostUsage.provider,

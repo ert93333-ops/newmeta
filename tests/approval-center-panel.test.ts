@@ -41,6 +41,32 @@ describe("Approval center panel", () => {
     expect(panelSource).not.toContain("/execute");
   });
 
+  it("queues approved paid generation through the render domain route", () => {
+    expect(panelSource).toContain("생성 작업 시작");
+    expect(panelSource).toContain("canQueueGeneration");
+    expect(panelSource).toContain("queueApprovedGeneration");
+    expect(panelSource).toContain("/api/render/jobs");
+    expect(panelSource).toContain("approvalRequestId: item.approval.id");
+    expect(panelSource).toContain("generationContext");
+    expect(panelSource).toContain("hermes:generation-job-queued");
+    expect(panelSource).not.toContain("/api/approvals/${selected.approval.id}/execute");
+  });
+
+  it("labels paid generation approvals by media type and human-readable context", () => {
+    expect(panelSource).toContain("formatApprovalTitle");
+    expect(panelSource).toContain("이미지 소재 생성 승인");
+    expect(panelSource).toContain("영상 소재 생성 승인");
+    expect(panelSource).toContain("formatApprovalSubtitle");
+    expect(panelSource).toContain("estimatedCostKrw");
+  });
+
+  it("maps approval API failures to operator-readable Korean messages", () => {
+    expect(panelSource).toContain("formatApiError");
+    expect(panelSource).toContain("본인이 요청한 고위험 승인 요청은 직접 승인할 수 없습니다.");
+    expect(panelSource).toContain("이미 처리된 승인 요청입니다.");
+    expect(panelSource).toContain("요청을 처리하지 못했습니다.");
+  });
+
   it("shows read-only action readiness without dispatching execution", () => {
     expect(panelSource).toContain("getReadinessStatus");
     expect(panelSource).toContain("2차 승인 대기 중");

@@ -3,6 +3,7 @@ import {
   executePaidGenerationJob,
   isPaidGenerationOperationConfigured
 } from "@/lib/generation/paid-generation-provider";
+import { extractGeneratedAssetCandidates } from "@/lib/generation/generated-assets";
 
 export interface ClaimedCreativeJob {
   id: string;
@@ -52,16 +53,17 @@ export async function runWorkerOnce(client: WorkerDbClient, currentWorkerName = 
     const result = await processClaimedCreativeJob(job, currentWorkerName);
     await client.query("begin");
     try {
+      const persistedResult = await persistGeneratedAssets(client, job, result, "succeeded");
       const completed = await client.query("select * from private.complete_creative_job($1, $2, $3::jsonb)", [
         job.id,
         currentWorkerName,
-        JSON.stringify(result)
+        JSON.stringify(persistedResult)
       ]);
       const completedJob = completed.rows[0] as { status?: WorkerRunResult["status"] } | undefined;
       if (!completedJob?.status) {
         throw new Error("WORKER_COMPLETE_MISSED");
       }
-      await recordPaidGenerationCostUsage(client, job, result, completedJob.status);
+      await recordPaidGenerationCostUsage(client, job, persistedResult, completedJob.status);
       await client.query("commit");
       return {
         claimed: true,
@@ -122,6 +124,94 @@ export async function processClaimedCreativeJob(
     jobType: job.job_type,
     input: job.input_json ?? {},
     mockSafe: true
+  };
+}
+
+export async function persistGeneratedAssets(
+  client: WorkerDbClient,
+  job: ClaimedCreativeJob,
+  result: Record<string, unknown>,
+  status: WorkerRunResult["status"]
+): Promise<Record<string, unknown>> {
+  if (status !== "succeeded" || !isPaidGenerationJob(job.job_type)) {
+    return result;
+  }
+
+  const input = readRecord(job.input_json) ?? {};
+  if (readStringField(input, "operation") !== "ai_paid_generation") {
+    return result;
+  }
+
+  const generatedAssets = [];
+  const candidates = extractGeneratedAssetCandidates({
+    result,
+    jobType: job.job_type,
+    jobId: job.id,
+    approvalRequestId: readStringField(input, "approvalRequestId"),
+    generationContext: input.generationContext
+  });
+
+  for (const candidate of candidates) {
+    const inserted = await client.query(
+      `insert into public.creative_assets (
+        id,
+        tenant_id,
+        created_by,
+        asset_type,
+        source_url,
+        sha256,
+        width,
+        height,
+        duration_seconds,
+        mime_type,
+        metadata_json
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+      on conflict (tenant_id, sha256) do update set
+        source_url = excluded.source_url,
+        metadata_json = excluded.metadata_json,
+        updated_at = now()
+      returning id, asset_type, source_url, width, height, duration_seconds, mime_type, metadata_json`,
+      [
+        candidate.id,
+        job.tenant_id,
+        job.created_by ?? null,
+        candidate.assetType,
+        candidate.sourceUrl ?? null,
+        candidate.sha256 ?? null,
+        candidate.width,
+        candidate.height,
+        candidate.durationSeconds ?? null,
+        candidate.mimeType ?? null,
+        JSON.stringify(candidate.metadataJson)
+      ]
+    );
+    const row = readRecord(inserted.rows[0]);
+    generatedAssets.push({
+      id: readStringField(row ?? {}, "id") ?? candidate.id,
+      assetType: readStringField(row ?? {}, "asset_type") ?? candidate.assetType,
+      sourceUrl: readStringField(row ?? {}, "source_url") ?? candidate.sourceUrl,
+      width: readNumberField(row ?? {}, "width") ?? candidate.width,
+      height: readNumberField(row ?? {}, "height") ?? candidate.height,
+      durationSeconds: readNumberField(row ?? {}, "duration_seconds") ?? candidate.durationSeconds,
+      mimeType: readStringField(row ?? {}, "mime_type") ?? candidate.mimeType,
+      metadataJson: readRecord(row?.metadata_json) ?? candidate.metadataJson
+    });
+  }
+
+  if (generatedAssets.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    generatedAssets,
+    draftRegistration: {
+      mode: "paused_draft_after_qa",
+      route: "/api/drafts/create-paused",
+      requiresDraftApproval: true,
+      assetIds: generatedAssets.map((asset) => asset.id)
+    },
+    experimentPlan: readRecord(input.experimentPlan) ?? readRecord(input.generationContext)?.experimentPlan
   };
 }
 

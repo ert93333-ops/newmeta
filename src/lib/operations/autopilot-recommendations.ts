@@ -42,12 +42,85 @@ export interface AutopilotRecommendation {
   reason: string;
   nextStep: string;
   confidence: "low" | "medium" | "high";
+  creativeBrief: {
+    recommendedPrompt: string;
+    changedVariable: string;
+    controlledVariables: string[];
+    objective: string;
+  };
+  operationPlan: {
+    registrationMode: "paused_draft_after_qa";
+    approvalGate: string;
+    steps: string[];
+    abTest: {
+      control: string;
+      variant: string;
+      primaryMetric: string;
+      secondaryMetrics: string[];
+      minimumData: string;
+      stopCondition: string;
+    };
+    automationBoundaries: string[];
+  };
+  complianceGate: {
+    status: "PASS" | "PASS_WITH_LOG" | "HOLD_FOR_REVIEW" | "BLOCK" | "QUARANTINE";
+    checks: string[];
+    blockedReasons: string[];
+  };
+  decisionProposal: {
+    agentName: "autopilot_recommendation_agent";
+    controllerVersion: "rule_based_v1";
+    actionType:
+      | "NOOP"
+      | "CREATE_VARIANT"
+      | "ROTATE_CREATIVE"
+      | "HOLD_SCALING_ON_DATA_DRIFT"
+      | "REQUEST_HUMAN_APPROVAL";
+    reasonCode: string;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    requiresHumanApproval: boolean;
+    autoExecutable: false;
+    executionOwner: "action_orchestrator";
+  };
+  experimentPlan: {
+    status: "DRAFT";
+    variableToChange: string;
+    fixedVariables: string[];
+    primaryMetric: string;
+    guardrailMetrics: string[];
+    minimumRuntime: string;
+    sampleGuard: string;
+  };
+  rollbackPlan: {
+    requiredBeforeExecution: true;
+    snapshotScope: string[];
+    rollbackAction: string;
+  };
 }
 
 export interface AutopilotRecommendationResult {
   mode: "read_only";
+  requestedMode: "PROPOSE_ONLY";
+  autonomyLevel: "RECOMMENDATION";
   budgetMutationBlocked: true;
   activeMutationBlocked: true;
+  execution: {
+    singleWriter: "action_orchestrator";
+    directMetaWritesBlocked: true;
+    executableBudgetActionsBlocked: true;
+    approvalRequiredForPublish: true;
+  };
+  dataQualityGates: Array<{
+    rule: string;
+    severity: "LOW" | "MEDIUM" | "HIGH";
+    status: "pass" | "hold" | "block";
+    action: string;
+  }>;
+  killSwitch: {
+    evaluated: true;
+    status: "clear" | "hold";
+    reasons: string[];
+  };
   tenantId: string;
   source: {
     insightRows: number;
@@ -92,34 +165,56 @@ export async function loadAutopilotRecommendations(
   const latestByAd = latestInsightByAd((insights ?? []) as InsightRow[]);
   const recommendations = buildRecommendations(latestByAd, adMap);
   const staleOrMissingCreativeCount = (ads ?? []).filter((ad) => !hasCreativeMetadata(ad.raw_json)).length;
+  const latestInsightAt = (insights ?? [])[0]?.created_at;
+  const dataQualityGates = buildDataQualityGates({
+    insightRows: (insights ?? []).length,
+    latestInsightAt,
+    staleOrMissingCreativeCount
+  });
+  const killSwitch = evaluateKillSwitch(dataQualityGates);
+
   if ((insights ?? []).length === 0) {
-    recommendations.push({
-      severity: "high",
-      action: "meta_account_backfill_required",
-      reason: "저장된 ad-level 인사이트가 없습니다.",
-      nextStep: "POST /api/meta/sync/account를 먼저 실행해 기존 광고 성과와 소재 메타데이터를 가져오십시오.",
-      confidence: "high"
-    });
+    recommendations.push(
+      withCreativeOps({
+        severity: "high",
+        action: "meta_account_backfill_required",
+        reason: "No persisted ad-level insight snapshots are available.",
+        nextStep: "Run POST /api/meta/sync/account first so Hermes can load ad performance and creative metadata.",
+        confidence: "high"
+      })
+    );
   } else if (staleOrMissingCreativeCount > 0) {
-    recommendations.push({
-      severity: "medium",
-      action: "creative_metadata_resync",
-      reason: `${staleOrMissingCreativeCount}개 광고에 소재 메타데이터가 비어 있습니다.`,
-      nextStep: "includeCreatives=true로 Meta account backfill을 재실행하십시오.",
-      confidence: "medium"
-    });
+    recommendations.push(
+      withCreativeOps({
+        severity: "medium",
+        action: "creative_metadata_resync",
+        reason: `${staleOrMissingCreativeCount} ads are missing creative metadata.`,
+        nextStep: "Run Meta account backfill again with includeCreatives=true before generating new variants.",
+        confidence: "medium"
+      })
+    );
   }
 
   return {
     mode: "read_only",
+    requestedMode: "PROPOSE_ONLY",
+    autonomyLevel: "RECOMMENDATION",
     budgetMutationBlocked: true,
     activeMutationBlocked: true,
+    execution: {
+      singleWriter: "action_orchestrator",
+      directMetaWritesBlocked: true,
+      executableBudgetActionsBlocked: true,
+      approvalRequiredForPublish: true
+    },
+    dataQualityGates,
+    killSwitch,
     tenantId,
     source: {
       insightRows: (insights ?? []).length,
       ads: (ads ?? []).length,
       evaluatedAds: latestByAd.length,
-      latestInsightAt: (insights ?? [])[0]?.created_at
+      latestInsightAt
     },
     recommendations: recommendations.slice(0, 50)
   };
@@ -153,80 +248,321 @@ function buildRecommendations(insights: InsightRow[], adMap: Map<string, AdRow>)
 
     if (impressions < 500) {
       return [
-        {
+        withCreativeOps({
           ...base,
           severity: "observe",
           action: "observe_until_signal",
-          reason: `노출 ${impressions}건으로 판단 신뢰도가 낮습니다.`,
-          nextStep: "추가 집행 데이터를 관찰하고 자동 변경은 보류하십시오.",
+          reason: `Only ${impressions.toLocaleString("ko-KR")} impressions are available, so signal is still weak.`,
+          nextStep: "Keep observing before changing delivery, budget, or publish state.",
           confidence: "low"
-        }
+        })
       ];
     }
 
     if (ctr < 1 && impressions >= 1000) {
       return [
-        {
+        withCreativeOps({
           ...base,
           severity: "high",
           action: "creative_hook_test",
-          reason: `CTR ${ctr.toFixed(2)}%로 hook/첫 화면 주목도가 약합니다.`,
-          nextStep: "소재 분석을 실행하고 hook 또는 첫 3초 변형 초안을 생성하십시오.",
+          reason: `CTR is ${ctr.toFixed(2)}%, so the hook or first-screen attention is likely weak.`,
+          nextStep: "Generate a controlled hook variant and route it as a PAUSED draft after QA.",
           confidence: "high"
-        }
+        })
       ];
     }
 
     if (insight.link_clicks >= 20 && landingRate > 0 && landingRate < 0.55) {
       return [
-        {
+        withCreativeOps({
           ...base,
           severity: "medium",
           action: "landing_arrival_diagnostic",
-          reason: `링크 클릭 대비 랜딩 도달률이 ${(landingRate * 100).toFixed(1)}%입니다.`,
-          nextStep: "랜딩 속도, URL, Pixel/CAPI/GA4 진단을 우선 확인하십시오.",
+          reason: `Landing arrival rate is ${(landingRate * 100).toFixed(1)}% from link clicks.`,
+          nextStep: "Clarify CTA and destination expectation, then validate Pixel/CAPI/GA4 separately.",
           confidence: "medium"
-        }
+        })
       ];
     }
 
     if (frequency >= 2.5 && ctr < 1.5) {
       return [
-        {
+        withCreativeOps({
           ...base,
           severity: "medium",
           action: "fatigue_creative_refresh",
-          reason: `빈도 ${frequency.toFixed(2)}에서 CTR이 ${ctr.toFixed(2)}%로 낮습니다.`,
-          nextStep: "새 hook/비주얼 변형을 PAUSED 초안으로 준비하십시오.",
+          reason: `Frequency is ${frequency.toFixed(2)} while CTR is ${ctr.toFixed(2)}%, which suggests fatigue.`,
+          nextStep: "Prepare a fresh visual-angle variant as a PAUSED draft without changing audience or budget.",
           confidence: "medium"
-        }
+        })
       ];
     }
 
     if (spend >= 50000 && conversionSignal === 0) {
       return [
-        {
+        withCreativeOps({
           ...base,
           severity: "high",
           action: "offer_or_product_page_review",
-          reason: `지출 ${Math.round(spend).toLocaleString("ko-KR")}원 동안 구매/장바구니 신호가 없습니다.`,
-          nextStep: "오퍼 명확성, 가격 표시, 상세페이지 전환 저항을 점검하십시오.",
+          reason: `Spend is ${Math.round(spend).toLocaleString("ko-KR")} KRW with no purchase or add-to-cart signal.`,
+          nextStep: "Generate an offer-clarity variant and verify product page friction before publishing.",
           confidence: "medium"
-        }
+        })
       ];
     }
 
     return [
-      {
+      withCreativeOps({
         ...base,
         severity: "low",
         action: "continue_observation",
-        reason: "현재 자동 차단 또는 고위험 병목 조건이 감지되지 않았습니다.",
-        nextStep: "다음 백필 주기까지 관찰하고 성과 변화만 추적하십시오.",
+        reason: "No high-risk bottleneck condition is currently detected.",
+        nextStep: "Continue observation and prepare only controlled variants from stronger signals.",
         confidence: "medium"
-      }
+      })
     ];
   });
+}
+
+function withCreativeOps(input: {
+  adId?: string;
+  metaAdId?: string;
+  adName?: string;
+  severity: "observe" | "low" | "medium" | "high";
+  action: string;
+  reason: string;
+  nextStep: string;
+  confidence: "low" | "medium" | "high";
+}): AutopilotRecommendation {
+  const strategy = creativeStrategyForAction(input.action);
+  const controlName = input.adName ?? input.metaAdId ?? "current best-matching ad";
+  const recommendedPrompt = [
+    `Create a Meta ad ${strategy.assetType} variant based on ${controlName}.`,
+    `Objective: ${strategy.objective}.`,
+    `Change only: ${strategy.changedVariable}.`,
+    `Keep controlled: ${strategy.controlledVariables.join(", ")}.`,
+    "Use final upload-ready creative only, with no safezone labels, pixel labels, or guide text.",
+    "Respect feed, stories, and reels placement constraints and avoid unsupported placement/creative combinations."
+  ].join(" ");
+
+  return {
+    ...input,
+    creativeBrief: {
+      recommendedPrompt,
+      changedVariable: strategy.changedVariable,
+      controlledVariables: strategy.controlledVariables,
+      objective: strategy.objective
+    },
+    operationPlan: {
+      registrationMode: "paused_draft_after_qa",
+      approvalGate:
+        "Generate asset only after paid AI approval; register Meta ads only as PAUSED drafts; ACTIVE requires separate approval.",
+      steps: [
+        "Generate one upload-ready creative from the recommended brief.",
+        "Run safe area, price accuracy, forbidden text, and placement compatibility checks.",
+        "Create a PAUSED Meta draft with the validated asset and existing campaign/ad set context.",
+        "Route the draft through Approval Center before any publish or status change.",
+        "Monitor Meta insights and keep budget changes recommendation-only."
+      ],
+      abTest: {
+        control: controlName,
+        variant: `${strategy.changedVariable} variant`,
+        primaryMetric: strategy.primaryMetric,
+        secondaryMetrics: ["CTR", "LPV rate", "ATC rate", "purchase rate"],
+        minimumData: "impressions >= 1,500, link_clicks >= 50, landing_page_views >= 30",
+        stopCondition:
+          input.confidence === "high"
+            ? "Stop only after minimum data is reached or policy/cost guard blocks the run."
+            : "Keep observing until minimum data is reached; do not call a winner on weak signal."
+      },
+      automationBoundaries: [
+        "No budget mutation API is available.",
+        "No ACTIVE transition runs without explicit approval.",
+        "No destructive action runs without the required approval policy.",
+        "All Meta write execution must go through the single-writer Action Orchestrator."
+      ]
+    },
+    complianceGate: complianceGateForAction(input.action),
+    decisionProposal: {
+      agentName: "autopilot_recommendation_agent",
+      controllerVersion: "rule_based_v1",
+      actionType: actionTypeForRecommendation(input.action),
+      reasonCode: reasonCodeForRecommendation(input.action),
+      riskLevel: riskLevelForSeverity(input.severity),
+      requiresHumanApproval: true,
+      autoExecutable: false,
+      executionOwner: "action_orchestrator"
+    },
+    experimentPlan: {
+      status: "DRAFT",
+      variableToChange: strategy.changedVariable,
+      fixedVariables: strategy.controlledVariables,
+      primaryMetric: strategy.primaryMetric,
+      guardrailMetrics: ["policy_risk", "negative_comment_rate", "LPV rate", "purchase rate"],
+      minimumRuntime: "24 hours after first delivery, then until minimum sample is reached",
+      sampleGuard: "Do not select a winner before impressions >= 1,500 and link_clicks >= 50."
+    },
+    rollbackPlan: {
+      requiredBeforeExecution: true,
+      snapshotScope: ["campaign", "adset", "ad", "creative", "landing_url", "status"],
+      rollbackAction: "Revert to the previous approved PAUSED draft or previous active creative after Action Orchestrator review."
+    }
+  };
+}
+
+function buildDataQualityGates(input: {
+  insightRows: number;
+  latestInsightAt?: string;
+  staleOrMissingCreativeCount: number;
+}): AutopilotRecommendationResult["dataQualityGates"] {
+  const gates: AutopilotRecommendationResult["dataQualityGates"] = [];
+  const latestAgeHours = input.latestInsightAt ? (Date.now() - Date.parse(input.latestInsightAt)) / 36e5 : Number.POSITIVE_INFINITY;
+
+  gates.push({
+    rule: input.insightRows > 0 ? "INSIGHTS_PRESENT" : "INSIGHTS_MISSING",
+    severity: "HIGH",
+    status: input.insightRows > 0 ? "pass" : "block",
+    action: input.insightRows > 0 ? "allow proposal generation" : "hold autopilot until Meta insights are synced"
+  });
+  gates.push({
+    rule: "INSIGHTS_STALE",
+    severity: "HIGH",
+    status: latestAgeHours <= 6 ? "pass" : "hold",
+    action: latestAgeHours <= 6 ? "allow latest-window recommendations" : "hold scale/pause decisions and refresh insights"
+  });
+  gates.push({
+    rule: "CREATIVE_JOIN_MISSING",
+    severity: "MEDIUM",
+    status: input.staleOrMissingCreativeCount > 0 ? "hold" : "pass",
+    action:
+      input.staleOrMissingCreativeCount > 0
+        ? "hold creative replacement execution until ad-to-creative metadata is backfilled"
+        : "allow creative proposal analysis"
+  });
+  gates.push({
+    rule: "BUDGET_MUTATION_HARD_BLOCKED",
+    severity: "HIGH",
+    status: "pass",
+    action: "budget recommendations stay text-only; no executable budget fields are emitted"
+  });
+  return gates;
+}
+
+function evaluateKillSwitch(dataQualityGates: AutopilotRecommendationResult["dataQualityGates"]) {
+  const reasons = dataQualityGates
+    .filter((gate) => gate.status === "block")
+    .map((gate) => `${gate.rule}:${gate.action}`);
+  return {
+    evaluated: true as const,
+    status: reasons.length > 0 ? ("hold" as const) : ("clear" as const),
+    reasons
+  };
+}
+
+function complianceGateForAction(action: string): AutopilotRecommendation["complianceGate"] {
+  if (action === "meta_account_backfill_required" || action === "creative_metadata_resync") {
+    return {
+      status: "HOLD_FOR_REVIEW",
+      checks: ["data_quality", "creative_metadata_join", "tenant_scope"],
+      blockedReasons: ["Data backfill is required before any creative or delivery action can be executed."]
+    };
+  }
+  return {
+    status: "PASS_WITH_LOG",
+    checks: ["policy_risk", "rights_status", "placement_fit", "landing_match", "approval_required"],
+    blockedReasons: []
+  };
+}
+
+function actionTypeForRecommendation(action: string): AutopilotRecommendation["decisionProposal"]["actionType"] {
+  if (action === "creative_hook_test" || action === "offer_or_product_page_review") {
+    return "CREATE_VARIANT";
+  }
+  if (action === "fatigue_creative_refresh") {
+    return "ROTATE_CREATIVE";
+  }
+  if (action === "landing_arrival_diagnostic" || action === "creative_metadata_resync") {
+    return "HOLD_SCALING_ON_DATA_DRIFT";
+  }
+  if (action === "meta_account_backfill_required") {
+    return "REQUEST_HUMAN_APPROVAL";
+  }
+  return "NOOP";
+}
+
+function reasonCodeForRecommendation(action: string): string {
+  const codes: Record<string, string> = {
+    observe_until_signal: "LOW_SAMPLE_OBSERVE",
+    continue_observation: "NO_HIGH_RISK_BOTTLENECK",
+    creative_hook_test: "LOW_CTR_HOOK_TEST",
+    landing_arrival_diagnostic: "LPV_RATE_DRIFT",
+    fatigue_creative_refresh: "FREQUENCY_FATIGUE",
+    offer_or_product_page_review: "SPEND_WITHOUT_CONVERSION_SIGNAL",
+    creative_metadata_resync: "CREATIVE_JOIN_MISSING",
+    meta_account_backfill_required: "INSIGHTS_MISSING"
+  };
+  return codes[action] ?? "AUTOPILOT_RECOMMENDATION";
+}
+
+function riskLevelForSeverity(severity: AutopilotRecommendation["severity"]): AutopilotRecommendation["decisionProposal"]["riskLevel"] {
+  if (severity === "high") return "HIGH";
+  if (severity === "medium") return "MEDIUM";
+  return "LOW";
+}
+
+function creativeStrategyForAction(action: string) {
+  const controlledVariables = ["audience", "landing URL", "offer facts", "campaign objective", "budget"];
+  switch (action) {
+    case "creative_hook_test":
+      return {
+        assetType: "image",
+        changedVariable: "hook",
+        controlledVariables,
+        objective: "increase thumb-stop and CTR by changing the first visible hook only",
+        primaryMetric: "CTR"
+      };
+    case "landing_arrival_diagnostic":
+      return {
+        assetType: "image",
+        changedVariable: "CTA clarity",
+        controlledVariables,
+        objective: "make click intent and destination expectation clearer before the click",
+        primaryMetric: "LPV rate"
+      };
+    case "fatigue_creative_refresh":
+      return {
+        assetType: "image",
+        changedVariable: "visual angle",
+        controlledVariables,
+        objective: "refresh attention while preserving the proven offer and audience",
+        primaryMetric: "CTR recovery"
+      };
+    case "offer_or_product_page_review":
+      return {
+        assetType: "image",
+        changedVariable: "offer framing",
+        controlledVariables,
+        objective: "clarify price, value, and product reason-to-buy without inventing claims",
+        primaryMetric: "ATC rate"
+      };
+    case "creative_metadata_resync":
+    case "meta_account_backfill_required":
+      return {
+        assetType: "image",
+        changedVariable: "data readiness",
+        controlledVariables,
+        objective: "prepare generation only after Meta creative and insight data are available",
+        primaryMetric: "data completeness"
+      };
+    default:
+      return {
+        assetType: "image",
+        changedVariable: "single creative angle",
+        controlledVariables,
+        objective: "prepare a controlled variant while preserving existing learnings",
+        primaryMetric: "CTR"
+      };
+  }
 }
 
 function hasCreativeMetadata(rawJson: unknown): boolean {
